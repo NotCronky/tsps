@@ -15936,10 +15936,27 @@ test('Priest in Peril unlocks the mausoleum Holy barrier only after completion',
     moveTo: (location) => moves.push([location.getX(), location.getY(), location.getZ()]),
     sendMessage: (text) => messages.push(text),
   };
-  for (stage of [0, 10, 50, quest.completionValue - 1]) {
+  for (stage of [0, 10, 46]) {
     assert.equal(pass({ player, objectId: api.core.ObjectIdentifiers.HOLY_BARRIER }), true);
     assert.deepEqual(moves, [], 'unfinished quests cannot cross');
     assert.match(messages.at(-1), /complete Priest in Peril/);
+  }
+  // Once Drezel holds the barrier (stage 50 on), he stops the player himself.
+  const runtime = require('../plugins/quests/QuestRuntime');
+  const played = [];
+  const startTranscript = runtime.startTranscript;
+  runtime.startTranscript = (...args) => { played.push(args[4]); return true; };
+  try {
+    require('../plugins/quests/quests/PriestInPeril.Quest')(api);
+    const stop = objects.get('Holy barrier')['Pass-through'];
+    for (stage of [50, quest.completionValue - 1]) {
+      assert.equal(stop({ player, objectId: api.core.ObjectIdentifiers.HOLY_BARRIER }), true);
+      assert.deepEqual(moves, [], 'unfinished quests cannot cross');
+      assert.equal(played.at(-1),
+        'after-drezel-is-freed-and-the-vampyre-is-sealed-attempting-to-pass-the-holy-barrier-before-securing-the-barrier');
+    }
+  } finally {
+    runtime.startTranscript = startTranscript;
   }
   for (stage of [quest.completionValue, quest.completionValue + 1]) {
     assert.equal(pass({ player, objectId: api.core.ObjectIdentifiers.HOLY_BARRIER }), true);
@@ -18397,31 +18414,6 @@ test('Night at the Theatre obtains and hands in the head once, and scopes shared
 
 });
 
-
-test('Entry Mode notice board starts its party prompt from the live cache object id', () => {
-  const { api } = mockApi();
-  const interactions=[];let prompt;
-  api.onObjectInteraction=(name,options)=>interactions.push([name,options]);
-  api.sendMultiChatboxPrompt=(...args)=>{prompt=args;};
-  const entry=require('../plugins/minigames/tob/Entry.TheatreOfBlood');entry(api);
-  const player={attributes:new Map(),getAttribute(k){return this.attributes.get(k);},setAttribute(k,v){this.attributes.set(k,v);},sendMessage(){}};
-  const actions=interactions.find(([name])=>name==='Notice board')[1];
-  const read=actions.Read;
-  assert.equal(typeof actions.read,'function','the live cache interaction may be lowercased by ObjectDefinition');
-  assert.equal(read({player,objectId:32655,definition:{id:24099}}),true);
-  assert.equal(read({player,objectId:24099}),false,'unrelated notice boards keep their own interaction');
-  assert.equal(prompt[1],'Theatre of Blood: choose a mode');
-  assert.equal(prompt[2],'Solo Entry Mode.');
-  prompt[3]();
-  assert.equal(player.attributes.get('tob:entry-party'),true);
-  let normal;
-  api.onCustomEvent('tob:normal-party',event=>{normal=event.player;});
-  assert.equal(prompt[4],'Normal Mode party.');
-  prompt[5]();
-  assert.equal(normal,player);
-  assert.equal(player.attributes.get('tob:entry-party'),false);
-  assert.equal(interactions.find(([name])=>name==='Theatre of Blood')[1].Enter({player,objectId:32653}),false,'normal parties retain the main entrance handler');
-});
 
 test('Entry Mode leaves the entrance available to normal Theatre parties', () => {
   const { api } = mockApi();

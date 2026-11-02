@@ -17,7 +17,7 @@
  *                                       and `claimed`: whether its rewards were claimed from Ghommal
  *   api.emitCustomEvent("combat-achievements:open", { player, collectionLogCategory? })
  *                                       the account summary's row; a collection log boss's button
- * and it emits "combat-achievements:completed" { player, task: { id, name, tier } }.
+ * and it emits "combat-achievements:completed" { player, silent, task: { id, name, tier } }.
  *
  *   ::ca complete <task name|id>   finish a task through the real path
  *   ::ca kc <monster> <n>           set a monster's kill count
@@ -36,6 +36,12 @@ function restore({ player }) {
   Progress.sendAll(player);
   Interface.restore(player);
   Kills.restore(player);
+}
+
+/** "combat-achievements:has-task" { player, task } comes back with `done`. */
+function onHasTask(request) {
+  const task = Data.taskNamed(request?.task);
+  if (request?.player && task) request.done = Progress.isComplete(request.player, task.id);
 }
 
 function onComplete(request) {
@@ -112,6 +118,7 @@ module.exports = {
     require("./combatachievements/tasks/Sarachnis.CombatAchievements")(api, Fights);
     api.onPlayerLogin(restore);
     api.onCustomEvent("combat-achievements:complete", onComplete);
+    api.onCustomEvent("combat-achievements:has-task", onHasTask);
     api.onCustomEvent("combat-achievements:open", onOpen);
     api.onCustomEvent("combat-achievements:tier", onTier);
     api.registerCommand("ca", caCommand, api.core.PlayerRights.ADMINISTRATOR, "Combat Achievements: ::ca complete <task> | kc <monster> <n> | reset");
