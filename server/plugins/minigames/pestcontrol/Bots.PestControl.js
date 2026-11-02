@@ -29,6 +29,10 @@ const { PathFinder } = require("../../../src/main/typescript/elvarg/game/model/m
 const { CombatFactory, CanAttackResponse } = require("../../../src/main/typescript/elvarg/game/content/combat/CombatFactory");
 const { CombatType } = require("../../../src/main/typescript/elvarg/game/content/combat/CombatType");
 const { ItemIdentifiers } = require("../../../src/main/typescript/elvarg/util/ItemIdentifiers");
+const { buildRoamingPvpMetadata } = require("../../bots/behaviours/pvp/PvpAssignment.PlayerBots");
+const { applyGeneratedPvpLoadout } = require("../../bots/behaviours/policies/PvpLoadoutPolicy.PlayerBots");
+const { initPvpTierLoadouts, pickTierChoice, TIER_PROFILE_IDS } = require("../../bots/behaviours/pvp/PvpTierLoadouts.PlayerBots");
+const { isFoodItem } = require("../../items/Food.plugin");
 
 const ROLES = Object.freeze({ DEFENDER: "defender", ATTACKER: "attacker", REPAIRER: "repairer" });
 const BOT_ROLE_ATTRIBUTE = "pest-control:bot-role";
@@ -51,6 +55,11 @@ const WALK_RETRY_MS = 600;
 const OBJECT_CLICK_COOLDOWN_MS = 1200;
 const STUCK_TIMEOUT_MS = 8000;
 
+// A bot eats from its kit below this share of its hitpoints, at most once per EAT_COOLDOWN_MS
+// (food's own three-tick delay still applies).
+const EAT_HP_RATIO = 0.5;
+const EAT_COOLDOWN_MS = 1800;
+
 // Engagement ranges (tiles).
 const ATTACKER_ENGAGE_RANGE = 6;
 const SPINNER_ENGAGE_RANGE = 10;
@@ -60,6 +69,8 @@ const REPAIRER_ENGAGE_RANGE = 8;
 // A gate is closed behind a bot only when no other player is this close to it.
 const GATE_CLEAR_RADIUS = 2;
 const GATE_LEAVE_RADIUS = 4;
+// How long the last bot out waits at a gate for its close click to take.
+const GATE_CLOSE_PATIENCE_MS = 4000;
 // Option slots the gates and barricades use when the cache names are not found.
 const OPEN_OPTION = 1;
 const REPAIR_OPTION = 3;
@@ -127,6 +138,15 @@ function assignRoles(count) {
     roles.push({ role: ROLES.REPAIRER, squad: index % SQUADS, post: index });
   }
   return roles;
+}
+
+/**
+ * Bots in the order assignRoles deals them out: the defender posts go first, so bots that
+ * fight at range take them. A melee defender cannot reach the torchers and defilers that
+ * shoot the knight from beyond the wall (chooseDefenderTarget). The sort is stable.
+ */
+function orderForRoles(bots) {
+  return [...bots].sort((a, b) => Number(reachesOverWalls(b)) - Number(reachesOverWalls(a)));
 }
 
 /** The squad's portal: its own in the shield order while alive, else the live ones shared out. */
@@ -320,13 +340,31 @@ class PestControlBot {
       lastTile: null,
       lastMovedAt: 0,
       gateToClose: null,
+      closeGateUntil: null,
     };
     const [x, y] = match.knightLocation();
     this.controller = new BotController(player, x, y, 0, this.tree(assignment.role));
   }
 
   tick(nowMs) {
+    this.eat(nowMs);
     return this.controller.tick(nowMs);
+  }
+
+  /** Eat the kit's food when hurt, as a player would; the Food plugin applies its rules. */
+  eat(nowMs) {
+    const { player, state, api } = this;
+    const core = api?.core;
+    if (!core?.ItemActionPacketListener || nowMs < (state.nextEatAt ?? 0)) return false;
+    const hitpoints = player.getHitpoints();
+    const max = player.getSkillManager().getMaxLevel(core.Skill.HITPOINTS);
+    if (hitpoints <= 0 || hitpoints >= max * EAT_HP_RATIO) return false;
+    const items = player.getInventory().getItems();
+    const slot = items.findIndex((item) => isFoodItem(item?.getId?.()));
+    if (slot < 0) return false;
+    state.nextEatAt = nowMs + EAT_COOLDOWN_MS;
+    core.ItemActionPacketListener.handleAction(player, core.Inventory.INTERFACE_ID, items[slot].getId(), slot, 1);
+    return true;
   }
 
   tree(role) {
@@ -356,6 +394,7 @@ class PestControlBot {
       // A death respawns at the landing stage: start the walk out afresh.
       this.state.destinationKey = null;
       this.state.gateToClose = null;
+      this.state.closeGateUntil = null;
       return false;
     }
     return true;
@@ -434,16 +473,25 @@ class PestControlBot {
       state.gateToClose = gateName;
       return this.walkTowards(ctx, destination[0], destination[1]);
     }
-    this.closeGateBehind(ctx);
+    if (this.closeGateBehind(ctx)) return "running";
     if (chebyshev(location, destination[0], destination[1]) <= 1) return "running";
     return this.walkTowards(ctx, destination[0], destination[1]);
   }
 
+  /**
+   * The last bot out closes the gate behind it. A bot that still has a teammate inside heading
+   * for the same gate leaves the job to that teammate; the last one stays at the gate until
+   * its click has closed it. Returns true while the bot is holding there to close it.
+   */
   closeGateBehind(ctx) {
     const { player, state, match } = this;
-    if (!state.gateToClose) return;
-    const gate = GATES[state.gateToClose];
-    const parts = gateParts(match.structures, state.gateToClose);
+    const name = state.gateToClose;
+    if (!name) {
+      state.closeGateUntil = null;
+      return false;
+    }
+    const gate = GATES[name];
+    const parts = gateParts(match.structures, name);
     const location = player.getLocation();
     const nearGate = Math.min(
       chebyshev(location, gate.inside[0], gate.inside[1]),
@@ -451,20 +499,44 @@ class PestControlBot {
     );
     if (nearGate > GATE_LEAVE_RADIUS || !gateOpen(parts)) {
       state.gateToClose = null;
-      return;
+      return false;
     }
-    const part = this.nearestGatePart(parts);
-    if (!part) return;
+    for (const other of match.bots?.values?.() ?? []) {
+      if (other !== this && other.exitGate() === name) {
+        state.gateToClose = null;
+        return false;
+      }
+    }
+    // Anyone else just inside the gateway is about to pass: let them through. Those already
+    // outside are through; one who wants back in opens it again.
     for (const other of match.players.keys()) {
       if (other === player || other.getHitpoints() <= 0) continue;
       const at = other.getLocation();
-      if (chebyshev(at, gate.inside[0], gate.inside[1]) <= GATE_CLEAR_RADIUS
-        || chebyshev(at, gate.outside[0], gate.outside[1]) <= GATE_CLEAR_RADIUS) {
-        return;
-      }
+      if (insideFort(at) && chebyshev(at, gate.inside[0], gate.inside[1]) <= GATE_CLEAR_RADIUS) return false;
     }
+    // Holding is bounded: a gate that will not close (a click that never lands) is left open.
+    state.closeGateUntil ??= ctx.nowMs + GATE_CLOSE_PATIENCE_MS;
+    if (ctx.nowMs > state.closeGateUntil) {
+      state.gateToClose = null;
+      return false;
+    }
+    const part = this.nearestGatePart(parts);
+    if (!part) {
+      this.walkTowards(ctx, gate.outside[0], gate.outside[1]);
+      return true;
+    }
+    // Stop here: steps already queued towards the portal would carry the bot past the gate.
+    player.getMovementQueue().reset();
     this.clickStructure(ctx, part, optionIndex(part.object, "close", OPEN_OPTION));
-    state.gateToClose = null;
+    return true;
+  }
+
+  /** The gate this bot is on its way out through, or null (outside, a defender, or dead). */
+  exitGate() {
+    const { player, state, match } = this;
+    if (state.role === ROLES.DEFENDER || player.getHitpoints() <= 0
+      || player.getPrivateArea?.() !== match.area || !insideFort(player.getLocation())) return null;
+    return gateFor(this.portal()?.key, state.detours);
   }
 
   stagingTile() {
@@ -575,6 +647,46 @@ function equipRepairer(player) {
   return logs;
 }
 
+/** The shared tier helpers read combat levels through api.core. */
+function initBots(api) {
+  initPvpTierLoadouts(api);
+}
+
+/**
+ * The tier choice for a lander bot: a members kit whose combat level is inside the boat's
+ * `botLevels`, under the boat's PvP behaviour profile. `index` spreads bots across the pool.
+ */
+function boatTierChoice(boat, index) {
+  return pickTierChoice(boat.key, { index, band: boat.botLevels, excludeF2p: true });
+}
+
+/**
+ * Stats and gear for a bot boarding `boat`, pinned to its level band (Castle Wars and Bounty
+ * Hunter crew their tiers the same way). Falls back to a roaming kit only if the band has no
+ * kit at all, which the tests rule out for every boat.
+ */
+function equipForBoat(player, boat, index, api) {
+  const choice = boatTierChoice(boat, index);
+  const config = choice
+    ? {
+        pvp: {
+          loadoutWeights: [{ value: choice.loadoutId, weight: 1 }],
+          profileWeights: [{ value: TIER_PROFILE_IDS[boat.key], weight: 1 }],
+        },
+      }
+    : {};
+  return applyGeneratedPvpLoadout(
+    player,
+    {
+      pvp: {
+        ...buildRoamingPvpMetadata({ excludeF2p: true, config }),
+        ...(choice ? { combatLevelRange: boat.botLevels, generatedArchetypeId: choice.archetypeId } : {}),
+      },
+    },
+    { api }
+  );
+}
+
 /** One bot's brain; `match` supplies knight, portals, structures, npcs and players. */
 function createBot(match, api, player, assignment) {
   player.setAttribute(BOT_ROLE_ATTRIBUTE, assignment.role);
@@ -587,8 +699,11 @@ module.exports = {
   BOT_ROLE_ATTRIBUTE,
   BOT_SQUAD_ATTRIBUTE,
   assignRoles,
+  orderForRoles,
   chooseDefenceTarget,
   equipRepairer,
+  equipForBoat,
+  initBots,
   createBot,
   _test: {
     FORT_BOUNDS,
@@ -596,7 +711,9 @@ module.exports = {
     PORTAL_GATES,
     STUCK_TIMEOUT_MS,
     REPAIR_LOGS,
+    EAT_HP_RATIO,
     PestControlBot,
+    boatTierChoice,
     insideFort,
     squadPortal,
     chooseDefenderTarget,
@@ -606,6 +723,7 @@ module.exports = {
     gateFor,
     gateClosed,
     gateOpen,
+    gateParts,
     repairerPost,
     optionIndex,
     trackProgress,
