@@ -21,8 +21,6 @@ const { ItemIdentifiers } = require("../../src/main/typescript/elvarg/util/ItemI
 const { NpcIdentifiers } = require("../../src/main/typescript/elvarg/util/NpcIdentifiers");
 const { ObjectIdentifiers } = require("../../src/main/typescript/elvarg/util/ObjectIdentifiers");
 const { createBotPlayer } = require("../bots/behaviours/spawn/PlayerFactory.PlayerBots");
-const { buildRoamingPvpMetadata } = require("../bots/behaviours/pvp/PvpAssignment.PlayerBots");
-const { applyGeneratedPvpLoadout } = require("../bots/behaviours/policies/PvpLoadoutPolicy.PlayerBots");
 const { ATTR_SKIP_PERSISTENCE } = require("../bots/runtime/PersistenceConstants.PlayerBots");
 const Bots = require("./pestcontrol/Bots.PestControl");
 const Rewards = require("./pestcontrol/Rewards.PestControl");
@@ -43,12 +41,20 @@ const KNIGHT_LOCATION = new Location(2656, 2592, 0);
 const GAME_SQUIRE_LOCATION = new Location(2655, 2607, 0);
 const MIN_PLAYERS = 5;
 const MAX_PLAYERS = 25;
-const LANDER_WAIT_TICKS = 500; // Five minutes at 600 ms per game tick.
+// Wiki: "Once at least 5 players have joined the lander, a 2 minute countdown begins".
+const LANDER_WAIT_TICKS = 200; // Two minutes at 600 ms per game tick.
 const GAME_TICKS = 2000; // Twenty minutes.
 const FIRST_SHIELD_TICK = 25;
 const SHIELD_INTERVAL_TICKS = 50;
 const PEST_SPAWN_INTERVAL_TICKS = 10;
 const MAX_PESTS = 100;
+// A pest fights back against a player who hit it this recently and is this close; past
+// either, it returns to its objective.
+const RETALIATE_TICKS = 8;
+const RETALIATE_RANGE = 12;
+// Brawlers attack players this close and otherwise walk up to the fort, stopping short of the knight.
+const BRAWLER_HUNT_RANGE = 8;
+const BRAWLER_KNIGHT_OFFSET = 3;
 const MIN_REWARD_ACTIVITY = 1;
 const MAX_ACTIVITY = 100;
 const ATTR_WAITING_BOAT = "pest-control:waiting-boat";
@@ -58,6 +64,9 @@ const BOATS = [
     key: "novice",
     name: "Novice",
     level: 40,
+    // Lander bots are drawn from this combat band: the boat's own minimum up to the levels
+    // its players usually bring, so a Veteran game is never crewed by sub-100 pures.
+    botLevels: { min: 40, max: 80 },
     points: 3,
     gangplankId: ObjectIdentifiers.GANGPLANK_27,
     exitId: ObjectIdentifiers.LADDER_175,
@@ -83,6 +92,7 @@ const BOATS = [
     key: "intermediate",
     name: "Intermediate",
     level: 70,
+    botLevels: { min: 70, max: 100 },
     points: 4,
     gangplankId: ObjectIdentifiers.GANGPLANK_48,
     exitId: ObjectIdentifiers.LADDER_326,
@@ -108,6 +118,7 @@ const BOATS = [
     key: "veteran",
     name: "Veteran",
     level: 100,
+    botLevels: { min: 100, max: 126 },
     points: 5,
     gangplankId: ObjectIdentifiers.GANGPLANK_49,
     exitId: ObjectIdentifiers.LADDER_327,
@@ -185,11 +196,10 @@ const PEST_IDS = {
   ],
 };
 
-// OSRS waves are weighted toward the common melee pests; special pests remain
-// present without making every wave a uniform lottery.
+// Wiki, Portal (Pest Control): each pest is a random roll at these odds (Mod Ash), in percent.
 const SPAWN_WEIGHTS = [
-  ["shifter", 3], ["splatter", 3], ["ravager", 2], ["spinner", 2],
-  ["defiler", 1], ["torcher", 1], ["brawler", 1],
+  ["splatter", 23], ["shifter", 20], ["defiler", 20], ["torcher", 20],
+  ["spinner", 7], ["ravager", 5], ["brawler", 5],
 ];
 const PEST_COMBAT_LEVELS = {
   splatter: [22, 33, 44], shifter: [36, 57, 76], ravager: [36, 53, 71],
@@ -210,9 +220,9 @@ function randomOf(values) {
   return values[Math.floor(Math.random() * values.length)];
 }
 
-function randomPestType() {
+function randomPestType(random = Math.random) {
   const total = SPAWN_WEIGHTS.reduce((sum, [, weight]) => sum + weight, 0);
-  let roll = Math.floor(Math.random() * total);
+  let roll = Math.floor(random() * total);
   for (const [type, weight] of SPAWN_WEIGHTS) {
     roll -= weight;
     if (roll < 0) return type;
@@ -226,6 +236,17 @@ function applyPortalCombatStats(npc, key) {
   for (let index = 10; index <= 14; index++) stats[index] = 100;
   const weakBonus = { purple: 14, blue: 13, yellow: 11, red: 12 }[key];
   if (weakBonus !== undefined) stats[weakBonus] = 0;
+}
+
+/**
+ * The Void Knight's defences (Wiki, Void Knight (Pest Control)): Defence 50 and +100 against
+ * every style. The vendored monster dump has no entry for him, so the cache leaves his bonuses
+ * at zero and nearly every pest attack would land.
+ */
+function applyKnightCombatStats(npc) {
+  const stats = npc.getDefinition().getStats();
+  stats[2] = 50;
+  for (let index = 10; index <= 14; index++) stats[index] = 100;
 }
 
 function applyPestStats(npc, type, tier) {
@@ -426,6 +447,7 @@ class PestControlMatch {
       NpcIdentifiers.VOID_KNIGHT_8,
     ]), KNIGHT_LOCATION);
     this.knight.__pcKind = "knight";
+    applyKnightCombatStats(this.knight);
     this.knight.getMovementQueue().setBlockMovement(true).reset();
     this.squire = this.spawnNpc(NpcIdentifiers.SQUIRE_12, GAME_SQUIRE_LOCATION);
     this.squire.__pcKind = "squire";
@@ -441,7 +463,7 @@ class PestControlMatch {
       this.portalByNpc.set(npc, state);
     });
 
-    const bots = players.filter((player) => player.isPlayerBot?.() === true);
+    const bots = Bots.orderForRoles(players.filter((player) => player.isPlayerBot?.() === true));
     const assignments = Bots.assignRoles(bots.length);
     bots.forEach((bot, index) => {
       if (assignments[index].role === Bots.ROLES.REPAIRER) Bots.equipRepairer(bot);
@@ -651,8 +673,23 @@ class PestControlMatch {
     if (type === "spinner") return this.processSpinner(npc);
     if (type === "splatter" || type === "ravager") return this.processStructurePest(npc, type);
 
-    const target = this.knight;
-    if (!target || target.getHitpoints() <= 0) return;
+    const knight = this.knight;
+    if (!knight || knight.getHitpoints() <= 0) return;
+    // Pests are aggressive monsters: one a player is fighting fights back. Only the free ones
+    // go for the knight, and Brawlers never do (Wiki: "During the game they do not attack the
+    // Void Knight"); a Brawler hunts the nearest player instead.
+    const foe = this.retaliationTarget(npc)
+      ?? (type === "brawler" ? this.nearestPlayer(npc, BRAWLER_HUNT_RANGE) : null);
+    if (foe) {
+      if (npc.getCombat().getTarget?.() !== foe) npc.getCombat().attack(foe);
+      return;
+    }
+    if (type === "brawler") {
+      if (npc.getCombat().getTarget?.()) npc.getCombat().reset();
+      routePest(npc, KNIGHT_LOCATION.getX(), KNIGHT_LOCATION.getY() - BRAWLER_KNIGHT_OFFSET);
+      return;
+    }
+    const target = knight;
 
     if (type === "shifter" && this.elapsedTicks >= (npc.__pcNextTeleport || 0)
       && npc.getLocation().getDistance(target.getLocation()) > 1) {
@@ -662,6 +699,29 @@ class PestControlMatch {
       npc.__pcNextTeleport = this.elapsedTicks + 15;
     }
     if (npc.getCombat().getTarget?.() !== target) npc.getCombat().attack(target);
+  }
+
+  /** The live match player who hit this pest within the last RETALIATE_TICKS, if still close. */
+  retaliationTarget(npc) {
+    const combat = npc.getCombat();
+    const attacker = combat.getAttacker?.();
+    if (!attacker?.isPlayer?.() || !this.players.has(attacker) || attacker.getHitpoints() <= 0) return null;
+    if ((combat.ticksSinceAttacked?.() ?? Infinity) > RETALIATE_TICKS) return null;
+    return npc.getLocation().getDistance(attacker.getLocation()) <= RETALIATE_RANGE ? attacker : null;
+  }
+
+  nearestPlayer(npc, range) {
+    let best = null;
+    let bestDistance = range + 1;
+    for (const player of this.players.keys()) {
+      if (player.getHitpoints() <= 0) continue;
+      const distance = npc.getLocation().getDistance(player.getLocation());
+      if (distance < bestDistance) {
+        best = player;
+        bestDistance = distance;
+      }
+    }
+    return best;
   }
 
   processSpinner(npc) {
@@ -1014,11 +1074,7 @@ function createPestControl(api) {
     bot.setRunning(true);
     bot.setAttribute(ATTR_SKIP_PERSISTENCE, true);
     bot.setAttribute(ATTR_WAITING_BOAT, state.boat.key);
-    applyGeneratedPvpLoadout(
-      bot,
-      { pvp: buildRoamingPvpMetadata({ excludeF2p: true }) },
-      { api }
-    );
+    Bots.equipForBoat(bot, state.boat, botSerial, api);
     api.emitPlayerLogin({ player: bot, username });
   }
 
@@ -1152,6 +1208,7 @@ module.exports = {
     World = api.getWorld();
     pluginApi = api;
     Rewards.initRewards(api);
+    Bots.initBots(api);
     api.registerNpcCombatMethodProvider(DEFILER_IDS, DefilerCombatMethod);
     api.registerNpcCombatMethodProvider(TORCHER_IDS, TorcherCombatMethod);
     createPestControl(api);
@@ -1161,6 +1218,8 @@ module.exports = {
     PEST_IDS,
     PORTAL_ORDERS,
     choosePortalOrder,
+    randomPestType,
+    applyKnightCombatStats,
     clampActivity,
     botsNeeded,
     moveBetweenAreas,
@@ -1178,6 +1237,11 @@ module.exports = {
       ACTIVITY_VARBIT,
       MIN_PLAYERS,
       MAX_PLAYERS,
+      LANDER_WAIT_TICKS,
+      GAME_TICKS,
+      FIRST_SHIELD_TICK,
+      SHIELD_INTERVAL_TICKS,
+      SPAWN_WEIGHTS,
     },
   },
 };

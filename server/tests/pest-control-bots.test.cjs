@@ -21,11 +21,12 @@ const { decodePluginMessagePayload } = require("../dist/net/protocol/ClientProto
 const plugin = require("../plugins/minigames/PestControl.plugin");
 const Rewards = require("../plugins/minigames/pestcontrol/Rewards.PestControl");
 const Bots = require("../plugins/minigames/pestcontrol/Bots.PestControl");
+const Food = require("../plugins/items/Food.plugin");
 
 const { ROLES, assignRoles, equipRepairer } = Bots;
 const {
   PestControlBot, squadPortal, chooseDefenderTarget, reachesOverWalls, chooseAttackTarget, nearestDamagedStructure,
-  gateFor, gateClosed, gateOpen, repairerPost, optionIndex, trackProgress, insideFort, GATES, STUCK_TIMEOUT_MS, REPAIR_LOGS,
+  gateFor, gateClosed, gateOpen, gateParts, repairerPost, optionIndex, trackProgress, insideFort, GATES, STUCK_TIMEOUT_MS, REPAIR_LOGS,
 } = Bots._test;
 
 const GAME_START = new Location(2657, 2611, 0);
@@ -307,6 +308,158 @@ test("a melee defender leaves a torcher shooting the knight over the wall to the
   combat.setCastSpell(null);
 });
 
+test("timings follow the Wiki: 2 minute lander countdown, 20 minute game, shields at 0:15 then every 0:30", () => {
+  const { LANDER_WAIT_TICKS, GAME_TICKS, FIRST_SHIELD_TICK, SHIELD_INTERVAL_TICKS } = plugin._test.constants;
+  const seconds = (ticks) => ticks * 0.6;
+  assert.equal(seconds(LANDER_WAIT_TICKS), 120);
+  assert.equal(seconds(GAME_TICKS), 1200);
+  assert.equal(seconds(FIRST_SHIELD_TICK), 15);
+  assert.equal(seconds(FIRST_SHIELD_TICK + 3 * SHIELD_INTERVAL_TICKS), 105, "all shields down by 1:45");
+});
+
+test("pest types roll at the Wiki's odds", () => {
+  const { SPAWN_WEIGHTS } = plugin._test.constants;
+  assert.deepEqual(Object.fromEntries(SPAWN_WEIGHTS), {
+    brawler: 5, defiler: 20, ravager: 5, shifter: 20, spinner: 7, splatter: 23, torcher: 20,
+  });
+  const counts = {};
+  for (let roll = 0; roll < 100; roll++) {
+    const type = plugin._test.randomPestType(() => (roll + 0.5) / 100);
+    counts[type] = (counts[type] ?? 0) + 1;
+  }
+  assert.deepEqual(counts, Object.fromEntries(SPAWN_WEIGHTS), "each percent of the roll maps to one pest");
+});
+
+function fakePest(match, type, x, y, { attacker = null, ticksSinceAttacked = Infinity } = {}) {
+  const attacks = [];
+  let target = null;
+  return {
+    attacks,
+    __pcType: type,
+    getHitpoints: () => 50,
+    getLocation: () => new Location(x, y, 0),
+    performGraphic() {},
+    moveTo() {},
+    getCombat: () => ({
+      getTarget: () => target,
+      getAttacker: () => attacker,
+      ticksSinceAttacked: () => ticksSinceAttacked,
+      attack(mobile) { attacks.push(mobile); target = mobile; },
+      reset() { target = null; },
+    }),
+  };
+}
+
+test("the Void Knight has the Wiki's defences: Defence 50 and +100 against every style", () => {
+  const boat = plugin._test.BOATS[2];
+  const match = new plugin._test.PestControlMatch(boat, [], () => {});
+  try {
+    const stats = match.knight.getDefinition().getStats();
+    assert.equal(stats[2], 50);
+    assert.deepEqual(stats.slice(10, 15), [100, 100, 100, 100, 100], "stab, slash, crush, magic, ranged");
+  } finally {
+    match.finish(false, "test over");
+  }
+});
+
+test("a pest a player is hitting fights back; a free one goes for the knight; a Brawler never does", () => {
+  const boat = plugin._test.BOATS[2];
+  const near = realPlayer(new Location(2656, 2596, 0));
+  const match = new plugin._test.PestControlMatch(boat, [near], () => {});
+  try {
+    near.setLocation(new Location(2656, 2596, 0));
+    const hit = fakePest(match, "torcher", 2656, 2600, { attacker: near, ticksSinceAttacked: 2 });
+    match.processPest(hit);
+    assert.deepEqual(hit.attacks, [near], "retaliates on the player who hit it");
+
+    const stale = fakePest(match, "torcher", 2656, 2600, { attacker: near, ticksSinceAttacked: 30 });
+    match.processPest(stale);
+    assert.deepEqual(stale.attacks, [match.knight], "an old hit is forgotten: back to the knight");
+
+    const brawler = fakePest(match, "brawler", 2656, 2600);
+    match.processPest(brawler);
+    assert.deepEqual(brawler.attacks, [near], "a Brawler hunts the nearby player");
+    near.setLocation(new Location(2680, 2620, 0));
+    const lone = fakePest(match, "brawler", 2656, 2600);
+    lone.getMovementQueue = () => ({ lastDestX: null, lastDestY: null, size: () => 0, isMovings: () => false });
+    const { PathFinder } = require("../dist/game/model/movement/path/PathFinder");
+    const walk = PathFinder.calculateWalkRoute;
+    PathFinder.calculateWalkRoute = () => {};
+    try { match.processPest(lone); } finally { PathFinder.calculateWalkRoute = walk; }
+    assert.deepEqual(lone.attacks, [], "with nobody near it walks on and never attacks the knight");
+  } finally {
+    match.finish(false, "test over");
+  }
+});
+
+test("lander bots are geared and levelled inside their boat's band, never under the boat's minimum", () => {
+  for (const boat of plugin._test.BOATS) {
+    const levels = [];
+    let overWalls = 0;
+    for (let index = 0; index < 25; index++) {
+      const player = realPlayer(boat.waitingLocation);
+      assert.equal(Bots.equipForBoat(player, boat, index, api), true, `${boat.key} bot ${index} is equipped`);
+      const level = player.getSkillManager().getCombatLevel();
+      levels.push(level);
+      assert.ok(level >= boat.level, `${boat.key} bot ${index} is combat ${level}, boat needs ${boat.level}`);
+      assert.ok(level <= boat.botLevels.max, `${boat.key} bot ${index} is combat ${level}, band tops out at ${boat.botLevels.max}`);
+      assert.ok(player.getEquipment().isSlotOccupied(3), `${boat.key} bot ${index} wields a weapon`);
+      if (reachesOverWalls(player)) overWalls++;
+    }
+    assert.ok(new Set(levels).size > 1, `${boat.key} bots vary`);
+    assert.ok(overWalls >= 4, `${boat.key}: enough ranged/magic bots for the four defender posts (${overWalls})`);
+  }
+});
+
+test("defender posts go to the bots that can hit over the fort wall", () => {
+  const melee = [0, 1, 2].map(() => realPlayer(GAME_START));
+  const caster = realPlayer(GAME_START);
+  caster.getCombat().setCastSpell({ spellId: () => 1 });
+  const ordered = Bots.orderForRoles([...melee, caster]);
+  assert.equal(ordered[0], caster, "the caster is dealt first, so assignRoles makes it a defender");
+  assert.deepEqual(ordered.slice(1), melee, "the rest keep their order");
+  assert.equal(assignRoles(ordered.length)[0].role, ROLES.DEFENDER);
+  caster.getCombat().setCastSpell(null);
+});
+
+test("a hurt bot eats from its kit below half hitpoints, and not above it", () => {
+  const player = realPlayer(GAME_START);
+  player.getSkillManager().setMaxLevel(Skill.HITPOINTS, 99).setCurrentLevel(Skill.HITPOINTS, 99);
+  player.getInventory().adds(ItemIdentifiers.SHARK, 2);
+  const match = fakeMatch({ players: [player], npcs: [], privateArea: area() });
+  const bot = botFor(match, player, { role: ROLES.ATTACKER, squad: 0, post: 0 });
+  // The bot clicks Eat like a player; route the click straight to the Food plugin.
+  let eatHandler = null;
+  const core = api.core;
+  Food.register({
+    core,
+    persistAttribute() {},
+    onPlayerLogin() {},
+    onItemAction(handler) { eatHandler = handler; },
+    emitCanEat: () => true,
+    emitCustomEvent() {},
+  });
+  const clicks = [];
+  bot.api = {
+    core: {
+      ...core,
+      ItemActionPacketListener: {
+        handleAction(who, interfaceId, itemId, slot, clickType) {
+          clicks.push({ interfaceId, itemId, slot, clickType });
+          eatHandler({ player: who, itemId, slot, clickType });
+        },
+      },
+    },
+  };
+  assert.equal(bot.eat(1000), false, "full health: no bite");
+  player.getSkillManager().setCurrentLevel(Skill.HITPOINTS, 40);
+  assert.equal(bot.eat(2000), true);
+  assert.equal(player.getInventory().getAmount(ItemIdentifiers.SHARK), 1);
+  assert.equal(player.getSkillManager().getCurrentLevel(Skill.HITPOINTS), 60, "a shark heals 20");
+  assert.equal(bot.eat(2600), false, "the cooldown holds the second shark");
+  assert.deepEqual(clicks, [{ interfaceId: core.Inventory.INTERFACE_ID, itemId: ItemIdentifiers.SHARK, slot: 0, clickType: 1 }]);
+});
+
 test("a bot at 0 hp does nothing: no target, no walk", () => {
   const player = realPlayer(GAME_START);
   const match = fakeMatch({ players: [player] });
@@ -393,19 +546,56 @@ test("a bot outside closes the gate behind it unless a teammate is about to pass
 
   bot.closeGateBehind({ nowMs: 1000 });
   assert.equal(emitted.length, 0, "a teammate two tiles inside the gate keeps it open");
+  teammate.setLocation(new Location(2641, 2592, 0));
+  bot.closeGateBehind({ nowMs: 1000 });
+  assert.equal(emitted.length, 1, "one already outside beside it does not");
+  emitted.length = 0;
+  bot.state.nextClickAt = 0;
+  teammate.setLocation(new Location(2645, 2592, 0));
   assert.equal(bot.state.gateToClose, "west");
 
   teammate.setLocation(new Location(2650, 2600, 0));
-  bot.closeGateBehind({ nowMs: 2000 });
+  assert.equal(bot.closeGateBehind({ nowMs: 2000 }), true, "the last one out holds at the gate");
   assert.equal(emitted.length, 1, "closed once the way is clear");
   assert.equal(emitted[0].clickType, 1);
+  assert.equal(bot.closeGateBehind({ nowMs: 2600 }), true, "still open: waits out the click cooldown");
+  assert.equal(emitted.length, 1);
+  for (const part of gateParts(match.structures, "west")) part.open = false;
+  assert.equal(bot.closeGateBehind({ nowMs: 3000 }), false, "closed: walks on");
   assert.equal(bot.state.gateToClose, null);
 
+  for (const part of gateParts(match.structures, "west")) part.open = true;
   bot.state.gateToClose = "west";
   player.setLocation(new Location(2635, 2592, 0));
   bot.closeGateBehind({ nowMs: 3000 });
   assert.equal(emitted.length, 1, "too far away: gives up instead of walking back");
   assert.equal(bot.state.gateToClose, null);
+});
+
+test("a bot with a teammate bot still inside on the way to its gate leaves the closing to the last one out", () => {
+  emitted.length = 0;
+  const first = realPlayer(new Location(...GATES.west.outside, 0));
+  const second = realPlayer(new Location(2650, 2600, 0));
+  const match = fakeMatch({ players: [first, second], structures: fortStructures({ west: { open: true } }) });
+  match.bots = new Map();
+  const a = botFor(match, first, { role: ROLES.ATTACKER, squad: 3, post: 0 });
+  const b = botFor(match, second, { role: ROLES.ATTACKER, squad: 3, post: 1 });
+  match.bots.set(first, a).set(second, b);
+  assert.equal(b.exitGate(), "west", "squad 3 is purple's: out through the west gate");
+  a.state.gateToClose = "west";
+  assert.equal(a.closeGateBehind({ nowMs: 1000 }), false, "walks on");
+  assert.equal(a.state.gateToClose, null, "the job is the teammate's");
+  assert.equal(emitted.length, 0);
+
+  second.setLocation(new Location(...GATES.west.outside, 0));
+  first.setLocation(new Location(2636, 2592, 0));
+  assert.equal(b.exitGate(), null, "outside now");
+  b.state.gateToClose = "west";
+  assert.equal(b.closeGateBehind({ nowMs: 2000 }), true);
+  assert.equal(emitted.length, 1, "the last one out closes it");
+
+  assert.equal(b.closeGateBehind({ nowMs: 6500 }), false, "a gate that will not close is given up on");
+  assert.equal(b.state.gateToClose, null);
 });
 
 test("object options come from the cache names, with the known slots as fallback", () => {
