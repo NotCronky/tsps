@@ -13,9 +13,17 @@ const Breath = {
   SHOCK: 3,
 };
 
+const {
+  resolveChromaticDragonfireDamage,
+  sendDragonfireMessages,
+  initDragonfireProtectionCoreAccess,
+} = require("../combat/DragonfireProtection");
+
+/** Wiki (King Black Dragon): unprotected dragonfire hits up to 65. */
+const KBD_DRAGONFIRE_MAX_HIT = 65;
+
 let api = null;
-let Location, Misc, PendingHit, Projectile, CombatEquipment;
-let PrayerHandler;
+let Location, Misc, PendingHit, Projectile;
 let CombatFactory;
 
 function climbDownToLair({ player }) {
@@ -33,8 +41,8 @@ function pullLairLever({ player }) {
 /** The combat method, built on api.core's classes. */
 function combatClass(pluginApi) {
   api = pluginApi;
-  ({ Location, Misc, PendingHit, Projectile, CombatEquipment } = pluginApi.core);
-  PrayerHandler = pluginApi.getPrayerHandler();
+  ({ Location, Misc, PendingHit, Projectile } = pluginApi.core);
+  initDragonfireProtectionCoreAccess(pluginApi);
   CombatFactory = pluginApi.getCombatFactory();
   const { Animation, CombatMethod, CombatType } = pluginApi.core;
 
@@ -92,39 +100,20 @@ function combatClass(pluginApi) {
       // The burn lands when the fire does, not before it.
       const hitDelay =
         this.currentAttackType === CombatType.MAGIC ? Projectile.arrivalTicks(character, target) : 1;
-      const hit = new PendingHit(character, target, this, hitDelay);
+      const breath = this.currentAttackType === CombatType.MAGIC;
+      const hit = new PendingHit(character, target, this, { delay: hitDelay, rollAccuracy: !breath });
       if (target.isPlayer()) {
         const player = target.getAsPlayer();
-        if (this.currentAttackType === CombatType.MAGIC && this.currentBreath === Breath.DRAGON) {
-          const prayer = PrayerHandler.isActivated(player, PrayerHandler.PROTECT_FROM_MAGIC);
-          const shield = CombatEquipment.hasDragonProtectionGear(player);
-          const antifire = !player.getCombat().getFireImmunityTimer().finished();
-          // The table below applies Protect from Magic itself; the generic impact stage
-          // must not reduce the custom breath again.
+        if (breath) {
+          // Wiki (King Black Dragon): all four breaths are dragonfire, up to 65, cut by the
+          // shield, Protect from Magic and antifire like any chromatic dragon's.
+          const dragonfire = resolveChromaticDragonfireDamage(character, player, { maxHit: KBD_DRAGONFIRE_MAX_HIT });
+          hit.setTotalDamage(dragonfire.damage);
+          // The resolver already applied Protect from Magic; impact must not cut it again.
           hit.markProtectionBypassed();
-          if (prayer) {
-            // The base magic roll used to be prayer-reduced before this custom damage was
-            // added. Keep that part of the old order now that impact defences are deferred.
-            for (const damage of hit.getHits()) damage.setDamage(0);
-          }
-          if (prayer && shield && antifire) {
-            target.sendMessage("You're protected against the dragonfire breath.");
-            return [hit];
-          }
-          let extendedHit = 25;
-          if (prayer) {
-            extendedHit -= 5;
-          }
-          if (antifire) {
-            extendedHit -= 10;
-          }
-          if (shield) {
-            extendedHit -= 10;
-          }
-          player.sendMessage("The dragonfire burns you.");
-          hit.getHits()[0].incrementDamage(extendedHit);
+          sendDragonfireMessages(player, dragonfire.messages);
         }
-        if (this.currentAttackType === CombatType.MAGIC) {
+        if (breath) {
           switch (this.currentBreath) {
             case Breath.ICE:
               CombatFactory.freeze(player, 5);

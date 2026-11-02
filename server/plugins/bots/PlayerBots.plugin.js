@@ -18,6 +18,7 @@ const {
   registerBotStatusInteractions,
 } = require("./runtime/RegisterBotStatusInteractions.PlayerBots");
 const { registerAiBots } = require("./ai/RegisterAiBots.PlayerBots");
+const { registerResidents } = require("./residents/RegisterResidents.PlayerBots");
 const { AI_BOT_ATTRIBUTE } = require("./ai/Config.PlayerBots");
 
 const BOT_BEHAVIOR_MODE = Object.freeze({
@@ -270,6 +271,14 @@ module.exports = {
     });
 
     registerAiBots({
+      api,
+      botApi,
+      runtime: boot.runtime,
+      registry: boot.brainRegistry,
+      world: boot.brainWorld,
+      resetMovementState,
+    });
+    registerResidents({
       api,
       botApi,
       runtime: boot.runtime,

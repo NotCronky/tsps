@@ -243,3 +243,80 @@ test('kept items retain their per-item charges and infusion after death',()=>{
   kept[0].setMetaValue('arclight',{charges:1000,infusion:7200});assert.deepEqual(sword.getMetaValue('arclight'),{charges:0,infusion:7200});
  }finally{for(const[k,v]of originals)PluginManager[k]=v;ItemOnGroundManager.registerLocation=register;}
 });
+
+function ownerDeathFixture(attributes = {}) {
+  const inventoryItems = Array.from({ length: 28 }, () => new Item(I.SHARK, 1));
+  const worn = [new Item(I.ABYSSAL_WHIP, 1)];
+  const added = [];
+  const inventory = { getItems: () => inventoryItems, getValidItems: () => inventoryItems, resetItems() { inventoryItems.length = 0; return this; }, refreshItems() { return this; }, addItem(item) { added.push(item); return this; } };
+  const equipment = { getItems: () => worn, getValidItems: () => worn, resetItems() { worn.length = 0; return this; }, refreshItems() { return this; } };
+  const player = {
+    ...fakePlayer({ items: inventoryItems }),
+    getRights: () => PlayerRights.OWNER,
+    getAttribute: (key) => attributes[key],
+    getInventory: () => inventory,
+    getEquipment: () => equipment,
+    getCombat: () => ({ getRecentDamagerEntries: () => [], getKiller: () => null }),
+    resetAttributes() {},
+    isPlayerBot: () => false,
+  };
+  return { player, inventoryItems, worn, added };
+}
+
+function withDeathHooksStubbed(run) {
+  const { PluginManager } = require('../dist/plugins/PluginManager');
+  const { ItemOnGroundManager } = require('../dist/game/entity/impl/grounditem/ItemOnGroundManager');
+  const originals = new Map(['emitShouldDropItemsOnDeath', 'emitPlayerDeathItemDrop', 'emitPlayerDeathDrops', 'emitPlayerDefeated', 'emitPlayerDeath'].map((key) => [key, PluginManager[key]]));
+  const register = ItemOnGroundManager.registerLocation;
+  const seen = { itemHooks: 0, grounded: [], deaths: [] };
+  try {
+    PluginManager.emitShouldDropItemsOnDeath = () => true;
+    PluginManager.emitPlayerDeathItemDrop = () => { seen.itemHooks++; return false; };
+    PluginManager.emitPlayerDeathDrops = () => {};
+    PluginManager.emitPlayerDefeated = () => {};
+    PluginManager.emitPlayerDeath = (event) => { seen.deaths.push(event); return true; };
+    ItemOnGroundManager.registerLocation = (_owner, item) => { seen.grounded.push(item); return null; };
+    run(seen);
+  } finally {
+    for (const [key, value] of originals) PluginManager[key] = value;
+    ItemOnGroundManager.registerLocation = register;
+  }
+}
+
+test('an owner dying with a full inventory and worn gear keeps every item in its slot', () => {
+  withDeathHooksStubbed((seen) => {
+    const { player, inventoryItems, worn, added } = ownerDeathFixture();
+    const task = new PlayerDeathTask(player);
+    task.ticks = 0;
+    task.execute();
+    assert.equal(inventoryItems.length, 28);
+    assert.equal(worn.length, 1);
+    assert.equal(added.length, 0);
+    assert.equal(seen.itemHooks, 0, 'no death-item hook may take an owner\'s items');
+    assert.deepEqual(seen.grounded.map((item) => item.getId()), [I.BONES], 'only the bones drop');
+    assert.equal(seen.deaths[0].itemsLost, false);
+  });
+});
+
+test('a raid wipe takes nothing from an owner', () => {
+  withDeathHooksStubbed((seen) => {
+    const { player, inventoryItems, worn } = ownerDeathFixture();
+    PlayerDeathTask.loseItemsAsDeath(player, EDGEVILLE);
+    assert.equal(inventoryItems.length, 28);
+    assert.equal(worn.length, 1);
+    assert.equal(seen.grounded.length, 0);
+  });
+});
+
+test('an owner who turned ::mortal on loses items like anyone else', () => {
+  withDeathHooksStubbed((seen) => {
+    const { player, inventoryItems, worn } = ownerDeathFixture({ 'dev:mortal': true });
+    const task = new PlayerDeathTask(player);
+    task.ticks = 0;
+    task.execute();
+    assert.equal(inventoryItems.length, 0);
+    assert.equal(worn.length, 0);
+    assert.ok(seen.itemHooks > 0);
+    assert.equal(seen.deaths[0].itemsLost, true);
+  });
+});

@@ -5,7 +5,9 @@ cache DB table `quest` is registered and complete. Eligibility matches each cach
 to one unique `QuestRuntime` definition; an unknown, missing, or duplicate quest closes the
 purchase, equip, emote, and teleport gates. This also means free-to-play worlds cannot skip
 members quests. The current runtime does not yet implement every cache quest, so this gate stays
-closed until those quest modules exist.
+closed until those quest modules exist. A world can open it sooner with
+`"QuestCape:implementedQuestsOnly": true` in `pluginConfig`, which requires only the cache's main
+quests that have a module.
 
 The cape can be trimmed or untrimmed after all tiers of every Achievement Diary are complete.
 The requirement is checked from diary progress, not by looking for an Achievement diary cape;

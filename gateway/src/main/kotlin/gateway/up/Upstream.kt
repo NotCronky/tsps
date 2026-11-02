@@ -44,6 +44,7 @@ import net.rsprot.protocol.game.incoming.social.IgnoreListAdd
 import net.rsprot.protocol.game.incoming.social.IgnoreListDel
 import net.rsprot.protocol.game.incoming.resumed.ResumePLongDialog
 import net.rsprot.protocol.game.incoming.resumed.ResumePNameDialog
+import net.rsprot.protocol.game.incoming.resumed.ResumePObjDialog
 import net.rsprot.protocol.game.incoming.resumed.ResumePStringDialog
 import net.rsprot.protocol.game.incoming.resumed.ResumePauseButton
 import net.rsprot.protocol.message.IncomingGameMessage
@@ -121,6 +122,8 @@ class Upstream(
             is ResumePLongDialog -> send(TspsWriter().i32(message.count.coerceIn(0, Int.MAX_VALUE.toLong()).toInt()).fixed(RESUME_COUNTDIALOG))
             is ResumePNameDialog -> send(TspsWriter().string(message.name).varByte(RESUME_NAMEDIALOG))
             is ResumePStringDialog -> send(TspsWriter().string(message.string).varByte(RESUME_STRINGDIALOG))
+            // tsps takes an item search's pick as text, as the browser client sends it.
+            is ResumePObjDialog -> send(TspsWriter().string(message.obj.toString()).varByte(RESUME_NAMEDIALOG))
             is CloseModal -> send(TspsWriter().fixed(IF_CLOSE))
             is MessagePublic ->
                 PUBLIC_CHAT_KINDS[message.type]?.let { send(TspsClientPacket.chat(it, message.message, publicChatStyle(message))) } ?: DropCounter.up(message)

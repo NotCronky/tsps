@@ -1,5 +1,5 @@
 {
-  "_comment": "Gear for the developer command ::maxgear <melee|range|mage> [void]. Items are ItemIdentifiers names; [name, amount] for a stack, {\"item\", \"amount\", \"meta\"} for item meta such as charges. \"void\" replaces those slots of the style's set.",
+  "_comment": "Gear for the developer command ::maxgear <melee|range|mage> [void]. Items are ItemIdentifiers names; [name, amount] for a stack, {\"item\", \"amount\", \"meta\"} for item meta such as charges. \"void\" replaces those slots of the style's set. \"bank\" is ::maxbank: one list per bank tab, starting at tab 1.",
   "styles": {
     "melee": {
       "head": "TORVA_FULL_HELM",
@@ -23,13 +23,21 @@
       "hands": "ZARYTE_VAMBRACES",
       "feet": "PEGASIAN_BOOTS",
       "ring": "VENATOR_RING",
-      "ammo": ["DRAGON_ARROW", 5000]
+      "ammo": [
+        "DRAGON_ARROW",
+        5000
+      ]
     },
     "mage": {
       "head": "ANCESTRAL_HAT",
       "cape": "IMBUED_SARADOMIN_CAPE",
       "amulet": "OCCULT_NECKLACE",
-      "weapon": { "item": "TUMEKENS_SHADOW", "meta": { "tumekens-shadow-charges": 20000 } },
+      "weapon": {
+        "item": "TUMEKENS_SHADOW",
+        "meta": {
+          "tumekens-shadow-charges": 20000
+        }
+      },
       "body": "ANCESTRAL_ROBE_TOP",
       "legs": "ANCESTRAL_ROBE_BOTTOM",
       "hands": "TORMENTED_BRACELET",
@@ -38,8 +46,519 @@
     }
   },
   "void": {
-    "melee": { "head": "VOID_MELEE_HELM", "body": "ELITE_VOID_TOP", "legs": "ELITE_VOID_ROBE", "hands": "VOID_KNIGHT_GLOVES" },
-    "range": { "head": "VOID_RANGER_HELM", "body": "ELITE_VOID_TOP", "legs": "ELITE_VOID_ROBE", "hands": "VOID_KNIGHT_GLOVES" },
-    "mage": { "head": "VOID_MAGE_HELM", "body": "ELITE_VOID_TOP", "legs": "ELITE_VOID_ROBE", "hands": "VOID_KNIGHT_GLOVES" }
-  }
+    "melee": {
+      "head": "VOID_MELEE_HELM",
+      "body": "ELITE_VOID_TOP",
+      "legs": "ELITE_VOID_ROBE",
+      "hands": "VOID_KNIGHT_GLOVES"
+    },
+    "range": {
+      "head": "VOID_RANGER_HELM",
+      "body": "ELITE_VOID_TOP",
+      "legs": "ELITE_VOID_ROBE",
+      "hands": "VOID_KNIGHT_GLOVES"
+    },
+    "mage": {
+      "head": "VOID_MAGE_HELM",
+      "body": "ELITE_VOID_TOP",
+      "legs": "ELITE_VOID_ROBE",
+      "hands": "VOID_KNIGHT_GLOVES"
+    }
+  },
+  "bank": [
+    [
+      "TORVA_FULL_HELM",
+      "TORVA_PLATEBODY",
+      "TORVA_PLATELEGS",
+      "OATHPLATE_HELM",
+      "OATHPLATE_CHEST",
+      "OATHPLATE_LEGS",
+      "INQUISITORS_GREAT_HELM",
+      "INQUISITORS_HAUBERK",
+      "INQUISITORS_PLATESKIRT",
+      "NEITIZNOT_FACEGUARD",
+      "INFERNAL_CAPE",
+      "AMULET_OF_TORTURE",
+      "AMULET_OF_RANCOUR",
+      "FEROCIOUS_GLOVES",
+      "PRIMORDIAL_BOOTS",
+      "ULTOR_RING",
+      "BELLATOR_RING",
+      "BERSERKER_RING_I_",
+      "AVERNIC_DEFENDER",
+      {
+        "item": "SCYTHE_OF_VITUR",
+        "meta": {
+          "scythe-of-vitur-charges": 20000
+        }
+      },
+      "GHRAZI_RAPIER",
+      "OSMUMTENS_FANG",
+      "INQUISITORS_MACE",
+      "ELDER_MAUL",
+      "SOULREAPER_AXE",
+      "DUAL_MACUAHUITL",
+      "ABYSSAL_TENTACLE",
+      "ABYSSAL_WHIP",
+      "ABYSSAL_BLUDGEON",
+      "DRAGON_CLAWS",
+      "BURNING_CLAWS",
+      "ARMADYL_GODSWORD",
+      "BANDOS_GODSWORD",
+      "VOIDWAKER",
+      "DRAGON_WARHAMMER"
+    ],
+    [
+      "MASORI_MASK_F_",
+      "MASORI_BODY_F_",
+      "MASORI_CHAPS_F_",
+      "NECKLACE_OF_ANGUISH",
+      "ZARYTE_VAMBRACES",
+      "PEGASIAN_BOOTS",
+      "VENATOR_RING",
+      "LIGHTBEARER",
+      "ARCHERS_RING_I_",
+      "DIZANAS_QUIVER",
+      "AVAS_ASSEMBLER",
+      "TWISTED_BOW",
+      "BOW_OF_FAERDHINEN_C_",
+      {
+        "item": "TOXIC_BLOWPIPE",
+        "meta": {
+          "toxic-blowpipe": {
+            "scales": 16383,
+            "dartId": 11230,
+            "dartAmount": 16383
+          }
+        }
+      },
+      "ZARYTE_CROSSBOW",
+      "ARMADYL_CROSSBOW",
+      "DRAGON_HUNTER_CROSSBOW",
+      "WEBWEAVER_BOW",
+      "HEAVY_BALLISTA",
+      "ELITE_VOID_TOP",
+      "ELITE_VOID_ROBE",
+      "VOID_KNIGHT_GLOVES",
+      "VOID_MELEE_HELM",
+      "VOID_RANGER_HELM",
+      "VOID_MAGE_HELM",
+      [
+        "DRAGON_ARROW",
+        100000
+      ],
+      [
+        "RUBY_DRAGON_BOLTS_E_",
+        100000
+      ],
+      [
+        "DIAMOND_DRAGON_BOLTS_E_",
+        100000
+      ],
+      [
+        "DRAGON_DART",
+        100000
+      ],
+      [
+        "DRAGON_JAVELIN",
+        100000
+      ]
+    ],
+    [
+      "ANCESTRAL_HAT",
+      "ANCESTRAL_ROBE_TOP",
+      "ANCESTRAL_ROBE_BOTTOM",
+      "OCCULT_NECKLACE",
+      "TORMENTED_BRACELET",
+      "ETERNAL_BOOTS",
+      "MAGUS_RING",
+      "SEERS_RING_I_",
+      "IMBUED_SARADOMIN_CAPE",
+      "IMBUED_ZAMORAK_CAPE",
+      "IMBUED_GUTHIX_CAPE",
+      {
+        "item": "TUMEKENS_SHADOW",
+        "meta": {
+          "tumekens-shadow-charges": 20000
+        }
+      },
+      {
+        "item": "SANGUINESTI_STAFF",
+        "meta": {
+          "sanguinesti-staff-charges": 20000
+        }
+      },
+      {
+        "item": "TRIDENT_OF_THE_SWAMP",
+        "meta": {
+          "trident-charges": 2500
+        }
+      },
+      {
+        "item": "TOXIC_STAFF_OF_THE_DEAD",
+        "meta": {
+          "toxic-staff-charges": 11000
+        }
+      },
+      "KODAI_WAND",
+      "HARMONISED_NIGHTMARE_STAFF",
+      "ELIDINIS_WARD_F_",
+      "ARCANE_SPIRIT_SHIELD",
+      "ELYSIAN_SPIRIT_SHIELD",
+      "SPECTRAL_SPIRIT_SHIELD",
+      "DRAGONFIRE_SHIELD",
+      "DRAGONFIRE_WARD",
+      "ANTI_DRAGON_SHIELD",
+      "BOOK_OF_DARKNESS"
+    ],
+    [
+      [
+        "MANTA_RAY",
+        10000
+      ],
+      [
+        "ANGLERFISH",
+        10000
+      ],
+      [
+        "DARK_CRAB",
+        10000
+      ],
+      [
+        "SHARK",
+        10000
+      ],
+      [
+        "COOKED_KARAMBWAN",
+        10000
+      ],
+      [
+        "SUPER_COMBAT_POTION_4_",
+        10000
+      ],
+      [
+        "DIVINE_SUPER_COMBAT_POTION_4_",
+        10000
+      ],
+      [
+        "RANGING_POTION_4_",
+        10000
+      ],
+      [
+        "DIVINE_RANGING_POTION_4_",
+        10000
+      ],
+      [
+        "BASTION_POTION_4_",
+        10000
+      ],
+      [
+        "MAGIC_POTION_4_",
+        10000
+      ],
+      [
+        "PRAYER_POTION_4_",
+        10000
+      ],
+      [
+        "SUPER_RESTORE_4_",
+        10000
+      ],
+      [
+        "SARADOMIN_BREW_4_",
+        10000
+      ],
+      [
+        "SANFEW_SERUM_4_",
+        10000
+      ],
+      [
+        "STAMINA_POTION_4_",
+        10000
+      ],
+      [
+        "ANTI_VENOM_4__3",
+        10000
+      ],
+      [
+        "ANTIDOTE_4__3",
+        10000
+      ],
+      [
+        "EXTENDED_SUPER_ANTIFIRE_4_",
+        10000
+      ],
+      [
+        "SUPER_ANTIFIRE_POTION_4_",
+        10000
+      ],
+      "IMBUED_HEART",
+      "SATURATED_HEART",
+      "ROCK_CAKE"
+    ],
+    [
+      [
+        "AIR_RUNE",
+        1000000
+      ],
+      [
+        "WATER_RUNE",
+        1000000
+      ],
+      [
+        "EARTH_RUNE",
+        1000000
+      ],
+      [
+        "FIRE_RUNE",
+        1000000
+      ],
+      [
+        "MIND_RUNE",
+        1000000
+      ],
+      [
+        "BODY_RUNE",
+        1000000
+      ],
+      [
+        "COSMIC_RUNE",
+        1000000
+      ],
+      [
+        "CHAOS_RUNE",
+        1000000
+      ],
+      [
+        "NATURE_RUNE",
+        1000000
+      ],
+      [
+        "LAW_RUNE",
+        1000000
+      ],
+      [
+        "DEATH_RUNE",
+        1000000
+      ],
+      [
+        "BLOOD_RUNE",
+        1000000
+      ],
+      [
+        "SOUL_RUNE",
+        1000000
+      ],
+      [
+        "ASTRAL_RUNE",
+        1000000
+      ],
+      [
+        "WRATH_RUNE",
+        1000000
+      ],
+      [
+        "SUNFIRE_RUNE",
+        1000000
+      ],
+      [
+        "AETHER_RUNE",
+        1000000
+      ],
+      "RUNE_POUCH",
+      "DIVINE_RUNE_POUCH"
+    ],
+    [
+      [
+        "VARROCK_TELEPORT",
+        10000
+      ],
+      [
+        "LUMBRIDGE_TELEPORT",
+        10000
+      ],
+      [
+        "FALADOR_TELEPORT",
+        10000
+      ],
+      [
+        "CAMELOT_TELEPORT",
+        10000
+      ],
+      [
+        "ARDOUGNE_TELEPORT",
+        10000
+      ],
+      [
+        "WATCHTOWER_TELEPORT",
+        10000
+      ],
+      [
+        "TELEPORT_TO_HOUSE",
+        10000
+      ],
+      [
+        "RIMMINGTON_TELEPORT",
+        10000
+      ],
+      [
+        "TAVERLEY_TELEPORT",
+        10000
+      ],
+      [
+        "POLLNIVNEACH_TELEPORT",
+        10000
+      ],
+      [
+        "HOSIDIUS_TELEPORT",
+        10000
+      ],
+      [
+        "RELLEKKA_TELEPORT",
+        10000
+      ],
+      [
+        "BRIMHAVEN_TELEPORT",
+        10000
+      ],
+      [
+        "YANILLE_TELEPORT",
+        10000
+      ],
+      [
+        "TROLLHEIM_TELEPORT",
+        10000
+      ],
+      [
+        "CARRALLANGER_TELEPORT",
+        10000
+      ],
+      [
+        "ANNAKARL_TELEPORT",
+        10000
+      ],
+      [
+        "SENNTISTEN_TELEPORT",
+        10000
+      ],
+      [
+        "ICE_PLATEAU_TELEPORT",
+        10000
+      ],
+      [
+        "GHORROCK_TELEPORT",
+        10000
+      ],
+      [
+        "KHARYRLL_TELEPORT",
+        10000
+      ],
+      [
+        "LASSAR_TELEPORT",
+        10000
+      ],
+      [
+        "PADDEWWA_TELEPORT",
+        10000
+      ],
+      [
+        "DAREEYAK_TELEPORT",
+        10000
+      ],
+      [
+        "RING_OF_DUELING_8_",
+        100
+      ],
+      [
+        "GAMES_NECKLACE_8_",
+        100
+      ],
+      [
+        "AMULET_OF_GLORY_6_",
+        100
+      ],
+      [
+        "RING_OF_WEALTH_5_",
+        100
+      ],
+      [
+        "SKILLS_NECKLACE_6_",
+        100
+      ],
+      [
+        "COMBAT_BRACELET_6_",
+        100
+      ],
+      [
+        "DIGSITE_PENDANT_5_",
+        100
+      ],
+      [
+        "SLAYER_RING_8_",
+        100
+      ],
+      [
+        "NECKLACE_OF_PASSAGE_5_",
+        100
+      ],
+      [
+        "BURNING_AMULET_5_",
+        100
+      ],
+      "XERICS_TALISMAN",
+      "DRAKANS_MEDALLION",
+      "ECTOPHIAL",
+      "ROYAL_SEED_POD",
+      "PHARAOHS_SCEPTRE",
+      "CHRONICLE",
+      "MYTHICAL_CAPE",
+      "CONSTRUCT_CAPE",
+      "ENCHANTED_LYRE_I_",
+      "EXPLORERS_RING_4",
+      "ARDOUGNE_CLOAK_4",
+      "KARAMJA_GLOVES_4",
+      "DESERT_AMULET_4",
+      "RADAS_BLESSING_4",
+      "MORYTANIA_LEGS_4",
+      "VARROCK_ARMOUR_4",
+      "FREMENNIK_SEA_BOOTS_4",
+      "WESTERN_BANNER_4",
+      "KANDARIN_HEADGEAR_4"
+    ],
+    [
+      [
+        "COINS",
+        1000000000
+      ],
+      "SLAYER_HELMET_I_",
+      "GRACEFUL_HOOD",
+      "GRACEFUL_TOP",
+      "GRACEFUL_LEGS",
+      "GRACEFUL_GLOVES",
+      "GRACEFUL_BOOTS",
+      "GRACEFUL_CAPE",
+      "LOOTING_BAG",
+      "GEM_BAG",
+      "HERB_SACK",
+      "SEED_BOX",
+      "COAL_BAG",
+      "INFERNAL_PICKAXE",
+      "CRYSTAL_PICKAXE",
+      "DRAGON_PICKAXE",
+      "INFERNAL_AXE",
+      "CRYSTAL_AXE",
+      "DRAGON_AXE",
+      "INFERNAL_HARPOON",
+      "CRYSTAL_HARPOON",
+      "DRAGON_HARPOON",
+      "SPADE",
+      "ROPE",
+      "KNIFE",
+      "CHISEL",
+      "HAMMER",
+      "SAW",
+      "TINDERBOX",
+      "HOLY_SYMBOL"
+    ]
+  ]
 }

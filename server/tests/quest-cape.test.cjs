@@ -245,3 +245,22 @@ test('Quest point cape skillcape emote requires every quest and uses its cache a
   musicUnlocked = true;
   assert.deepEqual(resolveSkillcapeEmote(player, musicApi), { sequence: 4751, graphic: 1239 });
 });
+
+test('a world can ask for only the main quests this server has', () => {
+  const unbuilt = registered.pop();
+  registered.push({ key: 'bear_your_soul', name: 'Bear Your Soul' }); // a miniquest: not on the cache's list
+  const answersBefore = answers.quests;
+  answers.quests = true;
+  try {
+    assert.equal(allQuestsComplete({}), false, 'closed by default while a main quest is missing');
+    api.getPluginConfig = (key, fallback) => (key === 'QuestCape:implementedQuestsOnly' ? true : fallback);
+    assert.equal(allQuestsComplete({}), true, 'the unbuilt quest no longer counts');
+    answers.quests = false;
+    assert.equal(allQuestsComplete({}), false, 'the quests that exist must still be complete');
+  } finally {
+    delete api.getPluginConfig;
+    answers.quests = answersBefore;
+    registered.pop();
+    registered.push(unbuilt);
+  }
+});

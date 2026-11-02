@@ -9,6 +9,7 @@ How `PlayerDeathTask` (`server/src/main/typescript/elvarg/game/task/impl/PlayerD
 - **Ranked by:** each item's Grand Exchange guide price (`item-prices.json`), or its high alchemy value when it has no price (Wiki: "the highest value determined first by effective Grand Exchange value, and then by alchemy value"). A stack is ranked by one item's price, as before. Before, items were ranked by their cache store value, which can run the other way: unskulled with a rune platebody, platelegs and kiteshield (store 54,400-65,000) and ranger boots, a berserker ring and dragon boots (store 200-20,000, but each worth more on the Grand Exchange), a death kept the rune armour.
 - **Untradeable items outside the kept ones** go to the player's grave on a PvM death ([gravestones](gravestones.md)). On a PvP death, or with graves turned off, they are still kept, as before, unless they split (below) or break ([broken items](broken-items.md)).
 - **Preset items** (from `::presets`, flagged with item metadata) are always lost and never take a kept slot. That's by design: they're free.
+- **Owners and developers** lose nothing: their deaths are safe deaths, with every item left in its slot, preset items included, and no death-item hook run. `::mortal` turns that off for the session.
 
 ## The Items Kept on Death interface (rsprox captures)
 

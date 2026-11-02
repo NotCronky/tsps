@@ -64,7 +64,7 @@ export class PlayerDeathTask extends Task {
                     }
                     const pluginShouldDropItems =
                         PluginManager.emitShouldDropItemsOnDeath(this.player, this.killer ?? null);
-                    this.loseItems = pluginShouldDropItems ?? true;
+                    this.loseItems = (pluginShouldDropItems ?? true) && !PlayerDeathTask.keepsEverything(this.player);
                     const deathPosition = this.player.getLocation();
                     // Always drop player bones on death, independent of item-drop policy.
                     ItemOnGroundManager.registerLocation(
@@ -180,8 +180,7 @@ export class PlayerDeathTask extends Task {
         for (const item of playerItems) {
             const dropEligible =
                 (item.isTradeable() || (!item.isLostOnDeath() && Barrows.isBarrowsItem(item.getId()))) &&
-                !itemsToKeep.includes(item) &&
-                !PlayerDeathTask.keepsEverything(player);
+                !itemsToKeep.includes(item);
             const deathDropEvent = {
                 player,
                 killer: killer ?? null,
@@ -204,13 +203,6 @@ export class PlayerDeathTask extends Task {
                 continue;
             }
 
-            // Owners and developers keep everything.
-            if (PlayerDeathTask.keepsEverything(player)) {
-                if (!item.isLostOnDeath() && !itemsToKeep.includes(item)) {
-                    itemsToKeep.push(item);
-                }
-                continue;
-            }
             if (item.isLostOnDeath() || itemsToKeep.includes(item)) {
                 continue;
             }
@@ -223,19 +215,17 @@ export class PlayerDeathTask extends Task {
         }
 
         // Emitted with nothing lost too: a death still changes an existing grave.
-        if (!PlayerDeathTask.keepsEverything(player)) {
-            const before = droppedItems.length + lostUntradeables.length;
-            PluginManager.emitPlayerDeathDrops({
-                player,
-                killer: killer ?? null,
-                location: position,
-                items: droppedItems,
-                untradeables: lostUntradeables,
-                layout,
-            });
-            if (droppedItems.length + lostUntradeables.length < before) {
-                pluginHandledDrop = true;
-            }
+        const before = droppedItems.length + lostUntradeables.length;
+        PluginManager.emitPlayerDeathDrops({
+            player,
+            killer: killer ?? null,
+            location: position,
+            items: droppedItems,
+            untradeables: lostUntradeables,
+            layout,
+        });
+        if (droppedItems.length + lostUntradeables.length < before) {
+            pluginHandledDrop = true;
         }
         for (const item of droppedItems) {
             ItemOnGroundManager.registerLocation(killer ? killer : player, item, position);
@@ -266,6 +256,7 @@ export class PlayerDeathTask extends Task {
      * its dead until the whole party falls takes their items then (The Fractured Archive).
      */
     public static loseItemsAsDeath(player: Player, position: Location): void {
+        if (PlayerDeathTask.keepsEverything(player)) return;
         PlayerDeathTask.returnKeptItems(player, PlayerDeathTask.dropItems(player, null, position));
         GameConstants.PLAYER_PERSISTENCE.requestSave(player, "death");
     }
@@ -297,7 +288,10 @@ export class PlayerDeathTask extends Task {
         };
     }
 
-    /** Owners and developers keep everything, unless they made themselves mortal (::mortal). */
+    /**
+     * Owners and developers die safely: every item stays in its slot, unless they made themselves
+     * mortal (::mortal).
+     */
     private static keepsEverything(player: Player): boolean {
         const rights = player.getRights();
         return (rights === PlayerRights.OWNER || rights === PlayerRights.DEVELOPER)
@@ -306,7 +300,6 @@ export class PlayerDeathTask extends Task {
 
     private static splitIntoComponents(player: Player, killer: Player | null | undefined, kept: Item[], items: Item[]): Item[] {
         if (!killer || killer === player || !Wilderness.isIn(player)) return items;
-        if (PlayerDeathTask.keepsEverything(player)) return items;
         return items.flatMap((item) => {
             const components = item.getDefinition().getDeathComponents();
             if (components.length === 0 || kept.includes(item) || item.isLostOnDeath()) return [item];

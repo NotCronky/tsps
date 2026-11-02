@@ -138,10 +138,11 @@ function addXp(player, xp) {
  * cycle after the click: something captured `n` ticks after the click happens on tick `n`.
  * `step` returns false to stop.
  */
-function run(player, step) {
+/** Runs `step` each tick until it returns false; `key` is what cancels it, the player's walking by default. */
+function run(player, step, key = player.getIndex()) {
   let tick = 0;
   core.TaskManager.submit(new (class extends core.Task {
-    constructor() { super(1, player.getIndex(), false); }
+    constructor() { super(1, key, false); }
     execute() {
       if (!player.isRegistered() || player.getHitpoints() <= 0 || step(++tick) === false) this.stop();
     }

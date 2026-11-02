@@ -334,7 +334,8 @@ function queueNpcSpawn(player, id, amount = 1, onSpawn = null, xOffset = 0, yOff
 // The cache's chatbox search (clientscript 750) searches names client side and resumes the
 // dialogue with what was picked - everything a spawner needs, without a server-drawn
 // interface. The title tells the client which types to search and to put the spawn amounts
-// on each row, so a pick arrives as "<id> <op>".
+// on each row, so a pick arrives as "<id> <op>". The official client through the gateway has
+// only the cache's "Select", so its pick is the bare id and the amount is asked for.
 const SEARCH_SCRIPT = 750;
 const SEARCH_CLOSE_SCRIPT = 138;
 const ITEM_SEARCH_TITLE = "Item Search";
@@ -374,7 +375,7 @@ function spawnSearchPick(player, input) {
   const spawn = spawnSearches.get(player);
   const [idPart, opPart] = String(input).split(" ");
   const id = parseIntArg(idPart);
-  const op = parseIntArg(opPart) ?? 1;
+  const op = parseIntArg(opPart) ?? SPAWN_OP_X;
   if (!spawn || id === null || id < 0) {
     return;
   }
@@ -416,8 +417,42 @@ function spawnSearchedNpc(player, id, amount) {
     .sendMessage(`Spawned ${spawned} x ${NpcDefinition.forId(id)?.getName?.() ?? "npc"} (${id}).`);
 }
 
+/** What ::spawn hands over: more than one of an unstackable item comes as its note, if it has one. */
+function spawnItemId(id, amount) {
+  const definition = ItemDefinition.forId(id);
+  if (amount <= 1 || definition.isStackable() || definition.isNoted()) {
+    return id;
+  }
+  const noteId = definition.getNoteId();
+  return noteId > 0 ? noteId : id;
+}
+
+function spawnNotedItem(core, player, id, amount) {
+  // Re-checked here: the pick arrives on a later tick, and this is a privileged action.
+  if (!PluginManager.playerHasCommandRights(player, "spawn") || !CacheDefinitions.hasItem(id)) {
+    return;
+  }
+  const spawnId = spawnItemId(id, amount);
+  const inventory = player.getInventory();
+  const room = inventory.getAddableAmount(new core.Item(spawnId, amount));
+  if (room <= 0) {
+    player.sendMessage("You don't have enough inventory space.");
+    return;
+  }
+  inventory.adds(spawnId, room);
+  const name = ItemDefinition.forId(id)?.getName?.() ?? "item";
+  const noted = spawnId !== id ? " (noted)" : "";
+  const fit = room < amount ? `; only ${room} of ${amount} fit` : "";
+  player.sendMessage(`Spawned ${room} x ${name}${noted} (${spawnId})${fit}.`);
+}
+
 function itemSearchCommand({ player }) {
   openSpawnSearch(player, ITEM_SEARCH_TITLE, (id, amount) => spawnSearchedItem(player, id, amount));
+  return true;
+}
+
+function notedItemSearchCommand(core, { player }) {
+  openSpawnSearch(player, ITEM_SEARCH_TITLE, (id, amount) => spawnNotedItem(core, player, id, amount));
   return true;
 }
 
@@ -1040,6 +1075,7 @@ module.exports = {
     }, PlayerRights.OWNER, "Transform into NPC");
 
     api.registerCommand("items", itemSearchCommand, PlayerRights.ADMINISTRATOR, "Open item spawner");
+    api.registerCommand("spawn", notedItemSearchCommand.bind(null, api.core), PlayerRights.ADMINISTRATOR, "Search for an item and pick a quantity (2+ arrive noted)");
     api.registerCommand("npcs", npcSearchCommand, PlayerRights.OWNER, "Search and spawn NPCs");
     api.onPlayerProcess(closeSpawnSearchOnMove);
 

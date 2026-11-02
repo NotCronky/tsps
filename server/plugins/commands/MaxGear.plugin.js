@@ -5,6 +5,9 @@
  * Worn gear goes to the bank; the inventory and stats are left alone (::master gives 99s).
  * `void` swaps in that style's void helm and elite void. The sets are data:
  * plugins/commands/data/dev-loadouts.json.
+ *
+ * ::maxbank - replaces the whole bank with the "bank" lists of the same file, one per tab: gear
+ * (charged items full), supplies, runes, teleports and tools. Inventory and worn items stay.
  */
 
 const fs = require("fs");
@@ -103,12 +106,34 @@ function maxGear({ player, parts }) {
   return true;
 }
 
+/** Every tab's items, read before anything is touched so a bad entry can't leave the bank empty. */
+function bankTabs() {
+  return data().bank.map((entries, tab) => entries.map((entry) => readEntry(entry, `bank tab ${tab + 1}`)));
+}
+
+function maxBank({ player }) {
+  const { Bank } = core();
+  const tabs = bankTabs();
+  for (let tab = 0; tab < Bank.TOTAL_BANK_TABS; tab++) player.getBank(tab).resetItems();
+  Bank.withoutLimit(player, () => tabs.forEach((items, tab) => {
+    for (const entry of items) player.getBank(tab + 1).add(makeItem(entry), false);
+  }));
+  player.getBank(player.getCurrentBankTab()).refreshItems();
+  pluginApi.emitCustomEvent("persistence:save", { player, reason: "max-bank" });
+  const total = tabs.reduce((count, items) => count + items.length, 0);
+  player.sendMessage(`Your bank has been replaced with ${total} items across ${tabs.length} tabs.`);
+  return true;
+}
+
 module.exports = {
   name: "MaxGear",
   register(api) {
     pluginApi = api;
     api.registerCommand("maxgear", maxGear, api.core.PlayerRights.DEVELOPER, "Wear best-in-slot gear (worn items go to the bank)");
+    api.registerCommand("maxbank", maxBank, api.core.PlayerRights.OWNER, "Replace your bank with the best gear, supplies, runes and teleports");
   },
   maxGear,
+  maxBank,
+  bankTabs,
   loadoutFor,
 };

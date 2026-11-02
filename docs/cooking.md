@@ -112,3 +112,10 @@ gameval. The Gauntlet's range is `server/plugins/minigames/gauntlet/Prep.Gauntle
 
 Sinew on the Lumbridge range ("What would you like to cook?|Cooked meat|Sinew"), potatoes, stew,
 cakes and the Hosidius Kitchen's lower burn chance.
+
+## Sacred eels
+
+A knife on a sacred eel dissects every eel carried (`server/plugins/skills/cooking/Eels.Cooking.js`):
+72 Cooking, no failures, 3-9 Zulrah's scales by boosted level and 100 XP plus 3 per scale, as the
+Wiki says. Walking doesn't stop it (update of 23 July 2020). The pace of 3 ticks an eel and the
+animation aren't from a capture.

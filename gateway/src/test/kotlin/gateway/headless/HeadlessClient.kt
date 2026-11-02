@@ -190,6 +190,14 @@ class HeadlessClient(private val host: String, private val port: Int) {
                 }.buffer.let { it.array().copyOf(it.writerIndex()) },
             )
 
+        /** RESUME_P_OBJDIALOG: the item picked in the chatbox item search. */
+        fun resumeObj(obj: Int) =
+            sendFixed(RESUME_P_OBJDIALOG, Unpooled.buffer().toJagByteBuf().apply { p2(obj) }.buffer.let { it.array().copyOf(it.writerIndex()) })
+
+        /** RESUME_P_COUNTDIALOG: the number typed into an amount prompt. */
+        fun resumeCount(count: Int) =
+            sendFixed(RESUME_P_COUNTDIALOG, Unpooled.buffer().toJagByteBuf().apply { p4(count) }.buffer.let { it.array().copyOf(it.writerIndex()) })
+
         /** IF_BUTTONT: the selected component (a spell, or an item's Use) on a target component's slot. */
         fun buttonT(selected: Int, selectedSub: Int, selectedObj: Int, target: Int, targetSub: Int, targetObj: Int) =
             sendFixed(
@@ -442,6 +450,8 @@ class HeadlessClient(private val host: String, private val port: Int) {
         const val OPNPC1 = 92
         const val IF_BUTTONT = 15
         const val RESUME_PAUSEBUTTON = 16
+        const val RESUME_P_OBJDIALOG = 3
+        const val RESUME_P_COUNTDIALOG = 68
         const val FRIENDLIST_ADD = 14
         const val MESSAGE_PRIVATE = 50
         const val MESSAGE_PUBLIC = 49

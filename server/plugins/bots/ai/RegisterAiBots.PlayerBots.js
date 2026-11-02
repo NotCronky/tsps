@@ -39,7 +39,7 @@ function buildCatalog(registry) {
       const about = activity.mode === "combat_training"
         ? "fight monsters that suit your combat level, with your own gear and food"
         : `${activity.mode.replace(/_/g, " ")}${level > 1 ? `, needs level ${level}` : ""}`;
-      return { id: activity.id, about, activity };
+      return { id: activity.id, about, activity, level };
     });
 }
 
@@ -295,4 +295,4 @@ function registerAiBots({ api, botApi, runtime, registry, world, resetMovementSt
   return { minds, roster };
 }
 
-module.exports = { registerAiBots, buildCatalog };
+module.exports = { registerAiBots, buildCatalog, lockedPassword };

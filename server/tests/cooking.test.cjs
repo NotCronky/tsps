@@ -428,3 +428,41 @@ test("wine's success chance is the Wiki's: about 60% at 35, sure at 68; stacks r
   assert.equal(successes(32, 0.5, () => (rolls++ % 2 === 0 ? 0 : 1)), 8 * 2 + 1, "15 batches of 2 and 2 jugs left over");
   assert.equal(rolls, 17);
 });
+
+test("sacred eels give the Wiki's scales: 8-level bands from 72, capped at 104", () => {
+  const Eels = require("../plugins/skills/cooking/Eels.Cooking");
+  const table = [[72, 3, 5], [79, 3, 5], [80, 4, 6], [87, 4, 6], [88, 5, 7], [95, 5, 7], [96, 6, 8], [99, 6, 8], [103, 6, 8], [104, 7, 9], [126, 7, 9]];
+  for (const [level, minimum, maximum] of table) {
+    assert.deepEqual(Eels.scaleRange(level), { minimum, maximum }, `level ${level}`);
+    assert.equal(Eels.rollScales(level, () => 0), minimum);
+    assert.equal(Eels.rollScales(level, () => 0.999), maximum);
+  }
+});
+
+test("a dissected eel becomes scales and pays 100 XP plus 3 for each, between 109 and 127", () => {
+  const Eels = require("../plugins/skills/cooking/Eels.Cooking");
+  const { ItemIdentifiers: I } = core;
+  const held = new Map([[I.SACRED_EEL, 2]]);
+  const gained = [];
+  const player = {
+    getInventory: () => ({
+      getAmount: (id) => held.get(id) ?? 0,
+      deleteNumber: (id, amount) => held.set(id, held.get(id) - amount),
+      adds: (id, amount) => held.set(id, (held.get(id) ?? 0) + amount),
+    }),
+    getSkillManager: () => ({
+      getCurrentLevel: () => 99,
+      addExperience: (_skill, xp) => gained.push(xp),
+      addExperiences: (_skill, xp) => gained.push(xp),
+    }),
+    getEquipment: () => ({ getItems: () => [] }),
+    getAttribute: () => undefined,
+  };
+  assert.equal(Eels.dissectOne(player), true);
+  assert.equal(held.get(I.SACRED_EEL), 1);
+  const scales = held.get(I.ZULRAHS_SCALES);
+  assert.ok(scales >= 6 && scales <= 8, `${scales} scales at 99`);
+  assert.deepEqual(gained, [100 + scales * 3]);
+  assert.equal(Eels.dissectOne(player), true);
+  assert.equal(Eels.dissectOne(player), false, "nothing left to dissect");
+});

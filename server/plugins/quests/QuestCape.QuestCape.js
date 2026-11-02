@@ -9,6 +9,8 @@ const QUEST_POINTS_COLUMN = 17;
 const HAS_SUBQUESTS_COLUMN = 22;
 const PRICE = 99000;
 const GATE_LOCATION = { x: 2727, y: 3349, z: 0 };
+/** World config: the cape asks only for the cache's main quests this server has, not all of them. */
+const IMPLEMENTED_ONLY_CONFIG = "QuestCape:implementedQuestsOnly";
 
 let pluginApi;
 let Items;
@@ -57,10 +59,14 @@ function allQuestsComplete(player) {
     if (!name || byCanonicalName.has(name)) return false;
     byCanonicalName.set(name, quest);
   }
-  if (byCanonicalName.size !== required.length) return false;
+  const implementedOnly = pluginApi.getPluginConfig?.(IMPLEMENTED_ONLY_CONFIG, false) === true;
+  if (!implementedOnly && byCanonicalName.size !== required.length) return false;
   for (const name of required) {
     const quest = byCanonicalName.get(canonicalQuestName(name));
-    if (!quest) return false;
+    if (!quest) {
+      if (implementedOnly) continue;
+      return false;
+    }
     const request = { player, key: quest.key, complete: false };
     pluginApi.emitCustomEvent("quest:is-complete", request);
     if (request.complete !== true) return false;

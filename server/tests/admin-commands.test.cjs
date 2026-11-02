@@ -218,3 +218,76 @@ test("::setlevel refuses levels a skill can't have, and skill names it can't tel
   assert.equal(owner.messages.at(-1), "Player nobody is not online.");
   assert.equal(owner.getSkillManager().getMaxLevel(Skill.ATTACK), 1, "nothing changed");
 });
+
+/** Opens ::spawn and picks a row: op 1-3 spawn 1, 5 and 10; op 4 asks for the amount. */
+function spawnPick(player, id, op) {
+  type(player, "spawn");
+  player.getEnteredSyntaxAction().execute(`${id} ${op}`);
+}
+
+test("::spawn is for administrators and up", () => {
+  const player = login("Player");
+  type(player, "spawn");
+  assert.equal(player.messages.at(-1), NO_PERMISSION);
+  assert.equal(player.getEnteredSyntaxAction?.() ?? null, null);
+});
+
+test("::spawn gives one item as itself and more than one as its note", () => {
+  const { ItemDefinition } = core;
+  const owner = login("Owner", Rights.OWNER);
+  const noteId = ItemDefinition.forId(I.SHARK).getNoteId();
+  assert.ok(noteId > 0);
+
+  spawnPick(owner, I.SHARK, 1);
+  assert.equal(owner.getInventory().getAmount(I.SHARK), 1);
+  assert.equal(owner.getInventory().getAmount(noteId), 0);
+
+  spawnPick(owner, I.SHARK, 3);
+  assert.equal(owner.getInventory().getAmount(I.SHARK), 1, "no loose sharks");
+  assert.equal(owner.getInventory().getAmount(noteId), 10);
+  assert.match(owner.messages.at(-1), /^Spawned 10 x Shark \(noted\)/);
+
+  spawnPick(owner, noteId, 2);
+  assert.equal(owner.getInventory().getAmount(noteId), 15, "a picked note stays a note");
+});
+
+test("::spawn takes a typed amount, and leaves stackables as they are", () => {
+  const owner = login("Owner", Rights.OWNER);
+  spawnPick(owner, I.COINS, 4);
+  owner.getEnteredAmountAction().execute(1234567);
+  assert.equal(owner.getInventory().getAmount(I.COINS), 1234567);
+  assert.match(owner.messages.at(-1), /^Spawned 1234567 x Coins \(995\)\.$/);
+});
+
+test("::spawn says what fit when an item has no note", () => {
+  const { ItemDefinition } = core;
+  const owner = login("Owner", Rights.OWNER);
+  const id = [I.BRONZE_KEY, I.GHOSTSPEAK_AMULET, I.BARCRAWL_CARD, I.SPINACH_ROLL]
+    .find((item) => item > 0 && !ItemDefinition.forId(item).isStackable() && ItemDefinition.forId(item).getNoteId() <= 0);
+  assert.ok(id, "an unstackable item without a note");
+  owner.getInventory().adds(I.COINS, 1);
+  for (let slot = 0; slot < 24; slot++) owner.getInventory().adds(I.SHARK, 1);
+  spawnPick(owner, id, 2);
+  assert.equal(owner.getInventory().getAmount(id), 3);
+  assert.match(owner.messages.at(-1), /only 3 of 5 fit\.$/);
+  spawnPick(owner, id, 1);
+  assert.equal(owner.messages.at(-1), "You don't have enough inventory space.");
+});
+
+test("a bare pick, as the official client sends it, asks for the amount and still notes", () => {
+  const { ItemDefinition } = core;
+  const owner = login("Owner", Rights.OWNER);
+  type(owner, "spawn");
+  owner.getEnteredSyntaxAction().execute(String(I.SHARK));
+  assert.equal(owner.getInventory().getAmount(I.SHARK), 0, "nothing until the amount is entered");
+  owner.getEnteredAmountAction().execute(50);
+  assert.equal(owner.getInventory().getAmount(ItemDefinition.forId(I.SHARK).getNoteId()), 50);
+});
+
+test("::items takes a bare pick too", () => {
+  const owner = login("Owner", Rights.OWNER);
+  type(owner, "items");
+  owner.getEnteredSyntaxAction().execute(String(I.COINS));
+  owner.getEnteredAmountAction().execute(1000);
+  assert.equal(owner.getInventory().getAmount(I.COINS), 1000);
+});

@@ -169,3 +169,34 @@ test('gear the player has not trained for is refused and stays in their inventor
   assert.ok(!player.messages.some((message) => /to wear this/.test(message)),
     'the same mask goes on once the combat level is there');
 });
+
+test('::maxbank lists only real, unnoted items, with charged weapons full', async () => {
+  await CachePipeline.initialize(require('node:path').resolve(__dirname, '..'));
+  const tabs = MaxGear.bankTabs();
+  assert.equal(tabs.length, 7);
+  const items = tabs.flat();
+  for (const { id } of items) {
+    assert.ok(CacheDefinitions.hasItem(id), `item ${id} exists`);
+    assert.equal(core.ItemDefinition.forId(id).isNoted(), false, `${id} is unnoted`);
+  }
+  for (const [item, key] of [[I.SCYTHE_OF_VITUR, 'scythe-of-vitur-charges'], [I.TUMEKENS_SHADOW, 'tumekens-shadow-charges'], [I.SANGUINESTI_STAFF, 'sanguinesti-staff-charges']]) {
+    assert.ok(items.find(({ id }) => id === item).meta[key] > 0, `${key} is set`);
+  }
+});
+
+test('::maxbank clears every tab, then fills tabs 1 to 7', () => {
+  const { Bank } = core;
+  const cleared = [];
+  const added = [];
+  const bank = (tab) => ({
+    resetItems() { cleared.push(tab); return this; },
+    add(item) { added.push([tab, item.getId()]); return this; },
+    refreshItems() { return this; },
+  });
+  const player = { getBank: bank, getCurrentBankTab: () => 0, sendMessage() {} };
+  MaxGear.register(new Proxy({ core, registerCommand() {} }, { get: (target, key) => target[key] ?? (() => {}) }));
+  MaxGear.maxBank({ player });
+  assert.equal(cleared.length, Bank.TOTAL_BANK_TABS);
+  assert.ok(added.some(([tab, id]) => tab === 1 && id === I.SCYTHE_OF_VITUR));
+  assert.ok(added.every(([tab]) => tab >= 1 && tab <= 7), 'tabs 1 to 7');
+});
