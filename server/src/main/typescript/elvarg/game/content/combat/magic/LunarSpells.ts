@@ -215,8 +215,14 @@ export class LunarSpells {
         ["tele group ice plateau", teleport("tele group ice plateau", 99, 2975, 3938)],
     ]);
 
+    /**
+     * Each teleport with its level and runes (the cache's), as the other spellbooks list theirs:
+     * directing a house portal reads both.
+     */
     public static getTeleportDestinations() {
-        return Array.from(this.TELEPORTS, ([name, spell]) => ({ name, ...spell.teleport }));
+        return Array.from(this.TELEPORTS, ([name, spell]) => ({
+            name, ...spell.teleport, level: spell.levelRequired(), runes: spell.itemsRequired(),
+        }));
     }
 
     /** A self-cast from the spellbook; `option` is the clicked op (Spellbook Swap's quick books are 2-4). */
