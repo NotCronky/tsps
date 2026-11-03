@@ -45,6 +45,7 @@ const ATTACK_RANGE_DEBUG_GRAPHIC = new Graphic(332, 0);
 const MAX_NPC_COMMAND_SPAWNS = 20;
 const INFINITE_HEALTH_ATTRIBUTE = "admin:infinite-health";
 const INFINITE_RUN_ENERGY_ATTRIBUTE = "admin:infinite-run-energy";
+const INFINITE_PRAYER_ATTRIBUTE = "admin:infinite-prayer";
 const RUNE_IDS = [554, 555, 556, 557, 558, 559, 560, 561, 562, 563, 564, 565, 566, 9075, 21880, 28929];
 const FULL_RUN_ENERGY = 100;
 // Short forms ::setlevel takes that aren't the start of the skill's name (att, str, pray are).
@@ -479,6 +480,25 @@ function keepRunEnergyFull({ player }) {
     player.setRunEnergy(FULL_RUN_ENERGY);
     player.getPacketSender().sendRunEnergy();
   }
+}
+
+function infinitePrayerCommand({ player }) {
+  const infinite = player.getAttribute(INFINITE_PRAYER_ATTRIBUTE) !== true;
+  player.setAttribute(INFINITE_PRAYER_ATTRIBUTE, infinite ? true : null);
+  player.sendMessage(infinite
+    ? "Your prayer points no longer drain. ::infpray again to stop."
+    : "Your prayer points drain as normal again.");
+  return true;
+}
+
+// Every change to a current level passes through here as it happens, so a drop in prayer (the
+// active prayers' drain, a boss's drain, a hit that drains prayer) is undone before anything sees
+// it: points never reach 0, so prayers never switch off. Restoring raises the level, which doesn't
+// come back here as a drop.
+function keepPrayerPoints({ player, skill, previous, current }) {
+  if (skill !== Skill.PRAYER || current >= previous) return;
+  if (player?.getAttribute?.(INFINITE_PRAYER_ATTRIBUTE) !== true) return;
+  player.getSkillManager().setCurrentLevel(Skill.PRAYER, previous, true);
 }
 
 /** ::give id [amount] player - puts items in an online player's inventory, as ::item does in yours. */
@@ -1362,6 +1382,9 @@ module.exports = {
 
     api.registerCommand("infrun", infiniteRunEnergyCommand, PlayerRights.OWNER, "Toggle infinite run energy");
     api.onPlayerProcess(keepRunEnergyFull);
+
+    api.registerCommand("infpray", infinitePrayerCommand, PlayerRights.OWNER, "Toggle infinite prayer points");
+    api.onCustomEvent("skills:current-level-changed", keepPrayerPoints);
 
     api.registerCommand("poisonme", ({ player, parts }) => {
       const typeToken = String(parts?.[1] ?? "super").trim().toLowerCase();

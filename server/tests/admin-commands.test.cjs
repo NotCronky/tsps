@@ -76,6 +76,29 @@ test("::infrun keeps run energy full while running, until it is turned off", () 
   assert.equal(owner.isRunningReturn(), false, "out of energy, so walking");
 });
 
+test("::infpray stops prayer points draining, from any source, until it is turned off", () => {
+  const owner = login("Owner", Rights.OWNER);
+  const skills = owner.getSkillManager();
+  skills.setMaxLevel(Skill.PRAYER, 99).setCurrentLevel(Skill.PRAYER, 99, false);
+  type(owner, "infpray");
+  assert.equal(owner.messages.at(-1), "Your prayer points no longer drain. ::infpray again to stop.");
+
+  skills.setCurrentLevel(Skill.PRAYER, 98, true); // a tick of an active prayer's drain
+  skills.setCurrentLevel(Skill.PRAYER, 0, true); // a boss draining it all at once
+  assert.equal(skills.getCurrentLevel(Skill.PRAYER), 99, "never drops, so prayers never switch off");
+  skills.setCurrentLevel(Skill.PRAYER, 104, true); // a boost still goes through
+  assert.equal(skills.getCurrentLevel(Skill.PRAYER), 104);
+
+  type(owner, "infpray");
+  assert.equal(owner.messages.at(-1), "Your prayer points drain as normal again.");
+  skills.setCurrentLevel(Skill.PRAYER, 40, true);
+  assert.equal(skills.getCurrentLevel(Skill.PRAYER), 40);
+
+  const admin = login("Admin", Rights.ADMINISTRATOR);
+  type(admin, "infpray");
+  assert.equal(admin.messages.at(-1), NO_PERMISSION, "owners only, like ::infhp and ::infrun");
+});
+
 test("::infrun and ::setlevel need an owner, ::give an administrator", () => {
   const admin = login("Admin", Rights.ADMINISTRATOR);
   const moderator = login("Moderator", Rights.MODERATOR);
