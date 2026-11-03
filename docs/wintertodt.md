@@ -347,7 +347,7 @@ These follow the Wiki and Near-Reality until a capture says otherwise:
 `Bots.Wintertodt.js` keeps a crowd fighting the Wintertodt with the players. Every bot acts through the same calls a player's clicks make: the object route and option, item on item, the NPC option, the item's own option. Points, warmth, the Wintertodt's attacks and the interruptions they cause all reach bots as they reach players.
 
 **Who comes:**
-- While a real player is in the camp or the prison, the world keeps a set number of bots: 8, or what `::wtbots` sets (0 to 40).
+- While a real player is in the camp or the prison, the world keeps a set number of bots: 8, or what `::wtbots` sets (0 to 100).
 - They arrive outside the Doors of Dinh one a tick and go in through them.
 - With no real player about for 100 ticks, they log out. They are never saved.
 - The world sends no zone events for bots, so each bot runs the doors' own zone handlers (`enteredPrison`, `leftPrison`, `syncHud`) as it crosses. The round then counts it as a player in the prison: the cold, the attacks, the end-of-round sweep of fuel and the reward reach it too.
@@ -382,4 +382,4 @@ A bot that dies logs out rather than dropping its kit in the prison.
 | `::wtinfo` | Your warm items, warmth, the damage each attack would do now, and the cold's chance. |
 | `::wtlight` | Lights every brazier and heals every pyromancer. |
 | `::wtattack <area\|small\|large\|pyro>` | Makes the Wintertodt attack you, or the corner nearest you. |
-| `::wtbots [count]` | How many bots the world keeps while players are about (0 turns them off); without a count, shows it. |
+| `::wtbots [count]` | How many bots the world keeps while players are about, 0-100 (0 turns them off); without a count, shows it. |

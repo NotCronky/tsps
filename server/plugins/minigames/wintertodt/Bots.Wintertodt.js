@@ -39,7 +39,7 @@ const { realisticName } = require("../../bots/ai/Names.PlayerBots");
 
 /** How many bots a world keeps while a real player is about, unless ::wtbots says otherwise. */
 const DEFAULT_TARGET = 8;
-const MAX_TARGET = 40;
+const MAX_TARGET = 100;
 /** A minute with no real player in the camp or prison and the bots log out. */
 const IDLE_LOGOUT_TICKS = 100;
 /** At most one new bot a tick, so a crowd trickles in as players do. */
