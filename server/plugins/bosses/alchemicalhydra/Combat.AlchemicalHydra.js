@@ -1,11 +1,15 @@
 /**
  * The Alchemical Hydra's combat method (Wiki: Alchemical Hydra/Strategies; stats from
  * monsters-complete): ranged and magic, switching every three basic attacks (every attack once
- * enraged), 35 at most and every 6 ticks, 55 and every 4 ticks enraged; the phase's special in
+ * enraged) after its heads sway back, 35 at most (52 empowered by a wrong vent) and every 6
+ * ticks, 55 and every 4 ticks enraged; the phase's special in
  * place of an attack when the count says so (Fight.AlchemicalHydra.js). Protection prayers block
  * its attacks entirely, as for any NPC.
  */
 const Common = require("./Common.AlchemicalHydra");
+
+/** The heads sway once the 2-tick attack animation (seqs 8235/8236 ...) has run. */
+const SWAY_AFTER_TICKS = 2;
 
 /** OSRS hit delays: magic 1 + (1 + d) / 3, ranged 1 + (3 + d) / 6 ticks. */
 function hitDelay(style, distance) {
@@ -21,7 +25,7 @@ function combatClass() {
     hits(character, target) {
       if (!character || !target || !this.style) return [];
       const fight = character.getAsNpc?.()?.__hydraFight;
-      const max = fight?.enraged ? combat.enragedMaxHit : combat.maxHit;
+      const max = fight ? fight.maxHit() : combat.maxHit;
       const hit = new PendingHit(character, target, this, this.delay);
       hit.setTotalDamage(Math.min(max, hit.getTotalDamage()));
       return [hit];
@@ -40,15 +44,20 @@ function combatClass() {
       fight.counted(kind);
       const { ids } = Common;
       if (kind === "special") {
-        npc.performAnimation(new Animation(ids.seqs.special[fight.phase]));
         const special = Common.data.phases[fight.phase].special;
+        // The flame special animates when it reaches the centre (Fight.breatheFire).
+        if (special === "fire") {
+          fight.startFire(target);
+          return;
+        }
+        npc.performAnimation(new Animation(ids.seqs.special[fight.phase]));
         if (special === "poison") fight.spitPoison(target);
         else if (special === "lightning") fight.castLightning();
-        else if (special === "fire") fight.breatheFire(target);
         return;
       }
       this.style = kind;
       npc.performAnimation(new Animation((kind === "magic" ? ids.seqs.magic : ids.seqs.ranged)[fight.phase]));
+      if (fight.switchesNext()) fight.swayLater(SWAY_AFTER_TICKS);
       const distance = Common.distanceToFootprint(target.getLocation(), npc);
       this.delay = hitDelay(kind, distance);
       const projectile = kind === "magic" ? ids.spotanims.magic : ids.spotanims.ranged;

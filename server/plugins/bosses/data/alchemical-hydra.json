@@ -20,11 +20,16 @@
     "seqs": {
       "ranged": ["hydra_stage_1_attack_ranged", "hydra_stage_2_attack_ranged", "hydra_stage_3_attack_ranged", "hydra_stage_4_attack_ranged"],
       "magic": ["hydra_stage_1_attack_magic", "hydra_stage_2_attack_magic", "hydra_stage_3_attack_magic", "hydra_stage_4_attack_magic"],
-      "special": ["hydra_stage_1_attack_special", "hydra_stage_2_attack_special", "hydra_stage_3_attack_special", "hydra_stage_1_attack_special"],
+      "special": ["hydra_stage_1_attack_special", "hydra_stage_2_attack_special", "hydra_stage_3_attack_special", "hydra_stage_4_attack_magic"],
+      "_special": "The enraged form has no special seq of its own; the stage 1 one is another skeleton, so its poison plays its own magic attack.",
+      "switch": ["hydra_stage_1_switch_attack", "hydra_stage_2_switch_attack", "hydra_stage_3_switch_attack", "hydra_stage_4_switch_attack"],
       "phaseOut": ["hydra_stage_1_death", "hydra_stage_2_death", "hydra_stage_3_death"],
       "phaseIn": ["hydra_stage_2_spawn", "hydra_stage_3_spawn", "hydra_stage_4_spawn"],
       "death": "hydra_stage_4_death",
-      "geyser": "hydra_geyser"
+      "finalDeath": "hydra_death",
+      "_death": "Skeletons: stage_N_death are the transition forms' (head falling), stage_4_death the enraged form's, hydra_death (8258) the final-death form's",
+      "geyser": "hydra_geyser",
+      "geyserOff": "hydra_geyser_off"
     },
     "spotanims": {
       "magic": "hydraboss_magic_proj",
@@ -89,10 +94,16 @@
     "specialAfter": 3,
     "specialEvery": 9,
     "shieldedDamage": 0.25,
+    "empoweredDamage": 1.5,
+    "_empoweredDamage": "Wiki: the wrong vent raises its damage by up to 50% (infobox 17x2 -> 26x2)",
     "ventRange": 1,
     "_calibrated": "the vent cadence and how long weakening lasts, pool, lightning and fire timings",
     "ventEvery": 10,
-    "phaseChangeTicks": 3
+    "_geyserTicks": "hydra_geyser (seq 8279) runs 160 client cycles, 5.3 ticks; the vents spray, and act on the Hydra, for that long",
+    "geyserTicks": 5,
+    "phaseChangeTicks": 3,
+    "_headFallTicks": "hydra_stage_4_death runs 3 ticks before the final form takes over",
+    "headFallTicks": 3
   },
   "poison": {
     "blobs": 5,
@@ -120,10 +131,19 @@
     "burnHits": 5,
     "burnDamage": 5,
     "idleAfter": 7,
-    "_calibrated": "the fire walls' damage and lifetime, and how long the tracking fire follows",
-    "wallDamage": 10,
+    "_walk": "Wiki: it walks to the centre of the chamber first and stuns the player on arriving; how long it may take to get there and how long the stun lasts are calibrated",
+    "walkTicks": 12,
+    "stunTicks": 2,
+    "_breatheAfter": "a tick after it stops at the centre, so a melee player following it lands beside it ('2, center') before the stun; a stun on the tick it arrives left them on the corner's diagonal, out of reach",
+    "breatheAfter": 1,
+    "_walls": "Wiki: 5x5 layers of fire to the player's sides. The geometry follows the Tile Packs plugin's 'Alchemical Hydra (melee)' pack (TrevorMDev/tile-packs b392d16, pack 47) and its video (Dehsow 2026, youtube _PSdH0KcDHc): '2, center' (1364,10271), '3, skip' (1363,10270) and '4th attack' (1361,10270) stay clear, and the west stream meets the wall at 'Skip when fire hits wall' (1356,10267). The video's clock has the special start about 15:23 and the tracking fire leave about 15:26-27; the spread is calibrated to that, not a capture",
+    "_calibrated": "how long the fires burn, the tick before the tracking fire moves and how much faster it gets with distance",
     "wallTicks": 20,
-    "trackTicks": 8
+    "firstWallAfter": 1,
+    "wallSpeed": 3,
+    "trackDelay": 1,
+    "fasterEvery": 4,
+    "trackTicks": 12
   },
   "kill": {
     "monster": "Alchemical Hydra",
@@ -136,6 +156,7 @@
     "noTask": "You need a hydra Slayer task to fight the Alchemical Hydra.",
     "doorLocked": "The door is jammed shut while the Hydra lives.",
     "killCount": "Your Alchemical Hydra kill count is: <col=ff0000>{kills}</col>.",
+    "roar": "Roaaaaaaaaaaar!",
     "weakened": "The chemicals neutralise the Alchemical Hydra's defences!",
     "empowered": "The chemicals are absorbed by the Alchemical Hydra; empowering it further!",
     "_unverified": "noTask, doorLocked, weakened and empowered have no capture behind them"

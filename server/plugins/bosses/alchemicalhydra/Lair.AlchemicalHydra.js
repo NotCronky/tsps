@@ -36,6 +36,19 @@ class Lair {
     return this.player.isRegistered?.() !== false && this.area.getPlayers().includes(this.player) ? [this.player] : [];
   }
 
+  /** The chamber's three chemical vents, as the map places them (geysers at their tiles). */
+  vents() {
+    if (!this.ventLocs) {
+      const { MapObjects } = Common.core;
+      const { locs } = Common.ids;
+      const byColour = { red: locs.ventRed, green: locs.ventGreen, blue: locs.ventBlue };
+      this.ventLocs = Object.entries(Common.data.vents)
+        .map(([colour, tile]) => MapObjects.get(byColour[colour], Common.toLocation(tile), null))
+        .filter(Boolean);
+    }
+    return this.ventLocs;
+  }
+
   hydraAlive() {
     return Boolean(this.hydra && this.hydra.getHitpoints() > 0 && !this.hydra.isDyingFunction?.());
   }
@@ -46,6 +59,8 @@ class Lair {
     hydra.__skipDefaultRespawn = true;
     hydra.__hydraLair = this;
     hydra.setFlag?.("combat:no-regen");
+    // It walks in on the player while attacking from range, which is how it is lured onto a vent.
+    hydra.setFlag?.("combat:close-in");
     hydra.getMovementCoordinator?.().setRadius?.(0);
     this.area.add(hydra);
     World.getAddNPCQueue().push(hydra);
@@ -102,7 +117,9 @@ function defineAreaClass() {
       if (mobile !== this.lair.hydra) return;
       const fight = this.lair.fight;
       const players = this.lair.players();
-      if (fight && players.length > 0 && mobile.getCombat().getTarget() !== players[0] && !fight.transitioning()) {
+      // A head falling, it stands where it is.
+      if (fight?.transitioning()) mobile.getMovementQueue().reset();
+      else if (fight && players.length > 0 && mobile.getCombat().getTarget() !== players[0]) {
         mobile.getCombat().attack(players[0]);
       }
       fight?.tick(players);

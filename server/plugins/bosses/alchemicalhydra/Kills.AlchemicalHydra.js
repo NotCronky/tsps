@@ -33,7 +33,11 @@ function slayerXp(kill) {
   if (Common.isHydra(kill?.npc)) kill.xp = Common.data.kill.slayerXp;
 }
 
-/** The kill animation plays as the last form (finaldeath) for its death ticks. */
+/**
+ * The kill: the enraged form's last head falls (hydra_stage_4_death, its own skeleton, played by
+ * the death task from npc-combat-defs), then it becomes the final form (hydraboss_finaldeath) for
+ * hydra_death, the one seq built on that model. The death task waits for both (deathTicks 10).
+ */
 function beforeDeath(event) {
   if (!Common.isHydra(event.npc) || event.preventDeath) return;
   const fight = event.npc.__hydraFight;
@@ -43,8 +47,12 @@ function beforeDeath(event) {
     event.npc.setHitpoints(1);
     return;
   }
-  event.npc.setNpcTransformationId(Common.ids.npcs.dead);
-  event.npc.performAnimation(new Common.core.Animation(Common.ids.seqs.death));
+  const npc = event.npc;
+  Common.later(Common.data.combat.headFallTicks, () => {
+    if (!npc.isRegistered?.()) return;
+    npc.setNpcTransformationId(Common.ids.npcs.dead);
+    npc.performAnimation(new Common.core.Animation(Common.ids.seqs.finalDeath));
+  });
 }
 
 function attach(api) {
