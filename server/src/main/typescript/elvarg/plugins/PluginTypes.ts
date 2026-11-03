@@ -1482,6 +1482,8 @@ export interface PluginCoreApi {
   PrayerHandler: any;
   PrayerData: any;
   ItemActionPacketListener: any;
+  /** Item-on-item and item-on-loc uses, as the client packets drive them (bots use items this way). */
+  UseItemPacketListener: any;
   /** Run shared item alchemy; plugins authorize opaque alternate payment sources via magic:alchemy-payment. */
   castAlchemy: (player: any, spellId: number | string, itemId: number, slot: number, source?: unknown) => boolean;
   ChatType: any;

@@ -16,5 +16,6 @@ module.exports = {
     require("./wintertodt/Crates.Wintertodt")(api);
     require("./wintertodt/Commands.Wintertodt")(api);
     require("./wintertodt/CombatAchievements.Wintertodt")(api);
+    require("./wintertodt/Bots.Wintertodt")(api);
   },
 };

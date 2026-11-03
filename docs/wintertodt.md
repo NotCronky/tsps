@@ -9,7 +9,8 @@ Status:
   - warmth and the Wintertodt's five attacks;
   - the reward cart and its loot;
   - Ignisia's exchange: uniques for burnt pages or an extra supply crate;
-  - the `::teleports` entry and developer commands.
+  - the `::teleports` entry and developer commands;
+  - bots that fight the Wintertodt alongside players.
 - **Not done:**
   - the discontinued supply crate item;
   - the tome of fire's pages;
@@ -35,6 +36,7 @@ Status:
 | `Pyromancers.*` | Healing the pyromancers. |
 | `Cart.*` | The reward cart's Search, Check and Big-search. |
 | `Commands.*` | Developer commands. |
+| `Bots.*` | The bots: how many come, and what each does in the prison. |
 
 **Changes outside the plugin:**
 - **Core: `Mobile.showHitsplat(damage, { mine, others }, health)`.** It shows a hitsplat that changes no hitpoints, with its own cache hitsplat ids and health bar. The cold on the warmth meter uses it, as do the pyromancers' own 14 health. `HitDamage` carries the ids and `PlayerSession` writes them.
@@ -42,6 +44,7 @@ Status:
 - **`Food.plugin.js`** emits `food:eaten` (`{ player, itemId, heal }`) for any plugin that reacts to eating.
 - **`Pets.plugin.js`** lists the phoenix (item 20693, follower 7370 as in the captures).
 - **`npc-spawns.json`:** the pyromancers face their braziers and stand still.
+- **Core: `api.core.UseItemPacketListener`.** Bots use an item on another (knife on a root, herb on a potion) through the same call the client's packet makes.
 
 ## The round
 
@@ -339,6 +342,33 @@ These follow the Wiki and Near-Reality until a capture says otherwise:
 - **Warmth restore:** the exact values from food and potions.
 - **Text:** the crate messages other than the knife's.
 
+## Bots
+
+`Bots.Wintertodt.js` keeps a crowd fighting the Wintertodt with the players. Every bot acts through the same calls a player's clicks make: the object route and option, item on item, the NPC option, the item's own option. Points, warmth, the Wintertodt's attacks and the interruptions they cause all reach bots as they reach players.
+
+**Who comes:**
+- While a real player is in the camp or the prison, the world keeps a set number of bots: 8, or what `::wtbots` sets (0 to 40).
+- They arrive outside the Doors of Dinh one a tick and go in through them.
+- With no real player about for 100 ticks, they log out. They are never saved.
+- The world sends no zone events for bots, so each bot runs the doors' own zone handlers (`enteredPrison`, `leftPrison`, `syncHud`) as it crosses. The round then counts it as a player in the prison: the cold, the attacks, the end-of-round sweep of fuel and the reward reach it too.
+
+**Their kit:**
+- Firemaking 60-99, Woodcutting 60-99, Fletching 50-99 and Hitpoints 60-99.
+- Four warm pieces (pyromancer pieces, warm gloves, a santa or bobble hat, a woolly scarf).
+- A rune or dragon axe by their Woodcutting, a knife, a tinderbox, a hammer and five cakes.
+
+**What each does,** working its home corner (bots are dealt round the four corners in turn), the first that applies:
+
+| | Does |
+| --- | --- |
+| Cold | Below 45% warmth or half its hitpoints, eats a bite of cake (35% warmth), else drinks a rejuvenation dose. Below 15% with nothing to eat, it logs out and a fresh bot replaces it. |
+| Healer (every fourth bot) | Heals any downed pyromancer with a potion, wherever she is. Keeps a potion: one concoction from the crate, one herb from the sprouting roots, mixed. |
+| Brazier | Fixes it when broken, lights it when out and its pyromancer is up. |
+| Fuel | Chops the corner's roots until its pack is full; half the bots then fletch them into kindling; then it feeds the brazier until the fuel is gone. |
+| Between rounds | Waits by its brazier. |
+
+A bot that dies logs out rather than dropping its kit in the prison.
+
 ## Developer commands
 
 | Command | What it does |
@@ -352,3 +382,4 @@ These follow the Wiki and Near-Reality until a capture says otherwise:
 | `::wtinfo` | Your warm items, warmth, the damage each attack would do now, and the cold's chance. |
 | `::wtlight` | Lights every brazier and heals every pyromancer. |
 | `::wtattack <area\|small\|large\|pyro>` | Makes the Wintertodt attack you, or the corner nearest you. |
+| `::wtbots [count]` | How many bots the world keeps while players are about (0 turns them off); without a count, shows it. |

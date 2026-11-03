@@ -98,3 +98,9 @@ module.exports = function registerWintertodtDoors(api) {
   api.onPlayerLogin(login);
   api.onPlayerLogout(logout);
 };
+
+/**
+ * The zone handlers, for content whose players the world's zone events skip: bots get no player
+ * process event (World.processPlayers), so the Wintertodt bots replay these as they cross over.
+ */
+Object.assign(module.exports, { enteredPrison, leftPrison, syncHud });
