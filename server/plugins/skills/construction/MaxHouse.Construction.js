@@ -8,25 +8,33 @@ const Portals = require("./Portals.Construction");
 const Nexus = require("./Nexus.Construction");
 const Trophies = require("./Trophies.Construction");
 
-// ::maxhouse (developer): replaces the house with one of every room, each with the best piece on
-// every space, for testing. The old house is kept for ::restorehouse. Levels, room counts and the
-// house size are ignored. The ground floor grows from the garden (with its exit portal), each room
-// turned so most of its doorways meet its neighbours'; the halls' upper halves stand over them,
-// the dungeon stairs under the skill hall and the oubliette under the throne room, and the rest of
-// the dungeon grows from the stairs. Portals, the nexus, the cape hanger, trophy displays and the
-// prize chest come set up.
+// ::maxhouse (developer): replaces the house with a 4x4 max house, every space holding its best
+// piece, for testing. The old house is kept for ::restorehouse. Levels, room counts and the house
+// size are ignored. The layout is the community "minimum load time" max house: one floor, no
+// upstairs or dungeon, a one-room border of grass on every side, rooms shifted to the south-west.
+// The formal garden has the exit portal; the two superior gardens hold the spirit tree & fairy
+// ring and the Wilderness obelisk, each with an ornate pool; two bedrooms keep a servant, the
+// dining room's bell pull calls them. Each room is turned so its doorways meet its neighbours'.
+// Portals, the nexus, the cape hanger and the prize chest come set up.
 const { HOUSE_ATTRIBUTE } = Data;
 const BACKUP_ATTRIBUTE = "construction:house-backup";
 const GRID = 8;
-const GROUND = 1, UPPER = 2, BASEMENT = 0;
-const GROUND_ROOMS = [
-  "PARLOUR", "KITCHEN", "DINING_ROOM", "SKILL_HALL_UP", "QUEST_HALL_UP", "THRONE_ROOM", "WORKSHOP", "BEDROOM", "STUDY",
-  "COSTUME_ROOM", "CHAPEL", "PORTAL_CHAMBER", "PORTAL_NEXUS", "GAMES_ROOM", "COMBAT_ROOM", "MENAGERIE_INDOORS",
-  "ACHIEVEMENT_GALLERY", "FORMAL_GARDEN", "SUPERIOR_GARDEN",
+const GROUND = 1;
+const ORIGIN = 1; // the grass border: the block's south-west room sits at (1, 1)
+// North row first, west to east, as the layout is drawn.
+const LAYOUT = [
+  ["BEDROOM", "CHAPEL", "ACHIEVEMENT_GALLERY", "STUDY"],
+  ["WORKSHOP", ["SUPERIOR_GARDEN", { TELEPORT_SPACE: "SPIRIT_TREE_AND_FAIRY_RING" }], "FORMAL_GARDEN", "PORTAL_NEXUS"],
+  ["COSTUME_ROOM", "MENAGERIE_INDOORS", ["SUPERIOR_GARDEN", { TELEPORT_SPACE: "OBELISK" }], "COMBAT_ROOM"],
+  ["DINING_ROOM", "QUEST_HALL_UP", "BEDROOM", "GAMES_ROOM"],
 ];
-const BASEMENT_ROOMS = ["DUNGEON_CORRIDOR", "DUNGEON_JUNCTION", "TREASURE_ROOM"];
-// Spaces whose top piece isn't the one to have: the garden keeps its exit portal.
-const PICKS = { GARDEN: { CENTERPIECE: "EXIT_PORTAL" } };
+// Spaces whose top piece isn't the one to have: the formal garden keeps the exit portal, the quest
+// hall has no floor above for stairs, and its trophy is the mythical cape.
+const PICKS = {
+  FORMAL_GARDEN: { FORMAL_GARDEN_CENTERPIECE: "EXIT_PORTAL" },
+  QUEST_HALL_UP: { QUEST_HALL_STAIRS_UP: "HALL_OPULENT_RUG", GUILD_TROPHY: "MOUNTED_MYTHICAL_CAPE" },
+  ACHIEVEMENT_GALLERY: { DISPLAY: "CAPE_HANGER" },
+};
 const PORTAL_DESTINATIONS = ["varrock teleport", "camelot teleport", "ardougne teleport"];
 const NEXUS_DESTINATIONS = ["varrock teleport", "lumbridge teleport", "falador teleport", "camelot teleport", "ardougne teleport", "watchtower teleport", "trollheim teleport", "kharyrll teleport"];
 const MAX_CAPE = { cape: Ids.obj("skillcape_max"), hood: Ids.obj("skillcape_max_hood") };
@@ -40,8 +48,8 @@ function rotated(doors, rotation) {
 }
 
 /** The highest-level piece a space takes (the top of an upgrade chain saves as itself). */
-function bestPiece(roomKey, hotspotKey) {
-  const forced = PICKS[roomKey]?.[hotspotKey];
+function bestPiece(roomKey, hotspotKey, picks = {}) {
+  const forced = picks[hotspotKey] ?? PICKS[roomKey]?.[hotspotKey];
   if (forced) return forced;
   const choices = House.hotspotChoices(hotspotKey);
   if (!choices.length) return null;
@@ -49,51 +57,63 @@ function bestPiece(roomKey, hotspotKey) {
   return best.savesAs ?? best.key;
 }
 
-function furnished(roomKey) {
+function furnished(roomKey, picks) {
   const furniture = {};
   for (const hotspotKey of new Set(Data.ROOM_BY_KEY.get(roomKey).hotspots)) {
     if (hotspotKey === "EMPTY") continue;
-    const piece = bestPiece(roomKey, hotspotKey);
+    const piece = bestPiece(roomKey, hotspotKey, picks);
     if (piece) furniture[hotspotKey] = piece;
   }
   return furniture;
 }
 
-/** Lays out the rooms; doorway masks come from the house style's room templates. */
+/** Whether score `a` beats `b`, comparing their parts in order. */
+function outscores(a, b) {
+  const i = a.findIndex((value, j) => value !== b[j]);
+  return i >= 0 && a[i] > b[i];
+}
+
+/**
+ * Places LAYOUT's rooms, turning each (outward from the formal garden) to meet the most doorways
+ * of the rooms already down, then to face the most rooms still to come, then the fewest outside.
+ * Doorway masks come from the house style's room templates.
+ */
 function layout(save) {
   const doorsOf = (roomKey) => Instance.PlayerHouseInstance.prototype.templateDoorMask.call({ save }, roomKey);
   const rooms = Array.from({ length: 3 }, () => Array.from({ length: GRID }, () => Array(GRID).fill(null)));
-  const put = (plane, x, y, roomKey, rotation) => { rooms[plane][x][y] = { roomKey, rotation, furniture: furnished(roomKey) }; };
-  const grow = (plane, roomKey) => {
+  const cells = new Map();
+  LAYOUT.forEach((row, r) => row.forEach((entry, column) => {
+    const [roomKey, picks] = Array.isArray(entry) ? entry : [entry, {}];
+    cells.set(`${ORIGIN + column},${ORIGIN + LAYOUT.length - 1 - r}`, { roomKey, picks });
+  }));
+  const [startKey] = [...cells].find(([, cell]) => cell.roomKey === "FORMAL_GARDEN");
+  const queue = [startKey], seen = new Set(queue);
+  while (queue.length) {
+    const key = queue.shift();
+    const [x, y] = key.split(",").map(Number);
+    const { roomKey, picks } = cells.get(key);
     const doors = doorsOf(roomKey);
     let best = null;
-    for (let x = 0; x < GRID; x++) for (let y = 0; y < GRID; y++) {
-      if (rooms[plane][x][y]) continue;
-      for (let rotation = 0; rotation < 4; rotation++) {
-        let met = 0;
-        OFFSETS.forEach(([dx, dy], edge) => {
-          const neighbour = rooms[plane][x + dx]?.[y + dy];
-          if (!neighbour || !(rotated(doors, rotation) & (1 << edge))) return;
+    for (let rotation = 0; rotation < 4; rotation++) {
+      const mask = rotated(doors, rotation);
+      let met = 0, ahead = 0, outside = 0;
+      OFFSETS.forEach(([dx, dy], edge) => {
+        if (!(mask & (1 << edge))) return;
+        const neighbour = rooms[GROUND][x + dx]?.[y + dy];
+        if (neighbour) {
           if (rotated(doorsOf(neighbour.roomKey), neighbour.rotation) & (1 << ((edge + 2) & 3))) met++;
-        });
-        const distance = Math.abs(x - 3.5) + Math.abs(y - 3.5);
-        if (met && (!best || met > best.met || (met === best.met && distance < best.distance))) best = { x, y, rotation, met, distance };
-      }
+        } else if (cells.has(`${x + dx},${y + dy}`)) ahead++;
+        else outside++;
+      });
+      const score = [met, ahead, -outside];
+      if (!best || outscores(score, best.score)) best = { rotation, score };
     }
-    if (best) put(plane, best.x, best.y, roomKey, best.rotation);
-    return best;
-  };
-  put(GROUND, 4, 4, "GARDEN", 0);
-  const placed = {};
-  for (const roomKey of GROUND_ROOMS) placed[roomKey] = grow(GROUND, roomKey);
-  for (const [below, above] of [["SKILL_HALL_UP", "SKILL_HALL_DOWN"], ["QUEST_HALL_UP", "QUEST_HALL_DOWN"]]) {
-    const at = placed[below];
-    if (at) put(UPPER, at.x, at.y, above, at.rotation);
+    rooms[GROUND][x][y] = { roomKey, rotation: best.rotation, furniture: furnished(roomKey, picks) };
+    for (const [dx, dy] of OFFSETS) {
+      const next = `${x + dx},${y + dy}`;
+      if (cells.has(next) && !seen.has(next)) { seen.add(next); queue.push(next); }
+    }
   }
-  const hall = placed.SKILL_HALL_UP, throne = placed.THRONE_ROOM;
-  if (hall) put(BASEMENT, hall.x, hall.y, "DUNGEON_STAIRS", hall.rotation);
-  if (throne) put(BASEMENT, throne.x, throne.y, "OUBLIETTE", throne.rotation);
-  for (const roomKey of BASEMENT_ROOMS) grow(BASEMENT, roomKey);
   return rooms;
 }
 

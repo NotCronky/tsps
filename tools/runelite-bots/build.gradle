@@ -1,0 +1,23 @@
+plugins { id 'java' }
+repositories {
+  maven { url = 'https://repo.runelite.net'; content { includeGroupByRegex('net\\.runelite.*') } }
+  mavenCentral()
+}
+// The RuneLite RSProx launches (~/.runelite/repository2/client-1.13.4.jar).
+def runeLiteVersion = '1.13.4'
+dependencies {
+  compileOnly "net.runelite:client:${runeLiteVersion}"
+  compileOnly 'org.projectlombok:lombok:1.18.30'
+  annotationProcessor 'org.projectlombok:lombok:1.18.30'
+  testImplementation "net.runelite:client:${runeLiteVersion}"
+  testImplementation 'org.junit.jupiter:junit-jupiter:5.11.0'
+  testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+tasks.withType(JavaCompile).configureEach { options.encoding = 'UTF-8'; options.release.set(11) }
+test { useJUnitPlatform(); systemProperty 'java.awt.headless', 'true'; testLogging { events 'failed'; exceptionFormat 'full' } }
+jar { archiveFileName = 'tsps-bots.jar' }
+// Copies the built plugin to the folder the RSProx-launched RuneLite loads sideloaded plugins from.
+tasks.register('installPlugin', Copy) {
+  from jar
+  into "${System.getProperty('user.home')}/.rlcustom/sideloaded-plugins"
+}

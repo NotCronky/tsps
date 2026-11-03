@@ -77,9 +77,8 @@ test('collection menus collect the item or its note they name', () => {
   // A noteable stack: op 1 Collect-notes, op 2 Collect-items.
   assert.equal(collectionOutputId(NOTEABLE, 5, 1), NOTE);
   assert.equal(collectionOutputId(NOTEABLE, 5, 2), NOTEABLE);
-  // Bank always takes the base item, and Collect-all notes when it can.
+  // Bank always takes the base item.
   assert.equal(collectionOutputId(NOTEABLE, 1, 3), NOTEABLE);
-  assert.equal(collectionOutputId(NOTEABLE, 1, 1, true), NOTE);
   // Items without a noted form are never converted.
   assert.equal(collectionOutputId(NO_NOTE, 1, 1), NO_NOTE);
   assert.equal(collectionOutputId(NO_NOTE, 1, 2), NO_NOTE);
@@ -462,6 +461,7 @@ test('unfillable offers survive saving and relogging, and abort refunds their in
     hooks.onPlayerLogin({ player: p });
     assert.equal(timers.length, 0);
     assert.equal(saved[0].finished, false);
+    click(7);
     click(23);
     click(24);
     assert.equal(inventory.getAmount(inputId), amount);
@@ -545,6 +545,7 @@ test('a completed sale collects its total less the tax', t => {
   assert.equal(offer.total, 10_000);
   assert.equal(inventory.getAmount(PRICED), 0);
   timers[0].callback();
+  click(7);
   click(24);
   assert.equal(inventory.getAmount(995), 9_800);
 });
@@ -577,8 +578,34 @@ test('an aborted sale returns the items without tax', t => {
   const { inventory, place, click } = exchange(t);
   inventory.add(new Item(PRICED, 10), false);
   place(true, PRICED, 10, 1_000);
+  click(7);
   click(23);
   click(24);
   assert.equal(inventory.getAmount(PRICED), 10);
   assert.equal(inventory.getAmount(995), 0);
+});
+
+test('placing an offer returns to the main page; the offer opens from its slot (Wiki, 27 February 2015)', t => {
+  t.mock.method(Math, 'random', () => 0.01);
+  const { inventory, place, click, timers } = exchange(t);
+  inventory.add(new Item(PRICED, 10), false);
+  place(true, PRICED, 10, 1_000);
+  timers[0].callback();
+  click(24);
+  assert.equal(inventory.getAmount(995), 0, 'no offer is open to collect from');
+  click(7);
+  click(24);
+  assert.equal(inventory.getAmount(995), 9_800);
+});
+
+test('the Collect button gives a single bought item as itself and a stack as notes', t => {
+  t.mock.method(Math, 'random', () => 0.01);
+  const { inventory, place, click, timers } = exchange(t);
+  inventory.add(new Item(995, 10_000), false);
+  place(false, NOTEABLE, 1, 100, 0);
+  place(false, NOTEABLE, 5, 100, 1);
+  for (const timer of timers) timer.callback();
+  click(6);
+  assert.equal(inventory.getAmount(NOTEABLE), 1);
+  assert.equal(inventory.getAmount(NOTE), 5);
 });

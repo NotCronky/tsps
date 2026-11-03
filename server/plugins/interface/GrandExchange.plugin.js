@@ -537,15 +537,12 @@ function confirm(player, offer) {
   completedOffers(player)[offer.slot] = finished;
   if (!offer.sell) recordLimit(player, offer.itemId, amount);
   saveOffers(player);
-  offers.delete(player);
-  viewing.set(player, offer.slot);
-  player.setEnteredAmountAction(null);
-  player.setEnteredSyntaxAction(null);
   sender.sendInterfaceScript(786, [], { [SELECTED_ITEM]: -1, ...marketVarps(offer.slot, finished) },
-      { [SELECTED_SLOT]: offer.slot + 1 },
-      { [COLLECTIONS[offer.slot]]: collection(finished) })
-    .sendString(examine(offer.itemId), DETAILS_DESC)
-    .sendMessage("Offer placed. It will fill when the market meets your price.");
+      { [SELECTED_SLOT]: 0 },
+      { [COLLECTIONS[offer.slot]]: collection(finished) });
+  // Wiki (Grand Exchange, 27 February 2015): a new offer returns you to the index panel of all slots.
+  home(player);
+  sender.sendMessage("Offer placed. It will fill when the market meets your price.");
   scheduleCompletion(player, finished);
 
 }
@@ -553,19 +550,19 @@ function confirm(player, offer) {
 /**
  * Script 9909's collection menu: a single noteable item offers Collect-item (1)
  * and Collect-note (2); a stack offers Collect-notes (1) and Collect-items (2).
- * A non-noteable item only has Collect (2) and Bank (3).
+ * A non-noteable item only has Collect (2) and Bank (3). The Collect-all buttons use op 1's rule:
+ * a stack comes as notes, a single item as itself.
  */
-function collectionOutputId(baseId, amount, action, forceNotes = false) {
+function collectionOutputId(baseId, amount, action) {
   const noteId = ItemDefinition.forId(baseId).getNoteId();
   const noteable = noteId >= 0 && ItemDefinition.forId(noteId).isNoted();
   if (!noteable || action === 3) return baseId;
-  if (forceNotes) return noteId;
   if (action === 2) return amount === 1 ? noteId : baseId;
   if (action === 1) return amount > 1 ? noteId : baseId;
   return baseId;
 }
 
-function collect(player, action, slot = viewing.get(player), forceNotes = false) {
+function collect(player, action, slot = viewing.get(player)) {
   const offer = completedOffers(player)[slot];
   if (!offer?.finished) return;
   const inventory = player.getInventory();
@@ -574,7 +571,7 @@ function collect(player, action, slot = viewing.get(player), forceNotes = false)
   const results = new Map();
   for (const paid of payout(offer)) {
     const baseId = paid.itemId === COINS || paid.itemId === PLATINUM_TOKEN ? paid.itemId : ItemDefinition.forId(paid.itemId).unNote();
-    const outputId = collectionOutputId(baseId, paid.amount, action, forceNotes);
+    const outputId = collectionOutputId(baseId, paid.amount, action);
     const destination = action === 3 ? player.getBank(Bank.getTabForItem(player, baseId)) : inventory;
     let result = results.get(destination)?.result;
     if (!result) {
@@ -633,10 +630,10 @@ function abort(player, slot = viewing.get(player)) {
   sender.sendMessage("Abort request acknowledged. Please be aware that your offer may have already been completed.");
 }
 
-/** The Collect button (465:6, dynamic child 0): op 1 to the inventory (as notes), op 2 to the bank. */
+/** The Collect button (465:6, dynamic child 0): op 1 to the inventory (stacks as notes), op 2 to the bank. */
 function collectAll(player, action) {
   const to = action === 2 ? 3 : 1;
-  for (const slot of Object.keys(completedOffers(player)).map(Number)) collect(player, to, slot, to === 1);
+  for (const slot of Object.keys(completedOffers(player)).map(Number)) collect(player, to, slot);
 }
 
 function openGrandExchange({ player }) {
@@ -724,7 +721,7 @@ function handleCollectionButton({ player, buttonId, slot, action }) {
   if (player.getInterfaceId() !== GE_COLLECT) return true;
   const child = buttonId & 0xffff;
   if ((child === 3 || child === 4) && action === 1) {
-    for (const index of Object.keys(completedOffers(player)).map(Number)) collect(player, child === 4 ? 3 : 1, index, child === 3);
+    for (const index of Object.keys(completedOffers(player)).map(Number)) collect(player, child === 4 ? 3 : 1, index);
   } else if (child >= 5 && child <= 12 && slot === 3 && action >= 1 && action <= 3) {
     collect(player, action, child - 5);
   }

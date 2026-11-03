@@ -376,14 +376,15 @@ Developer commands:
   (`::housemats HEAD_DISPLAY_TEAK`). An upgrade says what it needs built first.
 - `::deletehouse` deletes your house, taking you and any guests out of it, so you can buy a new
   one from an Estate agent.
-- `::maxhouse` replaces your house with one of every room (27; not the League hall), each space
-  holding its highest-level piece (the garden keeps the exit portal). The ground floor grows from
-  the garden with every room's doorways meeting a neighbour's, the halls' upper halves stand over
-  them, the dungeon stairs under the skill hall and the oubliette under the throne room, and the
-  dungeon grows from the stairs. The portals and nexus are directed, the cape hanger holds a max
-  cape, the trophy displays show Vorkath's head and a swift marlin, and the prize chest holds
-  100,000 coins. Levels, room counts and house size are ignored. `::restorehouse` brings back the
-  house it replaced.
+- `::maxhouse` replaces your house with a 4x4 max house on one floor, each space holding its
+  highest-level piece, laid out for the minimum load time: a one-room border of grass on every
+  side, rooms shifted to the south-west, no upstairs or dungeon. North to south, west to east:
+  bedroom, chapel, achievement gallery, study; workshop, superior garden (spirit tree & fairy
+  ring), formal garden (exit portal), portal nexus; costume room, menagerie, superior garden
+  (Wilderness obelisk), combat room; dining room, quest hall (rug instead of stairs, mythical
+  cape), bedroom, games room. Each room is turned so its doorways meet its neighbours'. The nexus
+  is directed, the cape hanger holds a max cape and the prize chest holds 100,000 coins. Levels,
+  room counts and house size are ignored. `::restorehouse` brings back the house it replaced.
 
 `::hotspots` (developer) lists the build hotspots of the room you stand in, with their tiles, so
 furniture can be built with the agent MCP: `object_option` Build on the hotspot, then

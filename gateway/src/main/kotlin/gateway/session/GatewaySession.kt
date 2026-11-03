@@ -230,7 +230,13 @@ class GatewaySession(
                 val reason = reader.string()
                 if (ok) send(Logout) else if (reason.isNotEmpty()) send(MessageGame(GAME_MESSAGE, reason))
             }
-            TspsServerPacket.TICK -> groundItems.tick(packet.reader().i32())
+            TspsServerPacket.TICK -> {
+                groundItems.tick(packet.reader().i32())
+                if (attackResendTicks > 0) {
+                    attackOption()
+                    attackResendTicks--
+                }
+            }
             else -> {
                 if (translators.none { it(packet) }) DropCounter.down(packet.opcode)
                 // Varbits also arrive inside interface and script bundles.
@@ -240,6 +246,8 @@ class GatewaySession(
     }
 
     private var attackShown = false
+    /** Game ticks left in which Attack is sent again however it was before (see [enterGame]). */
+    private var attackResendTicks = 0
 
     /**
      * The browser offers Attack on players while the wilderness varbit is set; tsps only sends
@@ -247,7 +255,7 @@ class GatewaySession(
      */
     private fun attackOption() {
         val inWilderness = varps.getVarbit(IN_WILDERNESS_VARBIT) == 1
-        if (inWilderness == attackShown) return
+        if (inWilderness == attackShown && !(inWilderness && attackResendTicks > 0)) return
         attackShown = inWilderness
         send(SetPlayerOp(ATTACK_OP, true, if (inWilderness) "Attack" else null))
     }
@@ -357,6 +365,10 @@ class GatewaySession(
         varps.setVarbit(NAME_SET_VARBIT, 1)?.let(session::queue)
         beforeLogin.forEach(session::queue)
         beforeLogin.clear()
+        // A player who logs in already in the wilderness had Attack sent with the login packets,
+        // and the official client didn't keep it (no Attack until they left and came back). Send
+        // it again on the first game ticks, once the client is in the game.
+        attackResendTicks = ATTACK_RESEND_TICKS
         state = State.IN_GAME
         // Pass the client's packets on as they come, not once per tick: tsps only acts on them at
         // its next tick, so waiting for ours as well added up to a tick to every click.
@@ -478,6 +490,7 @@ class GatewaySession(
         const val SCENE_RENDER_DISTANCE = 52
         const val TRADE_OP = 2
         const val ATTACK_OP = 1
+        const val ATTACK_RESEND_TICKS = 3
         const val IN_WILDERNESS_VARBIT = 5963
         const val NAME_SET_VARBIT = 8119
         const val RUN_VARP = 173

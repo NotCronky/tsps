@@ -45,6 +45,7 @@ The client only reports the click. The server sets the variable and sends it bac
 | Scroll wheel can change zoom distance | 13 | varbit 6357 `camera_zoom_mouse_disabled` |
 | Enable profanity filter | 37 | varp 1074 `option_chatfilter_disabled` |
 | Shift click to drop items | 51 | varbit 11556 `desktop_shiftclickdrop_enabled`; a fresh account starts with it on (live sent 1 at login in all 8 transcribed rsprox recordings). The login script (876, via 7431) passes it to `setshiftclickdrop` on desktop; with Shift held the inventory item's shift-click op is its top entry |
+| Automatically smash empty vials | 380 | varbit 5668 `auto_smash_vials`; drinking the last dose of a potion that leaves a plain vial leaves nothing instead (Potions.plugin.js), with "You quickly smash the empty vial using the trick a Barbarian taught you." Beer glasses, cups and gourds are kept |
 | Sailing side panel (dropdown) | 454 | varbit 18131 `settings_sailing_side_panel_onlyonboat` = option |
 | Level-up pop-up notifications (dropdown) | 315 | see below |
 | Level-up chatbox list | 493 | varbit 20158 `option_level_up_chatbox_list` |

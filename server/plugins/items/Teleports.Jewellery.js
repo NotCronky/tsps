@@ -270,14 +270,17 @@ const JEWELLERY = [
     emptyMessage: "Your ring hasn't got any charges left.",
     lastChargeMessage: "Your Slayer ring has worn out.",
     teleportOptions: ["Rub", "Teleport"],
-    // Rub's submenu is actions, not destinations (item params 451-455); Teleport picks one.
+    // Fallback when the cache names no sub-op: the old Rub submenu of actions. The cache's own
+    // submenus (Rub: Contact Master, Partner, Open Log; Teleport: the destinations) win.
     subOps: ["check", "teleport", "master", "partner", "log"],
     destinations: [
       { label: "Slayer Tower", tile: [3429, 3538, 0] },
-      { label: "Fremennik Slayer Dungeon", tile: [2807, 10002, 0] },
+      { label: "Fremennik Slayer Dungeon", aliases: ["Fremennik Dungeon"], tile: [2807, 10002, 0] },
       { label: "Tarn's Lair", tile: [3185, 4601, 0] },
-      { label: "Stronghold Slayer Cave", tile: [2431, 3424, 0] },
+      { label: "Stronghold Slayer Cave", aliases: ["Stronghold"], tile: [2431, 3424, 0] },
       { label: "Dark Beasts", tile: [2027, 4637, 0] },
+      // Lands where the cave under Ardeaglais lets players in (plugins/areas/data/wyrmscraig.json).
+      { label: "Wyrmscraig Cavern", tile: [2564, 8630, 0] },
     ],
   },
   {

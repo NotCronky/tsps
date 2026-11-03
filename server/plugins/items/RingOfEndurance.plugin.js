@@ -1,9 +1,11 @@
 /**
  * Ring of endurance (https://oldschool.runescape.wiki/w/Ring_of_endurance).
  *
- * Charged with stamina potions and mixes, one charge per dose (1,000 max).
- * While a charged ring is worn, a stamina dose is doubled (40% energy and a
- * 4-minute buff) and spends one charge; uncharging does not refund charges.
+ * Charged with stamina potions and mixes, one charge per dose, or extended
+ * stamina potions, two per dose (1,000 max). While a charged ring is worn, a
+ * stamina dose is doubled (40% energy and a 4-minute buff) and spends one
+ * charge; an extended dose (80% and 8 minutes) spends two. Uncharging does not
+ * refund charges.
  * With 500 or more charges, the ring skips 15% of run-energy drain.
  */
 const Equipment = require("../../src/main/typescript/elvarg/game/model/container/impl/Equipment").Equipment;
@@ -14,13 +16,18 @@ const PASSIVE_MIN_CHARGES = 500;
 const PASSIVE_SKIP_PERCENT = 15;
 const CHARGES_META_KEY = "ring-of-endurance";
 
-const DOSE_BY_ITEM = new Map([
+/** Charges a potion adds: one per stamina dose, two per extended stamina dose (Wiki). */
+const CHARGES_BY_ITEM = new Map([
   [ItemIdentifiers.STAMINA_POTION_4_, 4],
   [ItemIdentifiers.STAMINA_POTION_3_, 3],
   [ItemIdentifiers.STAMINA_POTION_2_, 2],
   [ItemIdentifiers.STAMINA_POTION_1_, 1],
   [ItemIdentifiers.STAMINA_MIX_2_, 2],
   [ItemIdentifiers.STAMINA_MIX_1_, 1],
+  [ItemIdentifiers.EXTENDED_STAMINA_POTION_4_, 8],
+  [ItemIdentifiers.EXTENDED_STAMINA_POTION_3_, 6],
+  [ItemIdentifiers.EXTENDED_STAMINA_POTION_2_, 4],
+  [ItemIdentifiers.EXTENDED_STAMINA_POTION_1_, 2],
 ]);
 
 let core = null;
@@ -56,8 +63,9 @@ function refresh(player) {
   player.getEquipment().refreshItems();
 }
 
-function useCharge(player, item) {
-  const left = charges(item) - 1;
+/** The Wiki doesn't say what an extended dose does with one charge left: it is doubled and empties the ring. */
+function useCharge(player, item, count = 1) {
+  const left = charges(item) - count;
   if (left > 0) {
     item.setMetaValue(CHARGES_META_KEY, left);
     return;
@@ -68,7 +76,7 @@ function useCharge(player, item) {
   player.sendMessage("Your ring of endurance has run out of charges.");
 }
 
-/** Doubles a stamina dose and spends one charge (Wiki). */
+/** Doubles a stamina dose and spends its charges: one, or two for an extended dose (Wiki). */
 function doubleStamina(request) {
   const ring = wornRing(request?.player);
   if (!ring) {
@@ -76,7 +84,7 @@ function doubleStamina(request) {
   }
   request.energy *= 2;
   request.durationMs *= 2;
-  useCharge(request.player, ring);
+  useCharge(request.player, ring, request.charges ?? 1);
 }
 
 function checkCharges({ player, item }) {
@@ -87,8 +95,8 @@ function chargeRing(event) {
   const { player, usedItem, usedWithItem, usedItemId, usedWithItemId } = event;
   const ring = chargedIds.has(usedItemId) || chargedByUncharged.has(usedItemId) ? usedItem : chargedIds.has(usedWithItemId) || chargedByUncharged.has(usedWithItemId) ? usedWithItem : null;
   const otherId = ring === usedItem ? usedWithItemId : usedItemId;
-  const doses = DOSE_BY_ITEM.get(Number(otherId));
-  if (!ring || !doses) {
+  const potionCharges = CHARGES_BY_ITEM.get(Number(otherId));
+  if (!ring || !potionCharges) {
     return;
   }
   const room = MAX_CHARGES - charges(ring);
@@ -97,7 +105,7 @@ function chargeRing(event) {
     event.handled = true;
     return;
   }
-  const added = Math.min(doses, room);
+  const added = Math.min(potionCharges, room);
   player.getInventory().deleteNumber(otherId, 1);
   if (chargedByUncharged.has(ring.getId())) {
     ring.setId(chargedByUncharged.get(ring.getId()));

@@ -2,6 +2,7 @@
   "//": "All Settings rows the server applies, by setting id (cache struct param 1077). A toggle flips its varbit or varp between 0 and 1. A dropdown option sets 'varbit' to the option's index, or sets every var in that option's entry of 'options'. 'script' runs after the change. 'default' is sent at login until the player chooses (a live default that is not zero). From an rsprox capture of live OSRS; see docs/settings.md.",
   "settings": {
     "432": { "name": "Casting Alchemy spells by using items together always triggers a warning", "varbit": 2179 },
+    "380": { "name": "Automatically smash empty vials", "varbit": 5668 },
     "5": { "name": "Hitsplat tinting", "varbit": 10236 },
     "7": { "name": "Hide roofs", "varbit": 12378 },
     "10": { "name": "Show boss health overlay", "varbit": 12389 },

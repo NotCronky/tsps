@@ -1662,6 +1662,12 @@ export class CombatFactory {
             return;
         }
 
+        // The bow of Faerdhinen is its own ammunition: never drop or break the bow itself.
+        // Its charges are spent by BowOfFaerdhinen.plugin.js above.
+        if (RangedWeapon.BOW_OF_FAERDHINEN.includes(rangedWeapon)) {
+            return;
+        }
+
         if (rangedWeapon === RangedWeapon.CRYSTAL_BOW) {
             const weaponItem = player.getEquipment().get(Equipment.WEAPON_SLOT);
             const weaponId = weaponItem?.getId?.() ?? -1;

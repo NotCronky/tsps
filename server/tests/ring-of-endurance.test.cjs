@@ -118,3 +118,25 @@ test('charging leaves unrelated target items and their materials untouched', () 
   RingOfEndurance._test.chargeRing(event);
   assert.equal(event.handled,undefined);assert.deepEqual(target.meta,{});
 });
+
+test("an extended stamina dose is doubled for two charges, and charges the ring two per dose (Wiki)", () => {
+  const ring = item(ItemIds.RING_OF_ENDURANCE, { "ring-of-endurance": 5 });
+  const player = createPlayer({ ring });
+  const request = { player, energy: 40, durationMs: 240000, charges: 2 };
+  RingOfEndurance._test.doubleStamina(request);
+  assert.equal(request.energy, 80);
+  assert.equal(request.durationMs, 480000);
+  assert.equal(RingOfEndurance._test.charges(ring), 3);
+
+  const event = {
+    player,
+    usedItem: item(ItemIds.EXTENDED_STAMINA_POTION_4_),
+    usedWithItem: ring,
+    usedItemId: ItemIds.EXTENDED_STAMINA_POTION_4_,
+    usedWithItemId: ItemIds.RING_OF_ENDURANCE,
+    handled: false,
+  };
+  RingOfEndurance._test.chargeRing(event);
+  assert.equal(event.handled, true);
+  assert.equal(RingOfEndurance._test.charges(ring), 11);
+});

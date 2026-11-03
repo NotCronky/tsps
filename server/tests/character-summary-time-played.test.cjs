@@ -17,6 +17,7 @@ journal.register({
   onCustomEvent: (name, handler) => { hooks[name] = handler; },
   onPlayerLogin: (handler) => { hooks.login = handler; },
   onPlayerLogout: (handler) => { hooks.logout = handler; },
+  onExperienceGained: (handler) => { hooks.experience = handler; },
   onInterfaceActionButton: (id, handler) => handlers.push({ id, handler }),
   emitCustomEvent: () => {},
 });
@@ -25,14 +26,15 @@ const SUMMARY = 712;
 const ENTRY_LIST = (SUMMARY << 16) | 3;
 const TIME_PLAYED_ROW = 7;
 
-function createPlayer(saved = {}) {
+function createPlayer(saved = {}, combatLevel = 3) {
   const attributes = new Map(Object.entries(saved));
-  const sent = { varbits: {}, times: [], order: [] };
+  const sent = { varbits: {}, times: [], combat: [], order: [] };
   let dialogue = null;
   const sender = new Proxy({}, {
     get: (_target, name) => (...args) => {
       if (name === "sendVarbit") sent.varbits[args[0]] = args[1];
       if (name === "sendInterfaceScript" && args[0] === 3970) { sent.times.push(args[1][2]); sent.order.push("time"); }
+      if (name === "sendInterfaceScript" && args[0] === 3954) { sent.combat.push(args[1]); sent.order.push("combat"); }
       if (name === "sendSubInterface") sent.order.push("open");
       return sender;
     },
@@ -43,6 +45,8 @@ function createPlayer(saved = {}) {
     getAttribute: (key) => attributes.get(key),
     setAttribute: (key, value) => attributes.set(key, value),
     getPacketSender: () => sender,
+    getSkillManager: () => ({ getCombatLevel: () => combatLevel }),
+    setCombatLevel: (level) => { combatLevel = level; },
     getDialogueManager: () => ({ startDialogues: (chain) => { dialogue = chain.dialogue; } }),
   };
 }
@@ -137,4 +141,23 @@ test("\"don't ask me again\" stays, and the choice is resent at login", () => {
   hooks.login({ player: relogged });
   assert.equal(relogged.sent.varbits[12933], 1);
   assert.equal(relogged.sent.varbits[12962], 1);
+});
+
+test("the summary's combat level is sent at login, on each open and when it changes (cs2 3954 sets varc 52, -1 until then)", () => {
+  const player = createPlayer({}, 87);
+  hooks.login({ player });
+  assert.deepEqual(player.sent.combat, [[(SUMMARY << 16) | 2, ENTRY_LIST, 87]]);
+
+  hooks.experience({ player });
+  assert.equal(player.sent.combat.length, 1, "unchanged level is not resent");
+  player.setCombatLevel(88);
+  hooks.experience({ player });
+  assert.deepEqual(player.sent.combat.at(-1), [(SUMMARY << 16) | 2, ENTRY_LIST, 88]);
+
+  hooks["side-journal:mount"]({ player, groupId: SUMMARY, tabIndex: 0 });
+  assert.equal(player.sent.combat.length, 2, "an open with the level unchanged sends only the time");
+  player.setCombatLevel(90);
+  hooks["side-journal:mount"]({ player, groupId: SUMMARY, tabIndex: 0 });
+  assert.deepEqual(player.sent.combat.at(-1), [(SUMMARY << 16) | 2, ENTRY_LIST, 90]);
+  assert.deepEqual(player.sent.order.slice(-3), ["combat", "time", "open"]);
 });

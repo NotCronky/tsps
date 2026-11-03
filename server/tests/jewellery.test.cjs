@@ -289,26 +289,39 @@ test("the ring of wealth's Rub submenu and worn options follow the cache's order
   assert.deepEqual(ACTIONS.slice(4).map((action) => action.type), ["boss-log", "coin-collection"]);
 });
 
-test("the slayer ring's Rub submenu is its actions: Check, Teleport, then Master, Partner and Log", () => {
+test("the slayer ring's submenus follow the cache: Rub's actions, Teleport's destinations", () => {
   const player = createPlayer();
   const ring = new Item(ItemIds.SLAYER_RING_8_, 1);
   player.inventory.setItem(0, ring);
 
-  inventoryClick(player, ring, "Rub", { subOpId: 1 });
-  assert.equal(player.messages.at(-1), "Your Slayer ring has 8 charges left.");
-  assert.equal(customEvents.at(-1)[0], "slayer:check", "the Slayer plugin adds the task");
-  assert.equal(teleports.length, 0, "Check doesn't teleport");
-
-  inventoryClick(player, ring, "Rub", { subOpId: 2 });
-  pick("Stronghold Slayer Cave");
-  assert.deepEqual(teleports.at(-1).target, [2431, 3424, 0], "Teleport offers the destinations");
-
-  const before = teleports.length;
-  for (const subOpId of [3, 4, 5]) {
+  // Rub (op 2): Contact Master, Partner, Open Log; none built yet.
+  for (const subOpId of [1, 2, 3]) {
     inventoryClick(player, ring, "Rub", { subOpId });
     assert.equal(player.messages.at(-1), "Nothing interesting happens.");
   }
-  assert.equal(teleports.length, before, "Master, Partner and Log don't teleport");
+  assert.equal(teleports.length, 0, "Master, Partner and Log don't teleport");
+
+  // Teleport (op 3): Stronghold, Slayer Tower, Fremennik Dungeon, Tarn's Lair, Dark Beasts, Wyrmscraig Cavern.
+  const expected = [[2431, 3424, 0], [3429, 3538, 0], [2807, 10002, 0], [3185, 4601, 0], [2027, 4637, 0], [2564, 8630, 0]];
+  expected.forEach((target, index) => {
+    inventoryClick(player, ring, "Teleport", { clickType: 3, subOpId: index + 1 });
+    assert.deepEqual(teleports.at(-1).target, target, `Teleport sub-op ${index + 1}`);
+  });
+
+  // Check (op 4) still shows the charges and the task.
+  player.inventory.setItem(0, ring);
+  inventoryClick(player, ring, "Check", { clickType: 4 });
+  assert.match(player.messages.at(-1), /Your Slayer ring has \d charges? left\./);
+});
+
+test("the slayer ring's Teleport dialogue offers Wyrmscraig Cavern", () => {
+  const player = createPlayer();
+  const ring = new Item(ItemIds.SLAYER_RING_8_, 1);
+  player.inventory.setItem(0, ring);
+  inventoryClick(player, ring, "Teleport", { clickType: 3 });
+  pick("More...");
+  pick("Wyrmscraig Cavern");
+  assert.deepEqual(teleports.at(-1).target, [2564, 8630, 0]);
 });
 
 test("the ring of dueling's Fortis Colosseum teleport needs the Colosseum's Hero title", () => {
@@ -360,12 +373,24 @@ test("the Colosseum answers the Hero check from the player's best Glory", () => 
   assert.equal(ask(), true, "Grand Champion keeps the Hero unlock");
 });
 
+test("a worn slayer ring's Teleport submenu reaches Wyrmscraig Cavern", () => {
+  const player = createPlayer();
+  const ring = new Item(ItemIds.SLAYER_RING_8_, 1);
+  player.equipment.setItem(Equipment.RING_SLOT, ring);
+  const slot = player.equipment.getItems().indexOf(ring);
+  // Worn options (params 451-455): Check, Teleport, Master, Partner, Log; Teleport is click 3.
+  const event = { player, item: ring, itemId: ring.getId(), slot, interfaceId: Equipment.INVENTORY_INTERFACE_ID, clickType: 3, subOpId: 6, handled: false };
+  itemAction(event);
+  assert.equal(event.handled, true);
+  assert.deepEqual(teleports.at(-1).target, [2564, 8630, 0]);
+});
+
 test("the slayer ring teleports up to level 30 Wilderness (Wiki)", () => {
   const player = createPlayer();
   const ring = new Item(ItemIds.SLAYER_RING_8_, 1);
   player.inventory.setItem(0, ring);
-  inventoryClick(player, ring, "Rub", { subOpId: 2 });
-  pick("Slayer Tower");
+  inventoryClick(player, ring, "Teleport", { clickType: 3, subOpId: 2 });
+  assert.deepEqual(teleports.at(-1).target, [3429, 3538, 0], "sub-op 2 is the Slayer Tower");
   assert.equal(teleports.at(-1).wildernessLevel, 30);
 });
 

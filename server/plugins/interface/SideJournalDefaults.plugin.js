@@ -47,6 +47,9 @@ const FLAGS_OP1_2 = (1 << 1) | (1 << 2);
 
 
 const SCRIPT_ACCOUNT_SUMMARY_SET_TIME_ID = 3970;
+// Stores the summary's combat level in varc 52 and redraws the row. The client starts varc 52
+// at -1, so without this the real client's summary reads "Combat Level: -1".
+const SCRIPT_ACCOUNT_SUMMARY_SET_COMBAT_LEVEL_ID = 3954;
 const VARBIT_ACCOUNT_SUMMARY_DISPLAY_PLAYTIME = 12933;
 const VARBIT_ACCOUNT_SUMMARY_PLAYTIME_REMIND_DISABLE = 12962;
 /** Milliseconds online in earlier sessions; the Time Played row adds this session (rsprox 3276). */
@@ -55,11 +58,16 @@ const PLAY_TIME_DISPLAY_ATTRIBUTE = "account-summary:play-time-displayed";
 const PLAY_TIME_REMIND_DISABLE_ATTRIBUTE = "account-summary:play-time-remind-disabled";
 const PLAY_TIME_PROMPT = "Are you sure you want to display your time played?";
 const sessionStartByPlayer = new WeakMap();
+const sentCombatLevel = new WeakMap();
 let pluginApi;
 
 function mountSideJournalContent(player, groupId, tabIndex) {
   // As captured (rsprox 3276): the time goes first, the summary opens on it.
-  if (groupId === INTERFACE_CHARACTER_SUMMARY_ID) sendPlayTime(player);
+  if (groupId === INTERFACE_CHARACTER_SUMMARY_ID) {
+    // A level set without experience (an admin command) still reaches the row.
+    sendCombatLevel(player, true);
+    sendPlayTime(player);
+  }
   player.getPacketSender().sendSubInterface(SIDE_JOURNAL_TAB_CONTAINER_UID, groupId);
   player.getPacketSender().sendVarbit(VARBIT_SIDE_JOURNAL_SELECTED_TAB, tabIndex);
   // Other journal content (the Leagues tab) learns its panel was replaced.
@@ -120,6 +128,18 @@ function sendPlayTime(player) {
   ]);
 }
 
+/** The summary's combat level; with `onlyIfChanged`, sent only when it differs from the last one sent. */
+function sendCombatLevel(player, onlyIfChanged = false) {
+  const level = player.getSkillManager().getCombatLevel();
+  if (onlyIfChanged && sentCombatLevel.get(player) === level) return;
+  sentCombatLevel.set(player, level);
+  player.getPacketSender().sendInterfaceScript(SCRIPT_ACCOUNT_SUMMARY_SET_COMBAT_LEVEL_ID, [
+    ACCOUNT_SUMMARY_CONTENTS_UID,
+    ACCOUNT_SUMMARY_ENTRY_LIST_UID,
+    level,
+  ]);
+}
+
 function displayPlayTime(player, displayed) {
   player.setAttribute(PLAY_TIME_DISPLAY_ATTRIBUTE, displayed);
   player.getPacketSender().sendVarbit(VARBIT_ACCOUNT_SUMMARY_DISPLAY_PLAYTIME, displayed ? 1 : 0);
@@ -157,6 +177,7 @@ function startPlayTime({ player }) {
   const sender = player.getPacketSender();
   sender.sendVarbit(VARBIT_ACCOUNT_SUMMARY_DISPLAY_PLAYTIME, player.getAttribute(PLAY_TIME_DISPLAY_ATTRIBUTE) ? 1 : 0);
   sender.sendVarbit(VARBIT_ACCOUNT_SUMMARY_PLAYTIME_REMIND_DISABLE, player.getAttribute(PLAY_TIME_REMIND_DISABLE_ATTRIBUTE) ? 1 : 0);
+  sendCombatLevel(player);
   sendPlayTime(player);
 }
 
@@ -176,6 +197,7 @@ module.exports = {
     api.persistAttribute(PLAY_TIME_REMIND_DISABLE_ATTRIBUTE, false);
     api.onPlayerLogin(startPlayTime);
     api.onPlayerLogout(stopPlayTime);
+    api.onExperienceGained(({ player }) => sendCombatLevel(player, true));
 
     api.onInterfaceActionButton(
       [SIDE_JOURNAL_SUMMARY_ICON_UID, SIDE_JOURNAL_QUEST_ICON_UID, SIDE_JOURNAL_DIARY_ICON_UID],

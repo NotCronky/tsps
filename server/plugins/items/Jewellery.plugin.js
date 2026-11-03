@@ -228,6 +228,23 @@ function equippedDestination(piece, event) {
 }
 
 /**
+ * The cache's name for a submenu entry: `subops[op - 1][subOp - 1]`. A worn option has no
+ * submenu of its own in the item config, so it borrows the inventory option of the same name
+ * (the slayer ring's worn Teleport lists the inventory Teleport's destinations).
+ */
+function cacheSubOpName(itemId, clickType, subOpId, wornOption = null) {
+  const definition = CacheDefinitions.getItem(itemId);
+  const subops = definition?.subops;
+  if (!Array.isArray(subops) || !Number.isInteger(subOpId)) return null;
+  let opIndex = clickType - 1;
+  if (wornOption != null) {
+    opIndex = (definition.inventoryActions ?? []).findIndex((action) => normalise(action) === normalise(wornOption));
+    if (opIndex < 0) return null;
+  }
+  return subops[opIndex]?.[subOpId - 1] ?? null;
+}
+
+/**
  * A Rub submenu entry that is an action rather than a destination (the slayer ring's Check,
  * Teleport, Master, Partner and Log). Master, Partner and Log aren't built yet.
  */
@@ -258,11 +275,35 @@ function handleJewelleryAction(event) {
   const equipped = event.interfaceId === Equipment.INVENTORY_INTERFACE_ID;
 
   if (equipped) {
+    if (Number.isInteger(event.subOpId)) {
+      const worn = event.option ?? wornOptionName(event.itemId, event.clickType);
+      const named = destinationNamed(piece, cacheSubOpName(event.itemId, event.clickType, event.subOpId, worn));
+      if (named) {
+        event.handled = true;
+        confirmAndTeleport(player, item, named);
+        return;
+      }
+    }
     const destination = equippedDestination(piece, event);
     if (!destination) return;
     event.handled = true;
     if (destination === "rub") rub(player, item);
     else confirmAndTeleport(player, item, destination);
+    return;
+  }
+
+  const subOpName = cacheSubOpName(event.itemId, event.clickType, event.subOpId);
+  const subOpDestination = destinationNamed(piece, subOpName);
+  if (subOpDestination) {
+    event.handled = true;
+    // A Rub submenu teleport rubs first, as Rub does (rsprox 723, 3170).
+    if (piece.rubMessage && entry.charges > 0) player.sendMessage(piece.rubMessage);
+    confirmAndTeleport(player, item, subOpDestination);
+    return;
+  }
+  if (subOpName && piece.subOps) {
+    event.handled = true;
+    subOp(player, item, entry, normalise(subOpName));
     return;
   }
 

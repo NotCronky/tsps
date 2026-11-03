@@ -648,3 +648,43 @@ test("shared stamina requests support timed restorative food without consuming a
  assert.equal(energy,30);assert.equal(attrs.get("potions:stamina:acc"),0);
  assert.ok(attrs.get("potions:stamina:end")>=now+60000&&attrs.get("potions:stamina:end")<=Date.now()+60000);
 });
+
+test("an extended stamina dose restores 40% run energy and runs the stamina effect for 4 minutes (Wiki)", t => {
+  const { Player } = require("../dist/game/entity/impl/player/Player");
+  const player = new Player(null);
+  const sender = new Proxy({}, { get: () => () => sender });
+  t.mock.method(player, "getPacketSender", () => sender);
+  t.mock.method(player, "sendMessage", () => {});
+  const doses = [ItemIdentifiers.EXTENDED_STAMINA_POTION_4_, ItemIdentifiers.EXTENDED_STAMINA_POTION_3_,
+    ItemIdentifiers.EXTENDED_STAMINA_POTION_2_, ItemIdentifiers.EXTENDED_STAMINA_POTION_1_];
+  for (const id of doses) assert.equal(Potions._test.findPotionEntry(id)?.potion.name, "Extended stamina potion");
+  player.setRunEnergy(10);
+  player.getInventory().setItem(0, new Item(doses[0], 1));
+  const now = Date.now();
+  assert.equal(drinkPotion({ player, itemId: doses[0], slot: 0 }), true);
+  assert.equal(player.getInventory().getItems()[0].getId(), doses[1]);
+  assert.equal(player.getRunEnergy(), 50);
+  const end = player.getAttribute("potions:stamina:end");
+  assert.ok(end >= now + 240000 && end <= Date.now() + 240000);
+});
+
+test("Automatically smash empty vials (varbit 5668) smashes the last dose's vial, and only a vial", t => {
+  const { Player } = require("../dist/game/entity/impl/player/Player");
+  const drinkLast = (itemId, smash) => {
+    const player = new Player(null);
+    const messages = [];
+    const sender = new Proxy({}, { get: (_, key) => key === "getVarbit" ? (id) => (id === 5668 && smash ? 1 : 0) : () => sender });
+    t.mock.method(player, "getPacketSender", () => sender);
+    t.mock.method(player, "sendMessage", message => messages.push(message));
+    player.getInventory().setItem(0, new Item(itemId, 1));
+    assert.equal(drinkPotion({ player, itemId, slot: 0 }), true);
+    return { left: player.getInventory().getItems()[0]?.getId?.() ?? -1, messages };
+  };
+  const I = ItemIdentifiers;
+  assert.equal(drinkLast(I.ENERGY_POTION_1_, false).left, I.VIAL, "off: the vial stays");
+  const smashed = drinkLast(I.ENERGY_POTION_1_, true);
+  assert.equal(smashed.left, -1, "on: no vial left");
+  assert.ok(smashed.messages.includes("You quickly smash the empty vial using the trick a Barbarian taught you."));
+  assert.equal(drinkLast(I.ENERGY_POTION_2_, true).left, I.ENERGY_POTION_1_, "a dose left: nothing smashed");
+  assert.equal(drinkLast(I.BEER, true).left, I.BEER_GLASS, "a beer glass is not a vial");
+});

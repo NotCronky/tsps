@@ -30,6 +30,8 @@ let pluginApi;
 const DRINK_ANIMATION = new Animation(829);
 const DEFAULT_EMPTY_ITEM = ItemIds.VIAL;
 const NO_EMPTY_ITEM = -1;
+/** All Settings 380 "Automatically smash empty vials" (varbit auto_smash_vials). */
+const AUTO_SMASH_VIALS_VARBIT = 5668;
 const STAMINA_DURATION_MS = 2 * 60 * 1000;
 const DIVINE_DURATION_MS = 5 * 60 * 1000;
 const OVERLOAD_DURATION_MS = 5 * 60 * 1000;
@@ -435,9 +437,9 @@ function applyStamina(player) {
   applyStaminaRequest({player});
 }
 
-function applyStaminaRequest({player,energy=20,durationMs=STAMINA_DURATION_MS}) {
-  // Ring of endurance doubles this by mutating the payload (Wiki).
-  const request = { player, energy, durationMs };
+function applyStaminaRequest({player,energy=20,durationMs=STAMINA_DURATION_MS,charges=1}) {
+  // Ring of endurance doubles this by mutating the payload, spending `charges` (Wiki).
+  const request = { player, energy, durationMs, charges };
   pluginApi.emitCustomEvent("potions:stamina-effect", request);
   restoreRunEnergy(player, request.energy);
   player.setAttribute(ATTR_STAMINA_END, Date.now() + request.durationMs);
@@ -863,6 +865,13 @@ registerPotion({
   name: "Stamina potion",
   chains: [doseChain("STAMINA_POTION_4_", "STAMINA_POTION_3_", "STAMINA_POTION_2_", "STAMINA_POTION_1_")],
   effect: applyStamina,
+});
+// Wiki (Extended stamina potion): 40% run energy and the stamina effect for 4 minutes per dose,
+// both doubled by a charged ring of endurance; a new dose resets the timer, it doesn't stack.
+registerPotion({
+  name: "Extended stamina potion",
+  chains: [doseChain("EXTENDED_STAMINA_POTION_4_", "EXTENDED_STAMINA_POTION_3_", "EXTENDED_STAMINA_POTION_2_", "EXTENDED_STAMINA_POTION_1_")],
+  effect: (player) => applyStaminaRequest({ player, energy: 40, durationMs: 2 * STAMINA_DURATION_MS, charges: 2 }),
 });
 
 registerPotion({
@@ -1354,7 +1363,10 @@ function handlePotionDrink(player, itemId, slot) {
   player.performAnimation(entry.potion.drink?.animation ? new Animation(entry.potion.drink.animation) : DRINK_ANIMATION);
   Sounds.sendSound(player, Sound.DRINK);
 
-  inventory.setItem(slot, new Item(entry.replacementId, entry.replacementId === NO_EMPTY_ITEM ? 0 : 1)).refreshItems();
+  // The setting smashes only a plain empty vial, not a beer glass, cup or gourd.
+  const smashed = entry.replacementId === DEFAULT_EMPTY_ITEM && player.getPacketSender().getVarbit(AUTO_SMASH_VIALS_VARBIT) === 1;
+  const replacementId = smashed ? NO_EMPTY_ITEM : entry.replacementId;
+  inventory.setItem(slot, new Item(replacementId, replacementId === NO_EMPTY_ITEM ? 0 : 1)).refreshItems();
   entry.potion.effect(player);
 
   const share = player.getAttribute("lunar:potion-share");
@@ -1373,6 +1385,7 @@ function handlePotionDrink(player, itemId, slot) {
     player.sendMessage(entry.potion.area === "chambers-of-xeric"
       ? "You have finished your potion. The gourd vial disintegrates."
       : "You have finished your potion.");
+    if (smashed) player.sendMessage("You quickly smash the empty vial using the trick a Barbarian taught you.");
   }
   pluginApi.emitCustomEvent("potions:drunk", { player, itemId, name: entry.potion.name });
 
