@@ -261,12 +261,12 @@ module.exports = function registerShadowOfTheStormQuest(api) {
   const SECOND_RITUAL_VARIANT = "summoning-agrith-naar-in-position";
 
   const SKILL_BY_OPTION = new Map([
-    ["Strength *", Skill.STRENGTH],
-    ["Attack *", Skill.ATTACK],
-    ["Defence *", Skill.DEFENCE],
-    ["Hitpoints *", Skill.HITPOINTS],
-    ["Magic *", Skill.MAGIC],
-    ["Ranged *", Skill.RANGED],
+    ["* Strength *", Skill.STRENGTH],
+    ["* Attack *", Skill.ATTACK],
+    ["* Defence *", Skill.DEFENCE],
+    ["* Hitpoints *", Skill.HITPOINTS],
+    ["* Magic *", Skill.MAGIC],
+    ["* Ranged *", Skill.RANGED],
   ]);
   const SKILL_BY_INDEX = new Map(
     [...SKILL_BY_OPTION.values()].map((skill) => [skill.getIndex(), skill])
@@ -1327,7 +1327,7 @@ module.exports = function registerShadowOfTheStormQuest(api) {
     if (!OWN_NPC_IDS.has(event.npcId)) return;
     let text = event.text;
     if (text.includes("[player name]")) {
-      text = text.replace(/\[player name\]/gi, String(event.player.getUsername()));
+      text = text.replace(/\[player name\]/gi, String(event.player.getDisplayName()));
     }
     if (text.includes("[him/her]") || text.includes("[his/her]") || text.includes("[He/She]")) {
       const male = event.player.getAppearance?.().isMale?.() !== false;
