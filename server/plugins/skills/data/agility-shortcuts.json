@@ -2411,6 +2411,94 @@
       ]
     },
     {
+      "name": "Rocks (Karuulm Slayer Dungeon, west)",
+      "object": 34544,
+      "at": [1302,10205,0],
+      "level": 1,
+      "unverified": "the movement and both ends (no capture; ends from the map). No Agility requirement: the Wiki lists none for the dungeon's rocks, lava gaps and tunnel",
+      "between": {"ends":[[1301,10205,0],[1303,10205,0]],"cross":[{"move":"to","anim":"CLIMB_ROCKS","speed":[0,60],"ticks":2},{"anim":-1}]}
+    },
+    {
+      "name": "Rocks (Karuulm Slayer Dungeon, north)",
+      "object": 34544,
+      "at": [1311,10215,0],
+      "level": 1,
+      "unverified": "the movement and both ends (no capture; ends from the map). No Agility requirement: the Wiki lists none for the dungeon's rocks, lava gaps and tunnel",
+      "between": {"ends":[[1311,10214,0],[1311,10216,0]],"cross":[{"move":"to","anim":"CLIMB_ROCKS","speed":[0,60],"ticks":2},{"anim":-1}]}
+    },
+    {
+      "name": "Rocks (Karuulm Slayer Dungeon, east)",
+      "object": 34544,
+      "at": [1321,10205,0],
+      "level": 1,
+      "unverified": "the movement and both ends (no capture; ends from the map). No Agility requirement: the Wiki lists none for the dungeon's rocks, lava gaps and tunnel",
+      "between": {"ends":[[1320,10205,0],[1322,10205,0]],"cross":[{"move":"to","anim":"CLIMB_ROCKS","speed":[0,60],"ticks":2},{"anim":-1}]}
+    },
+    {
+      "name": "Rocks (Karuulm Slayer Dungeon, north-east)",
+      "object": 34548,
+      "at": [1351,10251,0],
+      "level": 1,
+      "unverified": "the movement and both ends (no capture; ends from the map). No Agility requirement: the Wiki lists none for the dungeon's rocks, lava gaps and tunnel",
+      "between": {"ends":[[1351,10250,0],[1351,10252,0]],"cross":[{"move":"to","anim":"CLIMB_ROCKS","speed":[0,60],"ticks":2},{"anim":-1}]}
+    },
+    {
+      "name": "Lava gap (Karuulm Slayer Dungeon, west)",
+      "object": 34515,
+      "at": [1269,10171,0],
+      "level": 1,
+      "unverified": "the movement and both ends (no capture; ends from the map). No Agility requirement: the Wiki lists none for the dungeon's rocks, lava gaps and tunnel",
+      "between": {"ends":[[1270,10170,0],[1270,10175,0]],"cross":[{"use":"jump","args":["to"]}]}
+    },
+    {
+      "name": "Lava gap (Karuulm Slayer Dungeon, north)",
+      "object": 34515,
+      "at": [1307,10253,0],
+      "level": 1,
+      "unverified": "the movement and both ends (no capture; ends from the map). No Agility requirement: the Wiki lists none for the dungeon's rocks, lava gaps and tunnel",
+      "between": {"ends":[[1308,10252,0],[1308,10257,0]],"cross":[{"use":"jump","args":["to"]}]}
+    },
+    {
+      "name": "Steps (Karuulm Slayer Dungeon, lower, up)",
+      "object": 34530,
+      "at": [1330,10205,0],
+      "level": 1,
+      "unverified": "the landing tiles (no capture; from the map, the walkable side of the steps on the other floor). No Agility requirement",
+      "steps": [{"tele": [1334,10205,1]}]
+    },
+    {
+      "name": "Steps (Karuulm Slayer Dungeon, lower, down)",
+      "object": 34531,
+      "at": [1330,10205,1],
+      "level": 1,
+      "unverified": "the landing tiles (no capture; from the map, the walkable side of the steps on the other floor). No Agility requirement",
+      "steps": [{"tele": [1329,10205,0]}]
+    },
+    {
+      "name": "Steps (Karuulm Slayer Dungeon, upper, up)",
+      "object": 34530,
+      "at": [1314,10188,1],
+      "level": 1,
+      "unverified": "the landing tiles (no capture; from the map, the walkable side of the steps on the other floor). No Agility requirement",
+      "steps": [{"tele": [1318,10188,2]}]
+    },
+    {
+      "name": "Steps (Karuulm Slayer Dungeon, upper, down)",
+      "object": 34531,
+      "at": [1314,10188,2],
+      "level": 1,
+      "unverified": "the landing tiles (no capture; from the map, the walkable side of the steps on the other floor). No Agility requirement",
+      "steps": [{"tele": [1313,10188,1]}]
+    },
+    {
+      "name": "Tunnel (Karuulm Slayer Dungeon)",
+      "object": 34516,
+      "at": [1330,10238,1],
+      "level": 1,
+      "unverified": "the movement and both ends (no capture; ends from the map). No Agility requirement: the Wiki lists none for the dungeon's rocks, lava gaps and tunnel",
+      "between": {"ends":[[1329,10238,1],[1336,10238,1]],"cross":[{"use":"tunnel","args":["to"]}]}
+    },
+    {
       "name": "Tunnel (Stronghold Slayer Cave)",
       "object": [30174,30175],
       "level": 72,

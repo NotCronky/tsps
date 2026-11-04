@@ -174,6 +174,16 @@ export class World {
     }
 
     /**
+     * The players a world list shows as online: everyone connected, plus those plugins count as
+     * players without a connection ("world:population" { count }: bots that play like people).
+     */
+    public static getPopulation(): number {
+        const request = { count: World.getNetworkPlayerCount() };
+        PluginManager.emitCustomEvent("world:population", request);
+        return Math.max(0, Math.floor(Number(request.count) || 0));
+    }
+
+    /**
     * Broadcasts a message to all players in the game.
     *
     * @param message

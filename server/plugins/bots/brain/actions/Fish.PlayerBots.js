@@ -10,6 +10,7 @@ const {
   peekMovementRequest,
 } = require("../../behaviours/navigation/Navigation.PlayerBots");
 const Fishing = require("../../../skills/Fishing.plugin");
+const { createObtainAction } = require("./Obtain.PlayerBots");
 
 // Spots of the chosen cluster: within this of its centre.
 const SITE_RADIUS = 16;
@@ -71,6 +72,8 @@ function createFishAction(spec, world) {
   }
   const baitId = Number.isInteger(spec.bait) ? spec.bait : null;
   const baitAmount = Math.max(1, Math.floor(Number(spec.baitAmount ?? 300)));
+  // Bait is the character's own: carried, taken out of the bank or bought, never conjured.
+  const getBait = baitId !== null ? createObtainAction({ items: [{ item: baitId, amount: baitAmount }] }, world) : null;
   const routeExists = world.routes?.canReachSpot ?? canReachSpot;
   const canReachEntity = createEntityReachChecker(world.core);
   const clickTypeAt = (npc) =>
@@ -183,8 +186,10 @@ function createFishAction(spec, world) {
           waitSince: bot.siteWaitSince ? nowMs - bot.siteWaitSince : 0,
         });
       }
-      if (baitId !== null && inventory.getAmount(baitId) < baitAmount / 2) {
-        inventory.adds(baitId, baitAmount - inventory.getAmount(baitId));
+      if (getBait && inventory.getAmount(baitId) <= 0 && !Fishing.isFishingActive(player)) {
+        const result = getBait.update(ctx);
+        if (result === "failed") return "failed";
+        if (result !== "success") return "running";
       }
       if (Fishing.isFishingActive(player)) {
         bot.idleSince = 0;
@@ -287,9 +292,7 @@ function createFishAction(spec, world) {
     },
     stop(ctx) {
       const bot = stateFor(ctx.player);
-      // Bait is provisioned for fishing only: take back what is left before a bank trip.
-      const left = baitId !== null ? ctx.player.getInventory?.()?.getAmount(baitId) ?? 0 : 0;
-      if (left > 0) ctx.player.getInventory().deleteNumber(baitId, left);
+      getBait?.stop?.(ctx);
       leaveSite(ctx.player, bot, ctx.nowMs);
       bot.position = null;
       bot.siteWaitSince = 0;

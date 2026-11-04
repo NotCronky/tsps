@@ -537,6 +537,43 @@ test("native Lizardman Canyon handholds enter and leave both crossings at level 
   }
 });
 
+test("the Karuulm Slayer Dungeon's rocks, lava gaps and tunnel cross both ways at level 1", () => {
+  const { RegionManager } = require("../dist/game/collision/RegionManager");
+  const { MapObjects } = require("../dist/game/entity/impl/object/MapObjects");
+  RegionManager.init();
+  for (const [x, y] of [[1270, 10170], [1300, 10205], [1350, 10250], [1330, 10238]]) RegionManager.loadMapFiles(x, y);
+  for (const [id, at, a, b] of [
+    [34544, [1302, 10205, 0], [1301, 10205, 0], [1303, 10205, 0]],
+    [34544, [1311, 10215, 0], [1311, 10214, 0], [1311, 10216, 0]],
+    [34544, [1321, 10205, 0], [1320, 10205, 0], [1322, 10205, 0]],
+    [34548, [1351, 10251, 0], [1351, 10250, 0], [1351, 10252, 0]],
+    [34515, [1269, 10171, 0], [1270, 10170, 0], [1270, 10175, 0]],
+    [34515, [1307, 10253, 0], [1308, 10252, 0], [1308, 10257, 0]],
+    [34516, [1330, 10238, 1], [1329, 10238, 1], [1336, 10238, 1]],
+  ]) {
+    assert.ok(MapObjects.get(id, new Location(...at), null), `the map places ${id} at ${at}`);
+    for (const [from, to] of [[a, b], [b, a]]) {
+      assert.equal(RegionManager.blocked(new Location(...to), null), false, `landing ${to} is walkable`);
+      const player = createPlayer(...from, 1);
+      assert.notEqual(operate(player, id, at), false, `${id} at ${at} is handled from ${from}`);
+      assert.deepEqual(tileOf(player), to, `${id} at ${at} from ${from}`);
+      assert.equal(player.state.blocked, false, "the crossing releases movement");
+    }
+  }
+  for (const [id, at, from, to] of [
+    [34530, [1330, 10205, 0], [1329, 10205, 0], [1334, 10205, 1]],
+    [34531, [1330, 10205, 1], [1334, 10205, 1], [1329, 10205, 0]],
+    [34530, [1314, 10188, 1], [1313, 10188, 1], [1318, 10188, 2]],
+    [34531, [1314, 10188, 2], [1318, 10188, 2], [1313, 10188, 1]],
+  ]) {
+    assert.ok(MapObjects.get(id, new Location(...at), null), `the map places steps ${id} at ${at}`);
+    assert.equal(RegionManager.blocked(new Location(...to), null), false, `landing ${to} is walkable`);
+    const player = createPlayer(...from, 1);
+    assert.notEqual(operate(player, id, at), false, `steps ${id} at ${at} are handled`);
+    assert.deepEqual(tileOf(player), to, `steps ${id} at ${at}`);
+  }
+});
+
 test("the native Draynor underwall tunnel crosses both ways in one click (rsprox 4001)", () => {
   const core = PluginManager.getCoreApi();
   core.RegionManager.init();

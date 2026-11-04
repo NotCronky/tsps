@@ -1,0 +1,116 @@
+{
+  "_comment": "Where each task is done: place ids from places.json, none in the Wilderness. A character far from all of them travels to the nearest first (agent/Agent.PlayerBots.js), then the task looks for its trees, rocks or spots nearby. Gathering tiers have their own lists (an activity id from data/definitions/bot-activities.json), so a runite miner goes where runite is; a skill's list is the fallback. Smelting places have a furnace; the others a bank nearby.",
+  "places": {
+    "woodcutting": [
+      "lumbridge",
+      "draynor_village",
+      "varrock",
+      "seers_village",
+      "east_ardougne"
+    ],
+    "mining": [
+      "lumbridge",
+      "varrock",
+      "falador"
+    ],
+    "fishing": [
+      "lumbridge",
+      "draynor_village",
+      "catherby"
+    ],
+    "combat_training": [
+      "lumbridge",
+      "varrock",
+      "falador",
+      "east_ardougne",
+      "seers_village"
+    ],
+    "firemaking": [
+      "varrock",
+      "draynor_village",
+      "seers_village",
+      "grand_exchange"
+    ],
+    "cooking": [
+      "lumbridge",
+      "catherby",
+      "varrock"
+    ],
+    "smelting": [
+      "falador",
+      "edgeville",
+      "lumbridge"
+    ],
+    "hang_around": [
+      "grand_exchange",
+      "falador_park",
+      "varrock",
+      "edgeville",
+      "catherby"
+    ],
+    "normal_trees": [
+      "lumbridge",
+      "draynor_village",
+      "varrock"
+    ],
+    "oak_trees": [
+      "lumbridge",
+      "draynor_village",
+      "varrock",
+      "seers_village"
+    ],
+    "willow_trees": [
+      "draynor_village",
+      "seers_village",
+      "catherby"
+    ],
+    "maple_trees": [
+      "seers_village"
+    ],
+    "yew_trees": [
+      "edgeville",
+      "falador_park",
+      "seers_village",
+      "grand_exchange"
+    ],
+    "magic_trees": [
+      "seers_village"
+    ],
+    "copper_tin_rocks": [
+      "lumbridge",
+      "varrock"
+    ],
+    "iron_rocks": [
+      "varrock",
+      "falador"
+    ],
+    "silver_rocks": [
+      "varrock"
+    ],
+    "coal_rocks": [
+      "falador"
+    ],
+    "gold_rocks": [
+      "falador"
+    ],
+    "mithril_rocks": [
+      "lumbridge",
+      "falador"
+    ],
+    "adamantite_rocks": [
+      "lumbridge",
+      "falador"
+    ],
+    "runite_rocks": [
+      "falador"
+    ],
+    "fish_shrimps": ["lumbridge", "draynor_village", "catherby"],
+    "fish_sardines": ["draynor_village", "catherby"],
+    "fish_mackerel": ["catherby"],
+    "fish_trout": ["lumbridge", "seers_village"],
+    "fish_pike": ["lumbridge", "seers_village"],
+    "fish_tuna": ["catherby"],
+    "fish_lobsters": ["catherby"],
+    "fish_sharks": ["catherby"]
+  }
+}

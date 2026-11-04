@@ -6,6 +6,8 @@ const { canReachSpot } = require("../../behaviours/navigation/LongRoutes.PlayerB
 const { requestMovement, clearMovementRequest, peekMovementRequest, randomInRange } =
   require("../../behaviours/navigation/Navigation.PlayerBots");
 
+/** A slot to empty (the shield, under a two-handed weapon). */
+const EMPTY = Symbol("empty");
 const TARGET_RETRY_MS = 1800;
 const TARGET_SPREAD = 4;
 const ATTACK_DISTANCE = 20;
@@ -32,7 +34,6 @@ const MOVEMENT_STALL_TICKS = 3;
 // fall back to a walked brain route so doors get opened.
 const ATTACK_STUCK_MS = 6000;
 const RANGED_AMMO_AMOUNT = 1000;
-const MAGIC_RUNE_AMOUNT = 3000;
 // Shared across action instances: two trainers must not claim the same idle NPC.
 const CLAIMS = new WeakMap();
 // Shared across action instances: cluster key -> trainers there, so trainers fill
@@ -184,6 +185,7 @@ function createTrainCombatAction(spec, world) {
       ? tiers.filter((entry) => manager.getCurrentLevel(Skill.DEFENCE) >= entry.minLevel).pop()
       : offenseTier;
     const seedBase = player.getUsername?.() ?? "bot";
+    const carries = (id) => inventory.getAmount(id) > 0 || equipment.getItems().some((item) => item?.getId?.() === id);
     const pick = (pool, seed) => {
       if (!pool?.length) return null;
       const start = hashSeed(`${seedBase}:${seed}`) % pool.length;
@@ -192,6 +194,8 @@ function createTrainCombatAction(spec, world) {
         if (id === null) return null;
         const requirements = new Item(id, 1).getDefinition().getRequirements() ?? [];
         if (requirements.some((required, i) => required > manager.getCurrentLevel(skillByIndex.get(i)))) continue;
+        // Only gear the character owns and carries: it progresses like a player.
+        if (!carries(id)) continue;
         return id;
       }
       return null;
@@ -203,6 +207,8 @@ function createTrainCombatAction(spec, world) {
       if (style === "ranged") {
         const ammo = pick(offenseTier.ammo, `ammo:${offenseTier.minLevel}`);
         if (Number.isInteger(ammo)) items.push([Equipment.AMMUNITION_SLOT, ammo, RANGED_AMMO_AMOUNT]);
+        // No bow or no arrows of its own: fight with what it has instead.
+        else if (!Number.isInteger(weapon)) state.combatStyle = "melee";
       }
     }
     for (const [slot, keys] of armourTier?.armour ?? []) {
@@ -210,20 +216,28 @@ function createTrainCombatAction(spec, world) {
     }
     // Last write wins: a two-handed weapon vacates the shield the armour roll chose.
     if (Number.isInteger(weapon) && new Item(weapon, 1).getDefinition().isDoubleHanded?.() === true) {
-      items.push([Equipment.SHIELD_SLOT, null]);
+      items.push([Equipment.SHIELD_SLOT, EMPTY]);
     }
     for (const [slot, id, amount] of items) {
       const existing = equipment.getItems()[slot];
-      if (!Number.isInteger(id)) {
-        // An empty roll vacates the slot instead of keeping stale gear.
+      if (id === EMPTY) {
+        // A two-handed weapon: the shield goes back into the inventory.
         if (existing?.getId() > 0) {
+          inventory.adds(existing.getId(), existing.getAmount());
           equipment.set(slot, new Item(-1, 1));
           changed = true;
         }
         continue;
       }
-      if (existing?.getId() === id && (amount === undefined || existing.getAmount() >= amount)) continue;
-      equipment.set(slot, new Item(id, amount ?? 1));
+      // Nothing better owned for the slot: keep what is worn.
+      if (!Number.isInteger(id)) continue;
+      if (existing?.getId() === id) continue;
+      // Put it on as a player does: out of the inventory, with what it replaces put back there.
+      const carried = Math.min(inventory.getAmount(id), amount ?? 1);
+      if (carried <= 0) continue;
+      inventory.deleteNumber(id, carried);
+      if (existing?.getId() > 0) inventory.adds(existing.getId(), existing.getAmount());
+      equipment.set(slot, new Item(id, carried));
       changed = true;
     }
     if (changed) {
@@ -238,13 +252,15 @@ function createTrainCombatAction(spec, world) {
       const spell = available.length
         ? available[hashSeed(`${seedBase}:spell:${offenseTier.minLevel}`) % available.length]
         : null;
-      if (spell) {
+      // Only with the runes for it carried: they are the character's own.
+      const castable = spell && (spell.itemsRequired?.(player) ?? [])
+        .every((rune) => inventory.getAmount(rune.getId()) >= rune.getAmount());
+      if (castable) {
         core.Autocasting?.setAutocast(player, spell);
-        for (const rune of spell.itemsRequired?.(player) ?? []) {
-          const missing = MAGIC_RUNE_AMOUNT - inventory.getAmount(rune.getId());
-          if (missing > 0) inventory.adds(rune.getId(), missing);
-          (stateFor(player).runeIds ??= new Set()).add(rune.getId());
-        }
+        for (const rune of spell.itemsRequired?.(player) ?? []) (stateFor(player).runeIds ??= new Set()).add(rune.getId());
+      } else {
+        // No runes for it: fight with what it has instead.
+        state.combatStyle = "melee";
       }
     }
     if (style === "melee") {
@@ -254,10 +270,7 @@ function createTrainCombatAction(spec, world) {
         .find((type) => type?.getStyle?.() === fightStyle);
       if (fightType) WeaponInterfaceManager.changeCombatStyle(player, fightType.getChildId());
     }
-    // Match equipTool/ensureItem: simulated bots are provisioned, but earn XP
-    // exclusively through the normal combat engine. Refill only between fights.
-    const missing = foodAmount - inventory.getAmount(foodId);
-    if (missing > 0) inventory.adds(foodId, missing);
+    // Food is the character's own too: what it carries is what it can eat.
     state.virtualFoodChargesRemaining = inventory.getAmount(foodId);
   }
 
@@ -511,13 +524,7 @@ function createTrainCombatAction(spec, world) {
     },
     stop(ctx) {
       const bot = stateFor(ctx.player);
-      // Food and runes are provisioned for training only: take them back, so a bot
-      // switching to skilling has a free inventory (the next fight re-provisions).
-      const inventory = ctx.player.getInventory?.();
-      for (const itemId of [foodId, ...(bot.runeIds ?? [])]) {
-        const amount = inventory?.getAmount(itemId) ?? 0;
-        if (amount > 0) inventory.deleteNumber?.(itemId, amount);
-      }
+      // Food and runes are the character's own, so they stay in its inventory.
       bot.runeIds = null;
       dropTarget(ctx.player, bot, ctx.nowMs);
       clearMovementRequest(ctx.player);

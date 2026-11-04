@@ -50,6 +50,7 @@ class StatementDialogue {
 }
 Jewellery.register({
   getBonusManager: () => ({ update() {} }),
+  onCustomEvent() {},
   core: { ObjectIdentifiers, ItemIdentifiers, ItemDefinition, ObjectDefinition, Flag: require("../dist/game/model/Flag").Flag, DialogueChainBuilder, StatementDialogue },
   onItemAction: (nameOrHandler, actions) => {
     if (typeof nameOrHandler === "function") itemAction = nameOrHandler;

@@ -346,25 +346,27 @@ These follow the Wiki and Near-Reality until a capture says otherwise:
 
 `Bots.Wintertodt.js` keeps a crowd fighting the Wintertodt with the players. Every bot acts through the same calls a player's clicks make: the object route and option, item on item, the NPC option, the item's own option. Points, warmth, the Wintertodt's attacks and the interruptions they cause all reach bots as they reach players.
 
-**Who comes:**
-- While a real player is in the camp or the prison, the world keeps a set number of bots: 8, or what `::wtbots` sets (0 to 100).
-- They arrive outside the Doors of Dinh one a tick and go in through them.
-- With no real player about for 100 ticks, they log out. They are never saved.
+**Who comes,** as a Pest Control lander fills:
+- The moment a real player goes through the Doors of Dinh into the prison, the world's crowd spawns just inside the doors, all at once, and starts playing.
+- How many: world config `pluginConfig` `"Wintertodt:bots"` (a count, 0 to 100; 0 turns them off), 8 when unset. `::wtbots` changes it until the next restart.
+- With no real player in the camp or the prison for 100 ticks, they log out. They are never saved.
 - The world sends no zone events for bots, so each bot runs the doors' own zone handlers (`enteredPrison`, `leftPrison`, `syncHud`) as it crosses. The round then counts it as a player in the prison: the cold, the attacks, the end-of-round sweep of fuel and the reward reach it too.
 
 **Their kit:**
 - Firemaking 60-99, Woodcutting 60-99, Fletching 50-99 and Hitpoints 60-99.
 - Four warm pieces (pyromancer pieces, warm gloves, a santa or bobble hat, a woolly scarf).
-- A rune or dragon axe by their Woodcutting, a knife, a tinderbox, a hammer and five cakes.
+- A rune or dragon axe by their Woodcutting, a knife, a tinderbox and a hammer. No food: they brew their potions inside.
 
-**What each does,** working its home corner (bots are dealt round the four corners in turn), the first that applies:
+**What each does.** Every bot plays the way the player bots' Wintertodt task does (`docs/player-bots.md`; the task drives the same play through `wintertodt:play`). It works its home corner (bots are dealt round the four in turn), doing the first of these that applies:
 
 | | Does |
 | --- | --- |
-| Cold | Below 45% warmth or half its hitpoints, eats a bite of cake (35% warmth), else drinks a rejuvenation dose. Below 15% with nothing to eat, it logs out and a fresh bot replaces it. |
-| Healer (every fourth bot) | Heals any downed pyromancer with a potion, wherever she is. Keeps a potion: one concoction from the crate, one herb from the sprouting roots, mixed. |
+| Falling snow | Standing on a tile an area attack is about to hit, or within 2 of a brazier heavy snow is about to break, it steps to the nearest clear tile, and keeps off that brazier until it has broken. |
+| Cold | Below 45% warmth or half its hitpoints, drinks a rejuvenation dose. Below 15% with nothing to drink, it logs out and a fresh bot replaces it. |
+| Pyromancer down | The one bot nearest her with a dose heals her (75 points); the rest carry on. |
+| Potions | Once it runs low (under 2 doses, so straight away on entering), brews four: the concoctions from the crate at once, even between rounds; a herb each from the sprouting roots and the mix as soon as the round allows picking. |
 | Brazier | Fixes it when broken, lights it when out and its pyromancer is up. |
-| Fuel | Chops the corner's roots until its pack is full; half the bots then fletch them into kindling; then it feeds the brazier until the fuel is gone. |
+| Fuel | Chops the corner's roots until its pack is full, or until it couldn't burn one more before the round ends (the energy left over the lit braziers' drain, with about 4 ticks to cut, 4 to fletch and 3 to feed, and 15 ticks' slack). Half the crowd (and every character playing for itself, which carries a knife) then fletch them into kindling, unless there isn't time; then it feeds the brazier until the fuel is gone. |
 | Between rounds | Waits by its brazier. |
 
 A bot that dies logs out rather than dropping its kit in the prison.
@@ -382,4 +384,4 @@ A bot that dies logs out rather than dropping its kit in the prison.
 | `::wtinfo` | Your warm items, warmth, the damage each attack would do now, and the cold's chance. |
 | `::wtlight` | Lights every brazier and heals every pyromancer. |
 | `::wtattack <area\|small\|large\|pyro>` | Makes the Wintertodt attack you, or the corner nearest you. |
-| `::wtbots [count]` | How many bots the world keeps while players are about, 0-100 (0 turns them off); without a count, shows it. |
+| `::wtbots [count]` | How many bots fill the game, 0-100 (0 turns them off), until the next restart (`Wintertodt:bots` in the world config sets it for good); without a count, shows it. |

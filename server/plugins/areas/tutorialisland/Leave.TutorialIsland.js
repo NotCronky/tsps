@@ -145,6 +145,24 @@ function ironmanAvailable(player) {
   return query.mode !== undefined;
 }
 
+/** "tutorial:status" { player, active, canSkip }: whether the player is still on the tutorial. */
+function status(request) {
+  if (!request?.player) return;
+  request.active = T.isActive(request.player);
+  request.canSkip = pluginApi.getPluginConfig("TutorialIsland:allowSkip", true) !== false;
+}
+
+/**
+ * "tutorial:skip" { player, skipped }: skips the tutorial as the Gielinor Guide's offer does, for
+ * content acting for the player (bot mode). No Ironman question: the account stays as it is.
+ */
+function skipRequested(request) {
+  const player = request?.player;
+  if (!player || !T.isActive(player) || pluginApi.getPluginConfig("TutorialIsland:allowSkip", true) === false) return;
+  complete(player);
+  request.skipped = true;
+}
+
 /** "Yes, skip": the Ironman tutor is on the skipped part, so ask his question here (ours). */
 function skipTutorial(player) {
   if (!ironmanAvailable(player)) {
@@ -238,6 +256,8 @@ module.exports = function attach(api) {
   api.registerCommand("tutlast", ({ player }) => stepBy(player, -1), core.PlayerRights.ADMINISTRATOR, "Return to the previous tutorial step");
   api.onNpcInteraction("Gielinor Guide", { "Talk-to": talkToGielinorGuide });
   api.onPlayerLogin(onLogin);
+  api.onCustomEvent("tutorial:status", status);
+  api.onCustomEvent("tutorial:skip", skipRequested);
   api.onCanTeleport(onCanTeleport);
   api.onPlayerProcess(onProcess);
 };

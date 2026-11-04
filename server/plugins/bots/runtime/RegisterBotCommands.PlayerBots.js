@@ -188,53 +188,6 @@ function registerBotCommands(options) {
     }
   });
 
-  api.registerCommand("botme", ({ player, parts }) => {
-    const mode = (parts[1] ?? "toggle").toLowerCase();
-    if (mode === "status") {
-      const enabled = runtime.hasControllerForPlayer(player);
-      player.sendMessage(`botme: ${enabled ? "enabled" : "disabled"}`);
-      return true;
-    }
-
-    const shouldEnable =
-      mode === "on" ||
-      mode === "start" ||
-      (mode === "toggle" && !runtime.hasControllerForPlayer(player));
-
-    if (shouldEnable) {
-      const enabled = runtime.enableControllerForPlayer(player);
-      if (!enabled.ok) {
-        const reason =
-          enabled.reason === "already_enabled"
-            ? "already enabled"
-            : enabled.reason === "not_registered"
-            ? "player is not active"
-            : "unable to enable";
-        player.sendMessage(`botme: ${reason}.`);
-        return true;
-      }
-      player.sendMessage(
-        "botme enabled: your character is running PlayerBots behavior."
-      );
-      botApi.log("botme_enabled", { username: player.getUsername() });
-      return true;
-    }
-
-    if (mode === "off" || mode === "stop" || mode === "toggle") {
-      const disabled = runtime.disableControllerForPlayer(player);
-      if (!disabled) {
-        player.sendMessage("botme: already disabled.");
-        return true;
-      }
-      player.sendMessage("botme disabled: your character is no longer bot-driven.");
-      botApi.log("botme_disabled", { username: player.getUsername() });
-      return true;
-    }
-
-    player.sendMessage("Usage: ::botme [on|off|toggle|status]");
-    return true;
-  }, PlayerRights.ADMINISTRATOR, "Control yourself as a bot");
-
   api.registerCommand("bh", ({ player, parts }) => {
     const usernameArg = parts[1];
     const behaviorArg = parts[2]?.toLowerCase();

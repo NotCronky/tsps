@@ -155,6 +155,27 @@ function teleportTo(player, x, y) {
   });
 }
 
+/**
+ * "teleport:options" { player, options }: each minigame the player could go to now, while the
+ * cooldown is over, as an option content acting for the player can use (a bot travelling).
+ */
+function offerTeleports(request) {
+  const { player } = request ?? {};
+  if (!player || minutesLeft(Number(player.getAttribute(LAST_MINIGAME_TELEPORT_ATTRIBUTE))) > 0) return;
+  for (const [name, minigame] of Object.entries(minigames)) {
+    if (!Number.isInteger(minigame.x) || !Number.isInteger(minigame.y) || refusal(player, minigame)) continue;
+    request.options.push({
+      id: `minigame:${name}`, kind: "minigame", name: `${name} (minigame teleport)`,
+      to: { x: minigame.x, y: minigame.y, z: 0 }, waitMs: 25000, cost: 15,
+      use: () => {
+        if (!canStartTeleport(player)) return false;
+        teleportTo(player, minigame.x, minigame.y);
+        return true;
+      },
+    });
+  }
+}
+
 function chooseMinigame(event) {
   const grouping = event.groupId === GROUPING_INTERFACE && event.childId === GROUPING_TELEPORT_CHILD;
   if (event.groupId !== MINIGAMES_INTERFACE && !grouping) return;
@@ -212,6 +233,7 @@ module.exports = {
     api.persistAttribute(LAST_MINIGAME_TELEPORT_ATTRIBUTE);
     api.onInterfaceActionClick(castMinigameTeleport);
     api.onInterfaceActionClick(chooseMinigame);
+    api.onCustomEvent("teleport:options", offerTeleports);
     api.onCustomEvent("interface:opened", enableGroupingTeleport);
     api.onCustomEvent("interface:closed", minigamesClosed);
     api.onPlayerLogin(sendLastMinigameTeleport);

@@ -85,25 +85,53 @@ function castHomeTeleport(event) {
     return;
   }
   if (op !== 1) return;
+  castHome(player, home);
+}
+
+/** Casts a home teleport as the spellbook does: cooldown, members, combat and teleport checks. */
+function castHome(player, home, quiet = false) {
+  const say = (text) => {
+    if (!quiet) player.sendMessage(text);
+  };
   const left = minutesLeft(Number(player.getAttribute(LAST_HOME_TELEPORT_ATTRIBUTE)), COOLDOWN_MINUTES);
   if (left > 0) {
-    player.sendMessage(`You need to wait another ${left} minutes to cast this spell.`);
-    return;
+    say(`You need to wait another ${left} minutes to cast this spell.`);
+    return false;
   }
   if (home.members !== false && !core.WorldDefinition.isMembersWorld()) {
-    player.sendMessage("You need to be on a members' world to use this spell.");
-    return;
+    say("You need to be on a members' world to use this spell.");
+    return false;
   }
   const destination = destinationFor(home);
-  if (!core.TeleportHandler.checkReqs(player, destination)) return;
+  if (!core.TeleportHandler.checkReqs(player, destination)) return false;
   if (core.CombatFactory.inCombat(player)) {
-    player.sendMessage("You can't use this spell during combat.");
-    return;
+    say("You can't use this spell during combat.");
+    return false;
   }
   startHomeTeleport(core, player, destination, () => {
     const minute = dateMinutes();
     player.setAttribute(LAST_HOME_TELEPORT_ATTRIBUTE, minute);
     player.getPacketSender().sendConfig(LAST_HOME_TELEPORT_VARP, minute);
+  });
+  return true;
+}
+
+/**
+ * "teleport:options" { player, options }: the home teleport of the player's spellbook, while its
+ * cooldown is over, as an option content acting for the player can use (a bot travelling).
+ */
+function offerTeleports(request) {
+  const { player } = request ?? {};
+  if (!player || minutesLeft(Number(player.getAttribute(LAST_HOME_TELEPORT_ATTRIBUTE)), COOLDOWN_MINUTES) > 0) return;
+  const { MagicSpellbook } = core;
+  const book = player.getSpellbook?.();
+  const name = book === MagicSpellbook.ANCIENT ? "edgeville home teleport" : book === MagicSpellbook.LUNAR ? "lunar home teleport"
+    : book === MagicSpellbook.ARCEUUS ? "arceuus home teleport" : "lumbridge home teleport";
+  const home = HOMES.get(name);
+  if (!home || (home.members !== false && !core.WorldDefinition.isMembersWorld())) return;
+  request.options.push({
+    id: `home:${name}`, kind: "home", name, to: { x: home.x, y: home.y, z: 0 }, waitMs: 25000, cost: 15,
+    use: () => castHome(player, home, true),
   });
 }
 
@@ -171,6 +199,7 @@ module.exports = {
     api.persistAttribute(UNLOCKED_ATTRIBUTE, 0);
     api.persistAttribute(TOGGLES_ATTRIBUTE, 1);
     api.onInterfaceActionClick(castHomeTeleport);
+    api.onCustomEvent("teleport:options", offerTeleports);
     api.onInterfaceActionClick(toggleAnimation);
     api.onItemAction("Twisted teleport scroll", { Read: readScroll });
     api.onItemAction("Trailblazer teleport scroll", { Read: readScroll });

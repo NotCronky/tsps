@@ -104,6 +104,33 @@
         }
       ]
     },
+    "mine_and_bank": {
+      "_comment": "Ores that need coal to smelt (coal itself, mithril, adamantite, runite): banked for the Smelting task, or sold.",
+      "mode": "mining",
+      "repeat": true,
+      "requires": [{"skill":{"id":"mining","min":"$level"}}],
+      "setup": [],
+      "actions": [
+        {"type":"equipTool","tool":"pickaxe"},
+        {"type":"interactObject","catalog":"rock","tier":"$tier","option":"Mine","until":{"inventoryFull":true},"stallSeconds":120},
+        {
+          "type": "choose",
+          "options": [
+            {
+              "weight": 3,
+              "actions": [
+                {
+                  "type": "bank",
+                  "itemIds": "$resources",
+                  "orElse": {"type":"sellItems","itemIds":"$resources","orElse":{"type":"dropItems","itemIds":"$resources"}}
+                }
+              ]
+            },
+            {"weight":1,"actions":[{"type":"sellItems","itemIds":"$resources","orElse":{"type":"dropItems","itemIds":"$resources"}}]}
+          ]
+        }
+      ]
+    },
     "catch_fish": {
       "mode": "fishing",
       "repeat": true,
@@ -176,66 +203,24 @@
     },
     {"id":"oak_trees","template":"chop_trees","capacity":160,"fields":{"level":15,"tier":"oak","log":"oak_logs"}},
     {"id":"willow_trees","template":"chop_trees","capacity":160,"fields":{"level":30,"tier":"willow","log":"willow_logs"}},
+    {"id":"maple_trees","template":"chop_trees","capacity":160,"fields":{"level":45,"tier":"maple","log":"maple_logs"}},
     {"id":"yew_trees","template":"chop_trees","capacity":160,"fields":{"level":60,"tier":"yew","log":"yew_logs"}},
+    {"id":"magic_trees","template":"chop_trees","capacity":160,"fields":{"level":75,"tier":"magic","log":"magic_logs"}},
     {"id":"iron_rocks","template":"mine_rocks","capacity":160,"fields":{"level":15,"tier":"iron","resources":["iron_ore"],"bar":"Iron bar","smelted":["iron_bar","iron_ore"]}},
-    {"id":"coal_rocks","template":"mine_rocks","capacity":160,"fields":{"level":30,"tier":"coal","resources":["coal"],"bar":"Steel bar","smelted":["steel_bar","coal"]}},
-    {"id":"mithril_rocks","template":"mine_rocks","capacity":160,"fields":{"level":50,"tier":"mithril","resources":["mithril_ore"],"bar":"Mithril bar","smelted":["mithril_bar","mithril_ore"]}},
-    {
-      "id": "net_fishing",
-      "template": "catch_fish",
-      "capacity": 160,
-      "fields": {
-        "level": 1,
-        "tool": "small_fishing_net",
-        "spotTool": "NET",
-        "bait": null,
-        "resources": ["raw_shrimps","raw_anchovies"],
-        "dishes": ["shrimps","anchovies"],
-        "cooked": ["shrimps","anchovies","burnt_shrimp","burnt_fish","raw_shrimps","raw_anchovies"]
-      }
-    },
-    {
-      "id": "fly_fishing",
-      "template": "catch_fish",
-      "capacity": 160,
-      "fields": {
-        "level": 20,
-        "tool": "fly_fishing_rod",
-        "spotTool": "FLY_FISHING_ROD",
-        "bait": "feather",
-        "resources": ["raw_trout","raw_salmon"],
-        "dishes": ["trout","salmon"],
-        "cooked": ["trout","salmon","burnt_fish_3","raw_trout","raw_salmon"]
-      }
-    },
-    {
-      "id": "lobster_fishing",
-      "template": "catch_fish",
-      "capacity": 160,
-      "fields": {
-        "level": 40,
-        "tool": "lobster_pot",
-        "spotTool": "LOBSTER_POT",
-        "bait": null,
-        "resources": ["raw_lobster"],
-        "dishes": ["lobster"],
-        "cooked": ["lobster","burnt_lobster","raw_lobster"]
-      }
-    },
-    {
-      "id": "harpoon_fishing",
-      "template": "catch_fish",
-      "capacity": 160,
-      "fields": {
-        "level": 60,
-        "tool": "harpoon",
-        "spotTool": "HARPOON",
-        "bait": null,
-        "resources": ["raw_tuna","raw_swordfish"],
-        "dishes": ["tuna","swordfish"],
-        "cooked": ["tuna","swordfish","burnt_fish_7","burnt_swordfish","raw_tuna","raw_swordfish"]
-      }
-    },
+    {"id":"silver_rocks","template":"mine_rocks","capacity":160,"fields":{"level":20,"tier":"silver","resources":["silver_ore"],"bar":"Silver bar","smelted":["silver_bar","silver_ore"]}},
+    {"id":"coal_rocks","template":"mine_and_bank","capacity":160,"fields":{"level":30,"tier":"coal","resources":["coal"]}},
+    {"id":"gold_rocks","template":"mine_rocks","capacity":160,"fields":{"level":40,"tier":"gold","resources":["gold_ore"],"bar":"Gold bar","smelted":["gold_bar","gold_ore"]}},
+    {"id":"mithril_rocks","template":"mine_and_bank","capacity":160,"fields":{"level":55,"tier":"mithril","resources":["mithril_ore"]}},
+    {"id":"adamantite_rocks","template":"mine_and_bank","capacity":160,"fields":{"level":70,"tier":"adamantite","resources":["adamantite_ore"]}},
+    {"id":"runite_rocks","template":"mine_and_bank","capacity":160,"fields":{"level":85,"tier":"runite","resources":["runite_ore"]}},
+    {"id":"fish_shrimps","template":"catch_fish","capacity":160,"fields":{"level":1,"tool":"small_fishing_net","spotTool":"NET","bait":null,"resources":["raw_shrimps","raw_anchovies"],"dishes":["shrimps","anchovies"],"cooked":["shrimps","anchovies","burnt_shrimp","burnt_fish","raw_shrimps","raw_anchovies"]}},
+    {"id":"fish_sardines","template":"catch_fish","capacity":160,"fields":{"level":5,"tool":"fishing_rod","spotTool":"FISHING_ROD","bait":"fishing_bait","resources":["raw_sardine","raw_herring"],"dishes":["sardine","herring"],"cooked":["sardine","herring","burnt_fish","raw_sardine","raw_herring"]}},
+    {"id":"fish_mackerel","template":"catch_fish","capacity":160,"fields":{"level":16,"tool":"big_fishing_net","spotTool":"BIG_NET","bait":null,"resources":["raw_mackerel","raw_cod","raw_bass"],"dishes":["mackerel","cod","bass"],"cooked":["mackerel","cod","bass","burnt_fish","raw_mackerel","raw_cod","raw_bass"]}},
+    {"id":"fish_trout","template":"catch_fish","capacity":160,"fields":{"level":20,"tool":"fly_fishing_rod","spotTool":"FLY_FISHING_ROD","bait":"feather","resources":["raw_trout","raw_salmon"],"dishes":["trout","salmon"],"cooked":["trout","salmon","burnt_fish_3","raw_trout","raw_salmon"]}},
+    {"id":"fish_pike","template":"catch_fish","capacity":160,"fields":{"level":25,"tool":"fishing_rod","spotTool":"PIKE_ROD","bait":"fishing_bait","resources":["raw_pike"],"dishes":["pike"],"cooked":["pike","burnt_fish_3","raw_pike"]}},
+    {"id":"fish_tuna","template":"catch_fish","capacity":160,"fields":{"level":35,"tool":"harpoon","spotTool":"HARPOON","bait":null,"resources":["raw_tuna","raw_swordfish"],"dishes":["tuna","swordfish"],"cooked":["tuna","swordfish","burnt_fish_7","burnt_swordfish","raw_tuna","raw_swordfish"]}},
+    {"id":"fish_lobsters","template":"catch_fish","capacity":160,"fields":{"level":40,"tool":"lobster_pot","spotTool":"LOBSTER_POT","bait":null,"resources":["raw_lobster"],"dishes":["lobster"],"cooked":["lobster","burnt_lobster","raw_lobster"]}},
+    {"id":"fish_sharks","template":"catch_fish","capacity":160,"fields":{"level":76,"tool":"harpoon","spotTool":"SHARK_HARPOON","bait":null,"resources":["raw_shark"],"dishes":["shark"],"cooked":["shark","burnt_shark","raw_shark"]}},
     {
       "id": "combat_training",
       "mode": "combat_training",

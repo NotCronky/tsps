@@ -255,6 +255,83 @@ function castSpell(event) {
   }
 }
 
+/** Whether the player carries every rune a spell takes (no staff or pouch counted: a bot carries runes). */
+function carriesRunes(player, runes) {
+  const inventory = player.getInventory();
+  return (runes ?? []).every((rune) => inventory.getAmount(rune.getId()) >= rune.getAmount());
+}
+
+/**
+ * "teleport:options" { player, options }: the spellbook teleports the player can cast now (their
+ * spellbook, Magic level and carried runes) and the teleport tablets they carry, as options
+ * content acting for the player can use (a bot travelling). Each goes through the same code as
+ * a click: the spell's own checks, runes and XP; the tablet used up as it's absorbed.
+ *
+ * With `bank` (the player's banked items, when they could stop at a bank first) it also offers
+ * what the bank makes possible: a spell whose missing runes are banked, a banked tablet. Those
+ * carry `withdraw` ([{ item, amount }]) and no `use`: they're used once withdrawn.
+ */
+function offerTeleports(request) {
+  const { player } = request ?? {};
+  if (!player) return;
+  const book = player.getSpellbook?.();
+  const magic = player.getSkillManager().getCurrentLevel(core.Skill.MAGIC);
+  const books = [
+    // Standard and Ancient: the spell's own book is in its data.
+    ...core.SpellTeleports.getTeleportDestinations().map((spell) => ({ spell, book: spell.spellbook,
+      cast: () => core.SpellTeleports.handleSelf(player, spell.name, landing(standardCentre(spell.name)) ?? undefined) })),
+    ...core.LunarSpells.getTeleportDestinations().map((spell) => ({ spell, book: core.MagicSpellbook.LUNAR,
+      cast: () => core.LunarSpells.handleSelf(player, spell.name) })),
+    ...core.ArceuusSpells.getTeleportDestinations().map((spell) => ({ spell, book: core.MagicSpellbook.ARCEUUS,
+      cast: () => core.ArceuusSpells.handleSpell(player, spell.name) })),
+  ];
+  const banked = new Map();
+  for (const item of request.bank ?? []) {
+    if (item?.getId?.() > 0) banked.set(item.getId(), (banked.get(item.getId()) ?? 0) + item.getAmount());
+  }
+  const inventory = player.getInventory();
+  for (const { spell, book: needed, cast } of books) {
+    const centre = standardCentre(spell.name) ?? spell.destination;
+    if (!centre || needed !== book || magic < spell.level) continue;
+    const to = { x: centre.getX(), y: centre.getY(), z: centre.getZ() };
+    if (carriesRunes(player, spell.runes)) {
+      request.options.push({ id: `spell:${spell.name}`, kind: "spell", name: spell.name, to, waitMs: 8000, cost: 5, use: () => cast() === true });
+      continue;
+    }
+    const withdraw = (spell.runes ?? [])
+      .map((rune) => ({ item: rune.getId(), amount: rune.getAmount() - inventory.getAmount(rune.getId()) }))
+      .filter((entry) => entry.amount > 0);
+    if (request.bank && withdraw.every((entry) => (banked.get(entry.item) ?? 0) >= entry.amount)) {
+      request.options.push({ id: `spell:${spell.name}`, kind: "spell", name: spell.name, to, cost: 5, withdraw });
+    }
+  }
+  const seen = new Set();
+  const carried = new Set(player.getInventory().getItems().map((item) => item?.getId?.() ?? -1));
+  for (const item of [...player.getInventory().getItems(), ...(request.bank ?? [])]) {
+    const itemId = item?.getId?.() ?? -1;
+    if (itemId <= 0 || seen.has(itemId)) continue;
+    seen.add(itemId);
+    const name = core.ItemDefinition.forId(itemId)?.getName?.()?.toLowerCase() ?? "";
+    if (name === HOUSE_TABLET || TABLETS.scrolls[name]) continue;
+    const target = tabletDestination({ player }, name, "break");
+    if (!target?.destination) continue;
+    if (!carried.has(itemId)) {
+      request.options.push({ id: `tablet:${name}`, kind: "tablet", name: `${name} (tablet)`, cost: 10, withdraw: [{ item: itemId, amount: 1 }],
+        to: { x: target.destination.getX(), y: target.destination.getY(), z: target.destination.getZ() } });
+      continue;
+    }
+    request.options.push({
+      id: `tablet:${name}`, kind: "tablet", name: `${name} (tablet)`,
+      to: { x: target.destination.getX(), y: target.destination.getY(), z: target.destination.getZ() }, waitMs: 8000, cost: 10,
+      use: () => {
+        if (!player.getInventory().contains(itemId) || !core.TeleportHandler.checkReqs(player, target.destination)) return false;
+        useTablet({ player, itemId, option: "break" });
+        return true;
+      },
+    });
+  }
+}
+
 module.exports = {
   name: "SpellTeleports",
   register(api) {
@@ -265,5 +342,6 @@ module.exports = {
     api.onPlayerLogin(syncAlternates);
     api.onSpellCast(castAlternate);
     api.onInterfaceActionClick(castSpell);
+    api.onCustomEvent("teleport:options", offerTeleports);
   },
 };

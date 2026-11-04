@@ -1,0 +1,172 @@
+{
+  "_comment": "How far along a new bot account starts (population/Stages.PlayerBots.js): skill levels rolled per skill in `skills`, combat stats rolled to land in `combat` (a combat level band), coins in the bank, a cosmetic outfit tier and food. Its gear and tools are the best its levels allow; after its first login, everything is earned. Weights pick the stage; profiles pick what it likes doing (agent/Brain.PlayerBots.js). `bank` and `carried` are extra items by name ([name, amount]); `amulet` replaces the outfit's amulet (a glory, for teleporting).",
+  "weights": {
+    "early": 45,
+    "mid": 35,
+    "late": 20
+  },
+  "stages": {
+    "early": {
+      "skills": [
+        1,
+        35
+      ],
+      "combat": [
+        3,
+        45
+      ],
+      "coins": [
+        500,
+        20000
+      ],
+      "outfit": "novice",
+      "food": [
+        "SHRIMPS",
+        15
+      ],
+      "bank": []
+    },
+    "mid": {
+      "skills": [
+        30,
+        70
+      ],
+      "combat": [
+        40,
+        90
+      ],
+      "coins": [
+        25000,
+        400000
+      ],
+      "outfit": "mid",
+      "food": [
+        "LOBSTER",
+        15
+      ],
+      "bank": [
+        [
+          "GAMES_NECKLACE_8_",
+          1
+        ],
+        [
+          "KNIFE",
+          1
+        ],
+        [
+          "HAMMER",
+          1
+        ],
+        [
+          "CAKE",
+          10
+        ]
+      ],
+      "carried": [
+        [
+          "VARROCK_TELEPORT",
+          5
+        ],
+        [
+          "LUMBRIDGE_TELEPORT",
+          5
+        ],
+        [
+          "FALADOR_TELEPORT",
+          5
+        ],
+        [
+          "CAMELOT_TELEPORT",
+          5
+        ]
+      ]
+    },
+    "late": {
+      "skills": [
+        65,
+        99
+      ],
+      "combat": [
+        85,
+        126
+      ],
+      "coins": [
+        400000,
+        5000000
+      ],
+      "outfit": "elite",
+      "food": [
+        "SWORDFISH",
+        15
+      ],
+      "bank": [
+        [
+          "GAMES_NECKLACE_8_",
+          2
+        ],
+        [
+          "KNIFE",
+          1
+        ],
+        [
+          "HAMMER",
+          1
+        ],
+        [
+          "CAKE",
+          20
+        ],
+        [
+          "LAW_RUNE",
+          200
+        ],
+        [
+          "AIR_RUNE",
+          1000
+        ],
+        [
+          "FIRE_RUNE",
+          200
+        ],
+        [
+          "WATER_RUNE",
+          200
+        ],
+        [
+          "EARTH_RUNE",
+          200
+        ]
+      ],
+      "carried": [
+        [
+          "VARROCK_TELEPORT",
+          10
+        ],
+        [
+          "FALADOR_TELEPORT",
+          10
+        ],
+        [
+          "CAMELOT_TELEPORT",
+          10
+        ]
+      ],
+      "amulet": "AMULET_OF_GLORY_4_"
+    }
+  },
+  "focusBonus": 12,
+  "profiles": {
+    "balanced": 50,
+    "skiller": 30,
+    "fighter": 20
+  },
+  "focuses": [
+    "woodcutting",
+    "mining",
+    "fishing",
+    "cooking",
+    "firemaking",
+    "smithing",
+    "combat"
+  ]
+}

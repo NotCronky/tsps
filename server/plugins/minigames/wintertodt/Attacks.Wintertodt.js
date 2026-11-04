@@ -105,12 +105,15 @@ function largeBrazierAttack(index, ctx) {
   const c = Corners.corner(index);
   const centre = brazierCentre(index);
   c.brazierTargeted = true;
+  // Heavy snow: everyone within 2 of the centre is hurt as it breaks (bots step back).
+  c.brazierBreaking = true;
   Effects.snowfall(centre, 3);
   for (const [dx, dy] of [[0, 1], [1, 0], [0, -1], [-1, 0]]) Effects.snowfall({ x: centre.x + dx, y: centre.y + dy }, 3);
   Effects.projectile(Shared.STORM_SOURCE, c.corner.brazier, Shared.PROJECTILE.STORM_BOLT, { end: 120, startHeight: 150 });
   Effects.graphic(Shared.GFX.SNOW_IMPACT, c.corner.brazier, { delay: 120, height: 70 });
   Shared.later(`wintertodt-brazier-${index}`, 4, () => {
     c.brazierTargeted = false;
+    c.brazierBreaking = false;
     if (!ctx.isActive() || c.brazier !== Shared.BRAZIER.LIT) return;
     Corners.setBrazier(index, Shared.BRAZIER.BROKEN);
     Effects.areaSound(Shared.SOUND.BRAZIER_BREAK, c.corner.brazier, BRAZIER_SOUND_RADIUS);
@@ -236,7 +239,20 @@ function reset() {
   areaTiles.clear();
 }
 
+/**
+ * Whether a tile is about to be hit: under an area attack that hasn't landed, or within reach of
+ * a brazier heavy snow is about to break. What a player sees coming (the falling snow).
+ */
+function isDangerous(x, y) {
+  if (areaTiles.has(key(x, y))) return true;
+  return Corners.state.some((c, index) => {
+    if (!c.brazierBreaking) return false;
+    const centre = brazierCentre(index);
+    return Math.max(Math.abs(centre.x - x), Math.abs(centre.y - y)) <= 2;
+  });
+}
+
 module.exports = {
-  tick, reset, useRandom, standardChance, canTarget, areaAttack, smallBrazierAttack, largeBrazierAttack, pyromancerAttack,
+  tick, reset, useRandom, isDangerous, brazierCentre, standardChance, canTarget, areaAttack, smallBrazierAttack, largeBrazierAttack, pyromancerAttack,
   standardAttack, COLD_MESSAGE, AREA_MESSAGE, SHRAPNEL_MESSAGE, GONE_OUT_MESSAGE,
 };

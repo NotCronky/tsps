@@ -1,6 +1,6 @@
 "use strict";
 
-const NAME_PARTS = require("../data/ai-bot-names.json");
+const NAME_PARTS = require("../data/bot-names.json");
 
 const MAX_NAME_LENGTH = 12;
 const VALID_NAME = /^[A-Za-z0-9]+( [A-Za-z0-9]+)?$/;
@@ -55,18 +55,11 @@ function realisticName(random = Math.random) {
 }
 
 /**
- * A free name for a new AI bot. `taken(name)` says whether a name is in use (an online
- * player, a save of any account, another AI bot); taken names are never reused, so an AI
- * bot can never load a real player's account.
+ * A free name for a new bot account. `taken(name)` says whether a name is in use (an online
+ * player, a save of any account, another bot); taken names are never reused, so a bot can
+ * never load a real player's account.
  */
-function chooseName(style, index, taken, random = Math.random) {
-  if (style === "numbered") {
-    for (let number = index + 1; number < index + 10000; number++) {
-      const name = `AiBot${number}`;
-      if (!taken(name)) return name;
-    }
-    return null;
-  }
+function chooseName(taken, random = Math.random) {
   for (let attempt = 0; attempt < 200; attempt++) {
     const name = realisticName(random);
     if (!taken(name)) return name;

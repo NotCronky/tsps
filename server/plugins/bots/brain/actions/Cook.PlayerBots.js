@@ -49,7 +49,7 @@ function createCookAction(spec, world) {
   const chopLog = createInteractObjectAction({
     catalog: "tree", tier: "normal", option: "Chop down", until: { hasAnyItem: logIds }, stallSeconds: 120,
   }, world);
-  const equipAxe = createEquipToolAction({ tool: "axe" });
+  const equipAxe = createEquipToolAction({ tool: "axe" }, world);
   const stateFor = (player) => playerState(action, player, () => ({
     lastUseAt: 0, failedUses: 0, lastTargetKey: null, avoid: new Map(), chopping: false, moved: false, position: null,
   }));
@@ -126,7 +126,8 @@ function createCookAction(spec, world) {
         chopLog.stop?.(ctx);
         bot.chopping = false;
       }
-      if (inventory.getAmount(TINDERBOX) <= 0) inventory.adds(TINDERBOX, 1);
+      // The tinderbox is the character's own (the activity gets one first); without it, no fire.
+      if (inventory.getAmount(TINDERBOX) <= 0) return "failed";
       // The fire takes the tile the bot stands on and steps it aside; the next update finds it.
       return Firemaking.startBotInventoryFiremaking?.(player, log) === false ? "failed" : "running";
     }

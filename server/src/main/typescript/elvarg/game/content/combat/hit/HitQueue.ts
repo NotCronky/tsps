@@ -126,13 +126,16 @@ export class HitQueue {
         while (index > 0 && this.pendingHits[index - 1].revealCycle > scheduled.revealCycle) index--;
         this.pendingHits.splice(index, 0, scheduled);
         HitQueue.active.add(this);
-        // An NPC's blow on a player whose protection prayer is checked as it lands: announced so
-        // content can react before then (auto-prayer). Hits that judged prayer when they were
-        // rolled bypass it here, and their content announces them itself.
+        // Another combatant's blow on a player (an NPC's, or another player's) whose protection
+        // prayer is checked as it lands: announced so content can react before then (auto-prayer).
+        // Hits that judged prayer when they were rolled bypass it here, and their content
+        // announces them itself.
         const attacker = hit.getAttacker();
-        if (attacker?.isNpc?.() && this.character.isPlayer?.() && hit.bypassesProtectionPrayer?.() !== true) {
+        const type = hit.getProtectionType?.();
+        if (type != null && attacker && attacker !== this.character && this.character.isPlayer?.()
+            && hit.bypassesProtectionPrayer?.() !== true) {
             PluginManager.emitCustomEvent("combat:incoming-attack",
-                { attacker, target: this.character, type: hit.getProtectionType(), cycle: scheduled.revealCycle });
+                { attacker, target: this.character, type, cycle: scheduled.revealCycle });
         }
     }
 

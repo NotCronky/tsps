@@ -5,7 +5,7 @@ const {
   ATTR_RECRUIT_OWNER_USERNAME,
 } = require("./RecruitConstants.PlayerBots");
 const { startRecruit } = require("../brain/BrainActivities.PlayerBots");
-const { AI_BOT_ATTRIBUTE } = require("../ai/Config.PlayerBots");
+const { POPULATION_ATTRIBUTE } = require("../population/Population.PlayerBots");
 
 function registerBotStatusInteractions(options = {}) {
   const {
@@ -84,11 +84,11 @@ function registerBotStatusInteractions(options = {}) {
 
   api.onPlayerOption((event) => {
     const { player, target } = event;
-    // AI bots run their own lives; they aren't recruited.
+    // Population bots run their own lives; they aren't recruited.
     if (
       event.option !== recruitInteractionSlot ||
       target?.isPlayerBot?.() !== true ||
-      target.getAttribute?.(AI_BOT_ATTRIBUTE) === true ||
+      target.getAttribute?.(POPULATION_ATTRIBUTE) === true ||
       !shouldShowRecruitOption(player)
     ) {
       return;

@@ -170,9 +170,11 @@ test('cooking: food goes on a fire nearby; with no range or fire about, the bot 
       getMovementQueue: () => ({ size: () => 0, walkToObject: (object, { execute }) => execute() }),
     };
     items.set(LOGS, 1);
+    assert.equal(a.update({ player, nowMs: 1000 }), 'failed', 'no tinderbox of its own: no fire (none is conjured)');
+    assert.equal(lit, null);
+    items.set(590, 1);
     assert.equal(a.update({ player, nowMs: 1000 }), 'running');
-    assert.equal(lit, LOGS, 'no range or fire nearby: lights one fire with its log');
-    assert.ok(items.get(590) > 0, 'with a tinderbox it was given (a tool)');
+    assert.equal(lit, LOGS, 'no range or fire nearby: lights one fire with its log and its own tinderbox');
     objects.push(fire);
     a.update({ player, nowMs: 5000 });
     assert.deepEqual(used, [[RAW_SHRIMPS, 26185]], 'then uses the raw food on the fire');
@@ -1262,6 +1264,14 @@ function trainingScene(level = 1) {
   let target = null, owner = null, hp = 10, npcHp = 3, registered = true;
   let location = new Location(3230, 3298, 0), permission = true;
   const levels = Array(24).fill(level), items = [], inventory = new Map();
+  // The trainee owns every tier's gear, arrows and food: bots only use what they own.
+  for (const tier of [...combatGear.gearTiers, ...combatGear.rangedTiers, ...combatGear.magicTiers]) {
+    for (const name of [...(tier.weapons ?? []), ...Object.values(tier.armour ?? {}).flat()]) {
+      if (name && ItemIdentifiers[name] != null) inventory.set(ItemIdentifiers[name], 1);
+    }
+    for (const name of tier.ammo ?? []) if (ItemIdentifiers[name] != null) inventory.set(ItemIdentifiers[name], 1000);
+  }
+  inventory.set(ItemIdentifiers[trainingSpec.food], trainingSpec.foodAmount);
   const attacks = [], changes = [], logs = [], xp = [];
   const styles = [FightStyle.ACCURATE, FightStyle.AGGRESSIVE, FightStyle.DEFENSIVE]
     .map((style, index) => ({ getStyle: () => style, getChildId: () => index }));
@@ -1759,7 +1769,7 @@ test('a planned walk never skips the far side of a gate it has not crossed', () 
 
 test('bots are given tools, never resources: inputs come from gathering or the bank', () => {
   const raw = JSON.parse(fs.readFileSync('data/definitions/bot-activities.json', 'utf8'));
-  const TOOLS = new Set(['tinderbox', 'small_fishing_net', 'fly_fishing_rod', 'lobster_pot', 'harpoon']);
+  const TOOLS = new Set(['tinderbox', 'small_fishing_net', 'fishing_rod', 'big_fishing_net', 'fly_fishing_rod', 'lobster_pot', 'harpoon']);
   // A template's "$tool" is whatever each activity fills it with.
   for (const activity of raw.activities) {
     if (activity.fields?.tool !== undefined) {
@@ -1826,50 +1836,10 @@ test('a rotation switches activity after its time, never mid-fight or under an o
   assert.ok(logs.includes('bot_brain_activity_switch'));
 });
 
-test('sites split each mode\'s count over the tiers and the registry only assigns their activities', () => {
+test('the registry weights its picks, keeps PvP hotspot loadouts and honours allow/avoid', () => {
   const { PluginManager } = require('../dist/plugins/PluginManager');
   const { createBotActivityRegistry } = require('../plugins/bots/brain/ActivityRegistry.PlayerBots');
   const registry = createBotActivityRegistry({ world: { core: PluginManager.getCoreApi() } });
-  const bySite = new Map(registry.sites.map((site) => [site.id, site]));
-  const towns = ['lumbridge'];
-  const configured = JSON.parse(fs.readFileSync('data/definitions/bot-sites.json', 'utf8')).sites;
-  const total = (counts) => typeof counts === 'number' ? counts : Object.values(counts).reduce((sum, count) => sum + count, 0);
-  for (const town of towns) {
-    const bots = configured.find((site) => site.id === town).bots;
-    assert.equal(registry.sites.filter((site) => site.id.startsWith(`${town}_`)).reduce((sum, site) => sum + site.count, 0),
-      Object.values(bots).reduce((sum, counts) => sum + total(counts), 0), `${town} spawns exactly its configured bots`);
-  }
-  const raw = JSON.parse(fs.readFileSync('data/definitions/bot-activities.json', 'utf8'));
-  for (const site of registry.sites) {
-    assert.equal(site.activities.length, 1, site.id);
-    const level = raw.activities.find((activity) => activity.id === site.activities[0].id)?.fields?.level ?? 1;
-    assert.ok(level <= site.levels.all[0], `${site.id} can do ${site.activities[0].id} (needs ${level})`);
-  }
-  assert.deepEqual(bySite.get('lumbridge_woodcutting_experts').levels, { all: [60, 99], combat: [90, 126] });
-  assert.equal(bySite.get('lumbridge_woodcutting_experts').activities[0].id, 'yew_trees', 'each tier takes the best activity it can do');
-  assert.equal(bySite.get('lumbridge_woodcutting_novices').activities[0].id, 'normal_trees');
-  assert.equal(bySite.get('lumbridge_mining_experts').activities[0].id, 'mithril_rocks');
-  const expertsRotation = bySite.get('lumbridge_woodcutting_experts').rotation;
-  assert.equal(bySite.get('lumbridge_mining_experts').rotation, expertsRotation, 'a site tier shares one rotation');
-  assert.deepEqual(expertsRotation.switchAfterMs, { min: 15 * 60000, max: 25 * 60000 });
-  assert.equal(expertsRotation.weights.yew_trees, bySite.get('lumbridge_woodcutting_experts').count, 'switches are weighted by the mode counts');
-  const os = require('node:os');
-  const path = require('node:path');
-  const sitesPath = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'bot-sites-')), 'bot-sites.json');
-  fs.writeFileSync(sitesPath, JSON.stringify({ sites: [{ id: 'camp', x: 3222, y: 3218, bots: { woodcutting: 30, mining: { experts: 7 } } }] }));
-  const split = new Map(createBotActivityRegistry({ world: { core: PluginManager.getCoreApi() }, sitesPath }).sites
-    .map((site) => [site.id, site.count]));
-  assert.deepEqual(['novices', 'intermediates', 'advanced', 'experts'].map((tier) => split.get(`camp_woodcutting_${tier}`)),
-    [8, 8, 7, 7], '30 woodcutters split evenly, lowest tiers take the remainder');
-  assert.deepEqual(['novices', 'intermediates', 'advanced', 'experts'].map((tier) => split.get(`camp_mining_${tier}`)),
-    [undefined, undefined, undefined, 7], 'per-tier counts: only the listed tiers spawn');
-  fs.writeFileSync(sitesPath, JSON.stringify({ sites: [{ id: 'camp', x: 3222, y: 3218, bots: { basket_weaving: 4 } }] }));
-  assert.throws(() => createBotActivityRegistry({ world: { core: PluginManager.getCoreApi() }, sitesPath }), /unknown mode 'basket_weaving'/);
-  fs.writeFileSync(sitesPath, JSON.stringify({ sites: [{ id: 'camp', x: 3222, y: 3218, bots: { woodcutting: { gods: 4 } } }] }));
-  assert.throws(() => createBotActivityRegistry({ world: { core: PluginManager.getCoreApi() }, sitesPath }), /unknown tier 'gods'/);
-  fs.writeFileSync(sitesPath, JSON.stringify({ sites: [{ id: 'camp', x: 3222, y: 3218, bots: { woodcutting: 4, mining: 4 } }] }));
-  const fixed = createBotActivityRegistry({ world: { core: PluginManager.getCoreApi() }, sitesPath });
-  assert.ok(fixed.sites.every((site) => site.rotation === null), 'no switchMinutes, no switching');
   const weighted = new Map();
   for (let i = 0; i < 2000; i++) {
     const skilled = { ...fakePlayer(), getSkillManager: () => ({ getCurrentLevel: () => 99 }) };
@@ -1896,61 +1866,6 @@ test('sites split each mode\'s count over the tiers and the registry only assign
   const player = fakePlayer();
   assert.equal(registry.pickActivity(player, 0, { allowed: ['combat_training'] })?.id, 'combat_training');
   assert.equal(registry.pickActivity(player, 0, { allowed: ['combat_training'], avoid: 'combat_training' }), null);
-});
-
-test('a site\'s levels are applied to every skill of a spawned bot (hitpoints at least 10)', () => {
-  const { applyLevels } = require('../plugins/bots/brain/SiteSpawner.PlayerBots');
-  const set = new Map();
-  const manager = {
-    setCurrentLevel(skill, level) { set.set(skill.getName(), level); return this; },
-    setMaxLevels() { return this; },
-    setExperience() { return this; },
-  };
-  const bot = { getSkillManager: () => manager, getUpdateFlag: () => ({ flag() {} }) };
-  applyLevels(bot, 1);
-  assert.equal(set.get(Skill.ATTACK.getName()), 1);
-  assert.equal(set.get(Skill.HITPOINTS.getName()), 10, 'hitpoints never below 10');
-  assert.equal(set.get(Skill.AGILITY.getName()), 99, 'agility is always 99 so shortcuts are usable');
-  applyLevels(bot, { all: 40, mining: 60 });
-  assert.equal(set.get(Skill.ATTACK.getName()), 40);
-  assert.equal(set.get(Skill.MINING.getName()), 60, 'per-skill override');
-  applyLevels(bot, { all: [30, 35] });
-  const rolled = set.get(Skill.ATTACK.getName());
-  assert.ok(rolled >= 30 && rolled <= 35, `a band rolls inside it (got ${rolled})`);
-  const { combatLevelOf } = require('../plugins/bots/brain/SiteSpawner.PlayerBots');
-  assert.equal(combatLevelOf([1, 1, 1, 10, 1, 1, 1]), 3);
-  assert.equal(combatLevelOf([99, 99, 99, 99, 99, 99, 99]), 126);
-  const combatSkills = [Skill.ATTACK, Skill.STRENGTH, Skill.DEFENCE, Skill.HITPOINTS, Skill.RANGED, Skill.MAGIC, Skill.PRAYER];
-  for (const band of [[3, 30], [30, 60], [60, 90], [90, 126]]) {
-    for (let i = 0; i < 50; i++) {
-      applyLevels(bot, { all: [1, 19], combat: band });
-      const combat = combatLevelOf(combatSkills.map((skill) => set.get(skill.getName())));
-      assert.ok(combat >= band[0] && combat <= band[1], `combat ${combat} inside ${band}`);
-      assert.ok(set.get(Skill.MINING.getName()) <= 19, 'non-combat skills keep the skill band');
-    }
-  }
-});
-
-test('a spawned bot is dressed for its tier with real items and keeps the weapon slot free', () => {
-  const { applyOutfit, outfitTier } = require('../plugins/bots/brain/SiteSpawner.PlayerBots');
-  const { Equipment } = require('../src/main/typescript/elvarg/game/model/container/impl/Equipment');
-  assert.equal(outfitTier(1), 'novice');
-  assert.equal(outfitTier({ all: [1, 19] }), 'novice');
-  assert.equal(outfitTier({ all: [20, 39] }), 'mid');
-  assert.equal(outfitTier({ all: [40, 59] }), 'advanced');
-  assert.equal(outfitTier({ all: [60, 99] }), 'elite');
-  const slots = [Equipment.HEAD_SLOT, Equipment.CAPE_SLOT, Equipment.AMULET_SLOT, Equipment.BODY_SLOT,
-    Equipment.LEG_SLOT, Equipment.HANDS_SLOT, Equipment.FEET_SLOT];
-  const worn = new Map();
-  const bot = {
-    getEquipment: () => ({ set: (slot, item) => worn.set(slot, item.getId()), refreshItems() {} }),
-    getUpdateFlag: () => ({ flag() {} }),
-  };
-  applyOutfit(bot, 'elite');
-  for (const slot of slots) {
-    assert.ok(worn.get(slot) > 0, `slot ${slot} has a real item`);
-  }
-  assert.equal(worn.has(Equipment.WEAPON_SLOT), false, 'the skill tool owns the weapon slot');
 });
 
 test('timed visits rotate between sites without requiring a level-up', () => {
@@ -2308,16 +2223,16 @@ test('trainers do not attack a target their combat route cannot reach', () => {
   a.stop(s.ctx);
 });
 
-test('stopping training (switching to skilling) takes back the food and runes it provisioned', () => {
+test('training neither hands out nor takes back food: what the character carries is its own', () => {
   const s = trainingScene();
-  s.ctx.state.combatStyle = 'magic';
-  s.inventory.set(ItemIdentifiers.COPPER_ORE, 4); // the bot's own items stay
+  s.inventory.set(ItemIdentifiers.TROUT, 5);
+  s.inventory.set(ItemIdentifiers.COPPER_ORE, 4);
   const a = createTrainCombatAction(chickenSpec, s.world);
   a.update(s.ctx);
-  assert.equal(s.inventory.get(ItemIdentifiers.TROUT), 16, 'provisioned for the fight');
+  assert.equal(s.inventory.get(ItemIdentifiers.TROUT), 5, 'no free food');
   a.stop(s.ctx);
-  assert.equal(s.inventory.get(ItemIdentifiers.TROUT), 0, 'food taken back');
-  assert.equal(s.inventory.get(ItemIdentifiers.COPPER_ORE), 4, 'its own items are kept');
+  assert.equal(s.inventory.get(ItemIdentifiers.TROUT), 5, 'its food stays when training stops');
+  assert.equal(s.inventory.get(ItemIdentifiers.COPPER_ORE), 4, 'its other items stay');
 });
 
 test('ranged trainers equip a tier bow and a stack of arrows', () => {
@@ -2342,18 +2257,32 @@ test('magic trainers equip a staff, set autocast and carry runes', () => {
   s.world.core.CombatSpells = new Proxy({}, {
     get: () => ({
       levelRequired: () => 1,
-      itemsRequired: () => [{ getId: () => ItemIdentifiers.AIR_RUNE }],
+      itemsRequired: () => [{ getId: () => ItemIdentifiers.AIR_RUNE, getAmount: () => 1 }],
     }),
   });
   s.ctx.state.combatStyle = 'magic';
+  s.inventory.set(ItemIdentifiers.AIR_RUNE, 500);
   const a = createTrainCombatAction(chickenSpec, s.world);
   a.update(s.ctx);
   const tier = trainingSpec.magicTiers.find((entry) => entry.minLevel === 1);
   assert.ok(tier.weapons.map((key) => ItemIdentifiers[key])
     .includes(s.items[Equipment.WEAPON_SLOT].getId()), 'staff comes from the magic tier');
-  assert.equal(cast.length, 1, 'autocast set for the picked spell');
-  assert.ok(s.inventory.get(ItemIdentifiers.AIR_RUNE) >= 3000, 'runes stocked for the spell');
+  assert.equal(cast.length, 1, 'autocast set for the picked spell, with its own runes');
+  assert.equal(s.inventory.get(ItemIdentifiers.AIR_RUNE), 500, 'no runes are handed out');
   assert.deepEqual(s.attacks, [s.npc], 'magic bots attack through the normal engine');
+  a.stop(s.ctx);
+});
+
+test('a magic trainer with no runes of its own fights with melee instead', () => {
+  const s = trainingScene();
+  s.world.core.CombatSpells = new Proxy({}, {
+    get: () => ({ levelRequired: () => 1, itemsRequired: () => [{ getId: () => ItemIdentifiers.AIR_RUNE, getAmount: () => 1 }] }),
+  });
+  s.ctx.state.combatStyle = 'magic';
+  const a = createTrainCombatAction(chickenSpec, s.world);
+  a.update(s.ctx);
+  assert.equal(s.inventory.get(ItemIdentifiers.AIR_RUNE) ?? 0, 0, 'none conjured');
+  assert.equal(s.ctx.state.combatStyle, 'melee');
   a.stop(s.ctx);
 });
 

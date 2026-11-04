@@ -1,3 +1,5 @@
+import { World } from "../../game/World";
+
 /**
  * What RSProx needs to point the official client at this server's gateway (gateway/README.md):
  * a jav_config and the binary world list it names. Served next to the game socket so a
@@ -98,6 +100,13 @@ export class GatewayTarget {
         ].join("\n");
     }
 
+    /** The world's population as a u16 (World.getPopulation). */
+    private static population(): Buffer {
+        const buffer = Buffer.alloc(2);
+        buffer.writeUInt16BE(Math.min(0xffff, World.getPopulation()), 0);
+        return buffer;
+    }
+
     /** One world: `u32 length, u16 count`, then `u16 id, u32 flags, host, activity, u8 location, u16 population`. */
     private static worldList(): Buffer {
         const world = Buffer.concat([
@@ -106,7 +115,7 @@ export class GatewayTarget {
             Buffer.from(`${GatewayTarget.host()}\0`, "latin1"),
             Buffer.from("tsps\0", "latin1"),
             Buffer.from([0]),
-            Buffer.from([0, 0]),
+            GatewayTarget.population(),
         ]);
         const header = Buffer.alloc(6);
         header.writeUInt32BE(2 + world.length, 0);

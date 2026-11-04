@@ -41,6 +41,7 @@ before(async () => {
         core: PluginManager.getCoreApi(),
         persistAttribute: () => {},
         onItemAction: (handler) => { useTablet = handler; },
+        onCustomEvent() {},
         onPlayerLogin: () => {},
         onSpellCast: (handler) => { castAlternate = handler; },
         onInterfaceActionClick: () => {},

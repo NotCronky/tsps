@@ -4,50 +4,29 @@
 The existing bot activity command can also assign `combat_training` to a controlled bot.
 Commands retain their existing developer permissions.
 
-Bot population lives in `data/definitions/bot-sites.json`: one `sites` array for skilling and
-PvP alike. A site is a place (`x`, `y`, optional `z`/`radius`), an `enabled` flag (temporary,
-until /host controls sites) and its `bots`. Skilling sites ship **disabled** (no skilling or
-combat-training crowd on a fresh world); set `"enabled": true` on one to spawn it. Each
-enabled skilling site spawns its bots around its anchor at startup, a few per game tick
-(`SpawnPacing.PlayerBots.js`: 8 per 600 ms, round-robin over the sites, so 1000 bots take ~75 s). Without `switchMinutes` each
-bot is dedicated to one mode's activity: it never switches, and a failed activity waits out its
-cooldown and resumes. With `"switchMinutes": [15, 25]` each bot rolls its own timer in that range
-and then changes to another mode of its tier at the site, weighted by the site's counts for that
-tier so the mix stays near the configured one (a Varrock novice never becomes a woodcutter when
-Varrock only has expert woodcutters). Switches wait for a safe point: never mid-fight or under a
-bank-trip/fight-back overlay, and a switch with no free capacity slot retries 30 s later.
-
-**Per deployment:** a world chooses its own sites in `data/definitions/world.local.json` (gitignored; or `world.json`) with `pluginConfig` `"PlayerBots:sites"`, a map of site id to an object of site properties (`plugins/bots/brain/Sites.PlayerBots.js`). For a site `bot-sites.json` has, the properties replace its own, each top-level property whole, so `bots` sets every count at the site; sites and properties the map doesn't name keep theirs. Any other id is a new site and needs `x` and `y`. A world updates from main by fast-forward without touching `bot-sites.json`. For example, skilling and combat-training bots on, the PvP pens off, Lumbridge cut down to woodcutters, and a Draynor fishing site:
-
-```json
-"pluginConfig": {
-  "PlayerBots:sites": {
-    "varrock": { "enabled": true }, "falador": { "enabled": true }, "seers": { "enabled": true },
-    "east_ardougne": { "enabled": true },
-    "edge_low": { "enabled": false }, "edge_mid": { "enabled": false }, "edge_mains": { "enabled": false },
-    "varrock_ditch": { "enabled": false }, "green_drags_gate": { "enabled": false },
-    "revs_entrance": { "enabled": false },
-    "lumbridge": { "enabled": true, "bots": { "woodcutting": 20 } },
-    "draynor": { "enabled": true, "x": 3093, "y": 3244, "bots": { "fishing": 20 } }
-  }
-}
-```
-
-A value that isn't an object, or a new site without integer `x` and `y`, is warned about at startup and ignored.
+Combat training is one of the player bots' tasks (`plugins/bots/tasks/Combat.PlayerBots.js`): the
+population's bots and players in bot mode get it from the brain or pick it ([docs/player-bots.md](../../docs/player-bots.md)).
+Skilling sites are gone; `data/definitions/bot-sites.json` now only holds the Wilderness PvP
+hotspots. A world can still switch those on or off, or change their counts, in
+`data/definitions/world.local.json` with `pluginConfig` `"PlayerBots:sites"`, a map of site id to
+site properties (`plugins/bots/brain/Sites.PlayerBots.js`), for example
+`{ "edge_low": { "enabled": false } }`. A value that isn't an object, or a new site without
+integer `x` and `y`, is warned about at startup and ignored.
 
 Trainers find their NPCs through the NPC cluster index (below), so they fan out across every
-nearby group of their tier's monsters. The skilling
-activities cap how many bots run each one at once (`capacity`), the rest train combat. Change the counts in `bot-sites.json`;
-leave sites disabled for a bot-free world. `maxFailedTargets` (default 6) sets how many targets or frozen routes in a row
+nearby group of their tier's monsters. `maxFailedTargets` (default 6) sets how many targets or frozen routes in a row
 without landing damage fail a training site; that cluster is then skipped by the bot for 10 min.
 
 The activity uses the lowest permanent level of Attack, Strength and Defence to choose a
 melee training tier. Between kills it selects the combat style for the lowest of those three
 skills. A temporary boost does not promote a bot; drained stats cannot unlock equipment.
 Each trainer is assigned melee, ranged or magic from the activity's `styles` config
-(deterministically per username). Ranged trainers level Ranged with tiered bows and arrows,
-and magic trainers level Magic with tiered staffs, autocast low-level strike/bolt/blast
-spells and carry the matching runes; their site and gear tiers follow the trained skill.
+(deterministically per username). Bots progress like players: a trainer only wears gear it owns
+and carries (the best of its tier it has, moved from its inventory), casts only with its own runes
+and eats only its own food. A magic trainer without runes, or a ranged one without a bow and
+arrows, fights with melee instead. Ranged trainers level Ranged with tiered bows and arrows, and
+magic trainers level Magic with tiered staffs and autocast low-level strike/bolt/blast spells;
+their site and gear tiers follow the trained skill.
 
 | Lowest trained level | Stage | Opponent combat levels (`npcLevels`) | Found near the Lumbridge spawn |
 | --- | --- | --- | --- |

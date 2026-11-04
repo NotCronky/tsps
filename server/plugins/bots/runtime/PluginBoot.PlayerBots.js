@@ -120,6 +120,7 @@ function bootPlayerBotsRuntime(options = {}) {
       Firemaking.isFiremakingActive?.(player) === true ||
       Smithing.isSmeltingActive?.(player) === true,
     log: (message, extra) => botApi.log(message, extra),
+    emitCustomEvent: (name, payload) => botApi.emitCustomEvent(name, payload),
   };
 
   // One pvp engine for the brain activities and reactive overlays.

@@ -196,6 +196,19 @@ export class ShopManager {
         player.getSession?.().sendClientPacket?.(encodeShopClose());
     }
 
+    /**
+     * Buys `amount` of `itemId` from the shop the player has open, as a click on its stock would:
+     * same prices, stock and coin checks. False when no shop is open or it doesn't show the item.
+     */
+    public static buy(player: any, itemId: number, amount: number): boolean {
+        const shop = this.currentShop(player);
+        if (!shop || !this.displayEntries(shop, player).some((entry) => entry.itemId === itemId)) {
+            return false;
+        }
+        this.buyItem(player, shop, itemId, amount);
+        return true;
+    }
+
     public static processPlayer(player: any): void {
         if (
             player?.isPlayerBot?.() ||

@@ -13,15 +13,14 @@ const { registerPvpChatter } = require("./behaviours/pvp/PvpChatter.PlayerBots")
 const { createBotPluginLogging } = require("./runtime/PluginLogging.PlayerBots");
 const { bootPlayerBotsRuntime } = require("./runtime/PluginBoot.PlayerBots");
 const { createBotBenchmark } = require("./runtime/Benchmark.PlayerBots");
-const { startBotSites } = require("./brain/SiteSpawner.PlayerBots");
 const { setActiveBotRuntime } = require("./runtime/RuntimeRegistry.PlayerBots");
 const { PVP_BOT_SETTINGS } = require("./behaviours/pvp/WildernessHotspotRegistry.PlayerBots");
 const {
   registerBotStatusInteractions,
 } = require("./runtime/RegisterBotStatusInteractions.PlayerBots");
-const { registerAiBots } = require("./ai/RegisterAiBots.PlayerBots");
-const { registerResidents } = require("./residents/RegisterResidents.PlayerBots");
-const { AI_BOT_ATTRIBUTE } = require("./ai/Config.PlayerBots");
+const { registerPopulation, POPULATION_ATTRIBUTE } = require("./population/Population.PlayerBots");
+const { createCatalogue } = require("./tasks/Catalogue.PlayerBots");
+const BotMode = require("./BotMode.PlayerBots");
 
 const BOT_BEHAVIOR_MODE = Object.freeze({
   ROAMING: "roaming",
@@ -187,9 +186,27 @@ const BOT_CONFIG = Object.freeze({
   }),
 });
 
-/** Scripted bots accept every duel; AI bots aren't scripted, so they are left out. */
+/** Scripted bots accept every duel; population bots play like people, so they are left out. */
 function isScriptedBot(player) {
-  return player?.isPlayerBot?.() === true && player.getAttribute?.(AI_BOT_ATTRIBUTE) !== true;
+  return player?.isPlayerBot?.() === true && player.getAttribute?.(POPULATION_ATTRIBUTE) !== true;
+}
+
+/** Scripted bots (PvP, minigames) cast without runes; population bots use their own. */
+function bypassRunesForScriptedBots(event) {
+  if (isScriptedBot(event?.player)) event.bypass = true;
+}
+
+/** Ticks every character in bot mode. */
+function botModeTask(api) {
+  const { Task, TaskManager } = api.core;
+  TaskManager.submit(new (class extends Task {
+    constructor() {
+      super(1, "bot-mode", false);
+    }
+    execute() {
+      BotMode.tickAll();
+    }
+  })());
 }
 
 function registerDuelBotAcceptance(api) {
@@ -245,15 +262,6 @@ module.exports = {
       brainWorld: boot.brainWorld,
     });
 
-    startBotSites({
-      api,
-      botApi,
-      runtime: boot.runtime,
-      registry: boot.brainRegistry,
-      world: boot.brainWorld,
-      resetMovementState,
-    });
-
     registerBotStatusInteractions({
       api,
       botStatusReporter: boot.botStatusReporter,
@@ -274,22 +282,24 @@ module.exports = {
       brainRegistry: boot.brainRegistry,
     });
 
-    registerAiBots({
+    const catalogue = createCatalogue(boot.brainRegistry);
+    registerPopulation({
       api,
       botApi,
       runtime: boot.runtime,
       registry: boot.brainRegistry,
       world: boot.brainWorld,
+      catalogue,
       resetMovementState,
     });
-    registerResidents({
-      api,
-      botApi,
-      runtime: boot.runtime,
-      registry: boot.brainRegistry,
-      world: boot.brainWorld,
-      resetMovementState,
-    });
+    BotMode.init({ api, catalogue, registry: boot.brainRegistry, world: boot.brainWorld, behaviorMode: BOT_CONFIG.behaviorMode });
+    api.persistAttribute(BotMode.LAST_TASK_ATTRIBUTE, "");
+    api.registerCommand("botmode", BotMode.botModeCommand, api.core.PlayerRights.NONE,
+      "Let your character play itself: ::botmode (pick a task), ::botmode <task>, ::botmode list, ::botmode off");
+    api.onCustomEvent("player:world-input", BotMode.tookOver);
+    api.onCustomEvent("player:movement-input", BotMode.tookOver);
+    api.onPlayerLogout(BotMode.loggedOut);
+    api.onServerStartup(() => botModeTask(api));
 
     registerBotEvents({
       api,
@@ -303,12 +313,7 @@ module.exports = {
       pvpJumpOnKillPolicy: boot.pvpJumpOnKillPolicy,
     });
 
-    api.onSpellRuneBypass((event) => {
-      const player = event?.player;
-      if (player?.isPlayerBot?.() === true) {
-        event.bypass = true;
-      }
-    });
+    api.onSpellRuneBypass(bypassRunesForScriptedBots);
 
     botApi.log("registered", {
       spawned: boot.runtime.getSpawnedCount(),

@@ -59,7 +59,7 @@ character**, a save kept apart from its main one (`persistence/PlayerProfile.ts`
 - Known limits: the SQLite backend's one-time import of legacy JSON saves reads only the main
   files; an offline update to either save (an external store purchase) is refused while the
   account's other character is online, since both share the name; the friends chat's offline
-  owner lookup (`FriendsChatManager.js`) and the AI bots' name checks (`RegisterAiBots`,
+  owner lookup (`FriendsChatManager.js`) and the bots' name checks (`Population`,
   `PlayerFactory`) still read the main save only, so on a league world an offline owner's channel
   is the main character's and a name held only by a league character counts as free for a bot.
 

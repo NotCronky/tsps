@@ -139,24 +139,25 @@ function teleport(player, item, destination) {
   // reached here (Rub already checks, the worn/right-click options did not).
   if (chargesOf(entry, item) <= 0) {
     player.sendMessage(piece.emptyMessage);
-    return;
+    return false;
   }
   // A locked destination costs nothing (Wiki, Xeric's talisman: no charge since 2019).
   if (destination.colosseumRank && !colosseumRankReached(player, destination.colosseumRank)) {
     statement(player, destination.lockedMessage);
-    return;
+    return false;
   }
   if (destination.unlockAttribute && player.getAttribute(destination.unlockAttribute) !== true) {
     statement(player, destination.lockedMessage);
-    return;
+    return false;
   }
   const target = destinationTile(player, destination);
   if (!TeleportHandler.checkReqs(player, target, piece.wildernessLevel ?? DEFAULT_WILDERNESS_LEVEL)) {
-    return;
+    return false;
   }
   const castId = item.getId();
   const teleportType = piece.teleportType?.() ?? TeleportType.NORMAL;
   TeleportHandler.teleport(player, target, teleportType, false, () => useCharge(player, item, castId));
+  return true;
 }
 
 /** Whether the player has reached a Fortis Colosseum Glory title (the Colosseum plugin answers). */
@@ -364,6 +365,41 @@ function handleJewelleryAction(event) {
   }
 }
 
+/**
+ * "teleport:options" { player, options }: every destination of the charged teleport jewellery the
+ * player carries or wears, as options content acting for the player can use (a bot travelling).
+ * Locked destinations and the burning amulet's (all in the Wilderness) are left out. With `bank`
+ * (the player's banked items), banked pieces are offered too, with `withdraw` and no `use`.
+ */
+function offerTeleports(request) {
+  const { player } = request ?? {};
+  if (!player) return;
+  const seen = new Set();
+  const carried = [...player.getInventory().getItems(), ...player.getEquipment().getItems()];
+  const sources = [...carried.map((item) => [item, true]), ...(request.bank ?? []).map((item) => [item, false])];
+  const offered = new Set();
+  for (const [item, onHand] of sources) {
+    const entry = item ? JEWELLERY_BY_ITEM.get(item.getId()) : null;
+    if (!entry || seen.has(item.getId()) || entry.piece.key === "burning" || chargesOf(entry, item) <= 0) continue;
+    seen.add(item.getId());
+    for (const destination of entry.piece.destinations ?? []) {
+      if (destination.colosseumRank || destination.unlockAttribute || destination.confirm) continue;
+      const id = `jewellery:${entry.piece.key}:${destination.label}`;
+      // One piece carried beats the same piece banked.
+      if (offered.has(id)) continue;
+      offered.add(id);
+      const target = destinationTile(player, destination);
+      const option = {
+        id, kind: "jewellery", name: `${entry.piece.noun}: ${destination.label}`,
+        to: { x: target.getX(), y: target.getY(), z: target.getZ() }, waitMs: 8000, cost: 8,
+      };
+      if (onHand) option.use = () => teleport(player, item, destination) === true;
+      else option.withdraw = [{ item: item.getId(), amount: 1 }];
+      request.options.push(option);
+    }
+  }
+}
+
 module.exports = {
   name: "Jewellery",
   members: true,
@@ -371,6 +407,7 @@ module.exports = {
     pluginApi = api;
     BonusManager = api.getBonusManager();
     api.onItemAction(handleJewelleryAction);
+    api.onCustomEvent("teleport:options", offerTeleports);
     require("./Recharge.Jewellery")(api);
     require("./XericsTalisman.Jewellery")(api);
     api.onSpellCast(castRechargeDragonstone.bind(null, api));

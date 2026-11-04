@@ -152,6 +152,22 @@ test('the hit queue announces an NPC\'s hit on a player with its protection type
   queue.clear();
 });
 
+test('in PvP, another player\'s hit is prayed against too; a player\'s own (recoil) is not', () => {
+  const player = fakePlayer();
+  const queue = new HitQueue(player);
+  const hit = (attacker) => ({
+    getAttacker: () => attacker,
+    getTarget: () => player,
+    bypassesProtectionPrayer: () => false,
+    getProtectionType: () => core.CombatType.RANGED,
+  });
+  queue.addPendingHit(hit(player), 102);
+  assert.deepEqual(protecting(player), [], 'its own hit announces nothing');
+  queue.addPendingHit(hit(fakePlayer(false)), 102);
+  assert.deepEqual(protecting(player), ['ranged']);
+  queue.clear();
+});
+
 test('out of combat, the prayers it turned on go off again; ones the player put up stay', () => {
   const { PrayerHandler: P } = core;
   const player = fakePlayer();
@@ -177,8 +193,28 @@ test('prayers stay up while the player is still attacking', () => {
   assert.deepEqual(protecting(player), []);
 });
 
-test('::autopray toggles and is saved, off by default', () => {
+test('::autoprayoff leaves the offensive prayers alone; the protection still switches', () => {
+  const { PrayerHandler: P, CombatFactory } = core;
+  const getMethod = CombatFactory.getMethod;
+  try {
+    CombatFactory.getMethod = () => ({ type: () => core.CombatType.RANGED });
+    const player = fakePlayer();
+    commands.get('autoprayoff')({ player, parts: ['autoprayoff'] });
+    assert.equal(player.getAttribute(AutoPrayer.OFFENSIVE_ATTRIBUTE), false, 'on by default, so the first toggle turns it off');
+    announce(player, { type: 'magic', cycle: 101 });
+    assert.deepEqual(protecting(player), ['magic']);
+    assert.ok(!player.prayers[P.RIGOUR], 'no offensive prayer');
+    commands.get('autoprayoff')({ player, parts: ['autoprayoff', 'on'] });
+    announce(player, { type: 'magic', cycle: 101 });
+    assert.equal(player.prayers[P.RIGOUR], true);
+  } finally {
+    CombatFactory.getMethod = getMethod;
+  }
+});
+
+test('::autopray toggles and is saved, off by default; offensive prayers saved, on by default', () => {
   assert.equal(persisted.get(AutoPrayer.AUTOPRAY_ATTRIBUTE), false);
+  assert.equal(persisted.get(AutoPrayer.OFFENSIVE_ATTRIBUTE), true);
   const player = fakePlayer(false);
   commands.get('autopray')({ player, parts: ['autopray'] });
   assert.equal(player.getAttribute(AutoPrayer.AUTOPRAY_ATTRIBUTE), true);

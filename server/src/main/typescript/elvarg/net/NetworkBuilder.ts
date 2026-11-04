@@ -336,7 +336,7 @@ export class NetworkBuilder {
       const { WebRtcGameConnector } = require("./webrtc/WebRtcGameConnector") as typeof import("./webrtc/WebRtcGameConnector");
       WebRtcGameConnector.startFromEnv(
         (channel) => new ClientConnection(channel),
-        World.getNetworkPlayerCount
+        World.getPopulation
       );
     }
     return server;

@@ -1,16 +1,18 @@
 # Auto-prayer (`::autopray`)
 
 A learning aid, not part of OSRS. With it on, the server switches your protection prayer for
-you against monsters' attacks, and turns on the best offensive prayer you can use for your own
-weapon's style.
+you against monsters' attacks and other players' attacks, and turns on the best offensive prayer
+you can use for your own weapon's style.
 
 ```
-::autopray        toggle
-::autopray on
-::autopray off
+::autopray           toggle auto-prayer
+::autopray on|off
+::autoprayoff        toggle the offensive prayers (protection keeps switching)
+::autoprayoff on|off
 ```
 
-Saved per player, off by default. It replaced `::gauntletautopray`.
+Both are saved per player. Auto-prayer is off by default; once it's on, the offensive prayers are
+on until you turn them off with `::autoprayoff`. It replaced `::gauntletautopray`.
 
 ## How it behaves
 
@@ -26,7 +28,8 @@ Saved per player, off by default. It replaced `::gauntletautopray`.
 - It needs Prayer points and the prayer unlocked. It skips any prayer you can't use. For
   offensive prayers it falls back a tier: Rigour, then Eagle Eye; Augury, then Mystic Might;
   Piety, then Chivalry, then Ultimate Strength with Incredible Reflexes.
-- It works against **any monster**, not only bosses.
+- It works against **any monster**, not only bosses, and in **PvP**: another player's melee,
+  ranged and magic are prayed against the same way, by the style of the hit that lands next.
 
 ## Covered
 

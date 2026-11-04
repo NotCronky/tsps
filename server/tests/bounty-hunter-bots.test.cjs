@@ -566,7 +566,7 @@ test('every PvP build can wear what it names, and the researched builds keep the
 
 test('bot loadout bands use the player calculation for every archetype and stat layout', () => {
   const { SkillManager } = require('../dist/game/content/skill/SkillManager');
-  const { combatLevelOf } = require('../plugins/bots/brain/SiteSpawner.PlayerBots');
+  const { combatLevelOf } = require('../plugins/bots/population/Stages.PlayerBots');
   const { matchesHotspotCombatBand } = require('../plugins/bots/behaviours/policies/PvpLoadoutPolicy.PlayerBots').__testing;
   const { PVP_LOADOUT_DEFINITIONS } = require('../plugins/bots/behaviours/pvp/PvpLoadoutRegistry.PlayerBots');
   const statLines = [

@@ -4,16 +4,14 @@ const fs = require("fs");
 const path = require("path");
 
 /**
- * Who the AI bots are, kept in data/saves/ai-bots.json (plugins have no world store, as for
- * the Gauntlet and Doom scoreboards): name, persona, provider, notes and where each logged
- * out. Their levels and items are in their normal player saves.
+ * Who the bot population is, kept in data/saves/player-bots.json (plugins have no world store,
+ * as for the Gauntlet and Doom scoreboards): name, profile, stage and where each logged out.
+ * Their levels and items are in their normal player saves, like anyone's.
  */
-const DEFAULT_FILE = path.join(process.cwd(), "data", "saves", "ai-bots.json");
-const MAX_NOTES = 12;
-const MAX_NOTE_LENGTH = 120;
+const DEFAULT_FILE = path.join(process.cwd(), "data", "saves", "player-bots.json");
 const SAVE_DELAY_MS = 2000;
 
-class AiBotRoster {
+class BotRoster {
   constructor(file = DEFAULT_FILE) {
     this.file = file;
     this.bots = [];
@@ -23,14 +21,13 @@ class AiBotRoster {
       this.bots = Array.isArray(raw?.bots) ? raw.bots.filter((bot) => typeof bot?.name === "string") : [];
     } catch (error) {
       if (error?.code !== "ENOENT") {
-        console.error(`[ai bots] could not read ${file}; starting a new roster`, error);
+        console.error(`[player bots] could not read ${file}; starting a new roster`, error);
       }
     }
   }
 
   has(name) {
-    const key = String(name).toLowerCase();
-    return this.bots.some((bot) => bot.name.toLowerCase() === key);
+    return this.get(name) !== null;
   }
 
   get(name) {
@@ -39,20 +36,10 @@ class AiBotRoster {
   }
 
   add(entry) {
-    const bot = { notes: [], location: null, createdAt: new Date().toISOString(), ...entry };
+    const bot = { location: null, createdAt: new Date().toISOString(), ...entry };
     this.bots.push(bot);
     this.save();
     return bot;
-  }
-
-  /** Adds a note, dropping the oldest past MAX_NOTES. */
-  remember(name, note) {
-    const bot = this.get(name);
-    const text = String(note ?? "").replace(/\s+/g, " ").trim().slice(0, MAX_NOTE_LENGTH);
-    if (!bot || !text) return false;
-    bot.notes = [...(bot.notes ?? []), text].slice(-MAX_NOTES);
-    this.save();
-    return true;
   }
 
   setLocation(name, location) {
@@ -85,9 +72,9 @@ class AiBotRoster {
       fs.writeFileSync(temp, `${JSON.stringify({ bots: this.bots }, null, 2)}\n`);
       fs.renameSync(temp, this.file);
     } catch (error) {
-      console.error(`[ai bots] could not write ${this.file}`, error);
+      console.error(`[player bots] could not write ${this.file}`, error);
     }
   }
 }
 
-module.exports = { AiBotRoster, MAX_NOTES, MAX_NOTE_LENGTH };
+module.exports = { BotRoster };

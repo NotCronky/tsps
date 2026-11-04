@@ -242,8 +242,10 @@ update from main by fast-forward:
 { "experienceMultiplier": 10, "plugins": { "TutorialIsland": true } }
 ```
 
-The bot population follows the same layering: `pluginConfig` `"PlayerBots:sites"` overrides
-bot-sites.json sites by id, property by property, and adds new ones (`plugins/bots/brain/Sites.PlayerBots.js`; docs/bot-combat-training.md).
+The bots follow the same layering: `pluginConfig` `"PlayerBots:sites"` overrides
+bot-sites.json's Wilderness PvP hotspots by id, property by property, and adds new ones
+(`plugins/bots/brain/Sites.PlayerBots.js`), and `"PlayerBots:population"` switches the bot
+population on (docs/player-bots.md at the repository root).
 
 ## Conventions
 

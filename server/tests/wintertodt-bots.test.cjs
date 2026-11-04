@@ -23,16 +23,17 @@ const fletcher = { corner: 0, healer: false, fletcher: true };
 const healer = { corner: 1, healer: true, fletcher: false };
 const plan = (over) => decide({ self: self(), corner: corner(), downed: [], role: feeder, phase: 'gather', ...over }).action;
 
-test('bots are dealt round the four corners, and every fourth heals', () => {
+test('bots are dealt round the four corners, and every one brews its own potions and heals pyromancers (task play)', () => {
   const roles = Array.from({ length: 8 }, (_, i) => roleFor(i, () => 0.9));
   assert.deepEqual(roles.map((r) => r.corner), [0, 1, 2, 3, 0, 1, 2, 3]);
-  assert.deepEqual(roles.map((r) => r.healer), [false, false, false, true, false, false, false, true]);
+  assert.ok(roles.every((r) => r.brews && r.heals && !r.healer));
   assert.equal(roleFor(0, () => 0.1).fletcher, true);
   assert.equal(roleFor(0, () => 0.9).fletcher, false);
 });
 
-test('bots come one a tick up to the target, and only real players in the camp or prison count', () => {
-  assert.equal(spawnsNeeded(8, 0), 1);
+test('the whole crowd comes at once up to the target, and only real players in the camp or prison count', () => {
+  assert.equal(spawnsNeeded(8, 0), 8);
+  assert.equal(spawnsNeeded(8, 5), 3);
   assert.equal(spawnsNeeded(8, 8), 0);
   assert.equal(spawnsNeeded(0, 3), 0);
   const at = (x, y, bot = false) => ({ isPlayerBot: () => bot, getLocation: () => ({ getX: () => x, getY: () => y, getZ: () => 0 }) });
@@ -102,5 +103,72 @@ test('a bot replays the Doors zone handlers as it crosses, as zone events do for
     assert.deepEqual(calls, ['hud', 'entered', 'left', 'hud', 'hud'], 'the camp, in, out, then away: once each crossing');
   } finally {
     Object.assign(Doors, saved);
+  }
+});
+
+test('one that brews its own makes a batch of four when low, and only then', () => {
+  const brewer = { corner: 0, healer: false, brews: true, fletcher: false };
+  assert.equal(plan({ role: brewer, self: self({ doses: 0 }), brewing: true }), 'brew');
+  assert.equal(plan({ role: brewer, self: self({ doses: 0 }), brewing: false }), 'chop', 'not brewing: works');
+  assert.equal(Bots._test.OWN_POTIONS, 4);
+});
+
+test('the round left is its energy over the drain of the lit braziers', () => {
+  const Round = require('../plugins/minigames/wintertodt/Round.Wintertodt');
+  const Corners = require('../plugins/minigames/wintertodt/Corners.Wintertodt');
+  const energy = Round.energy;
+  const draining = Corners.isDraining;
+  try {
+    Round.energy = () => 350;
+    Corners.isDraining = (index) => index < 2;
+    assert.equal(Math.round(Bots._test.ticksLeft()), Math.round(350 / (2 * Shared.DRAIN_PER_PYROMANCER)));
+    Corners.isDraining = () => false;
+    assert.equal(Bots._test.ticksLeft(), Infinity, 'nothing draining it: no end in sight');
+  } finally {
+    Round.energy = energy;
+    Corners.isDraining = draining;
+  }
+});
+
+test('the falling snow: the tiles an area attack or a breaking brazier will hit are dangerous', () => {
+  const Attacks = require('../plugins/minigames/wintertodt/Attacks.Wintertodt');
+  const Corners = require('../plugins/minigames/wintertodt/Corners.Wintertodt');
+  const centre = Attacks.brazierCentre(0);
+  assert.equal(Attacks.isDangerous(centre.x + 2, centre.y), false);
+  Corners.corner(0).brazierBreaking = true;
+  try {
+    assert.equal(Attacks.isDangerous(centre.x + 2, centre.y), true, 'within 2 of a breaking brazier');
+    assert.equal(Attacks.isDangerous(centre.x + 3, centre.y), false, 'one more step is clear');
+  } finally {
+    Corners.corner(0).brazierBreaking = false;
+  }
+});
+
+test('a downed pyromancer is healed by the one nearest bot with a dose, not all of them', () => {
+  const Round = require('../plugins/minigames/wintertodt/Round.Wintertodt');
+  const Corners = require('../plugins/minigames/wintertodt/Corners.Wintertodt');
+  const { healerFor, playing } = Bots._test;
+  const tile = Corners.corner(0).corner.pyromancer;
+  const bot = (dx, doses) => ({
+    player: {
+      isRegistered: () => true, getHitpoints: () => 50,
+      getLocation: () => ({ getX: () => tile.x + dx, getY: () => tile.y, getZ: () => 0 }),
+      getInventory: () => ({ getItems: () => (doses > 0 ? [{ getId: () => Shared.ITEM.REJUVENATION_4, getAmount: () => doses }] : []) }),
+    },
+  });
+  const inPrison = Round.inPrison;
+  const before = [...playing];
+  playing.clear();
+  try {
+    Round.inPrison = () => true;
+    const far = bot(9, 1);
+    const near = bot(2, 1);
+    const nearest = bot(1, 0);
+    for (const b of [far, near, nearest]) playing.add(b);
+    assert.equal(healerFor(0), near, 'the nearest with a potion; the very nearest has none');
+  } finally {
+    Round.inPrison = inPrison;
+    playing.clear();
+    for (const b of before) playing.add(b);
   }
 });

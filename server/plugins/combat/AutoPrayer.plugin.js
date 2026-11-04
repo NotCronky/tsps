@@ -1,24 +1,28 @@
 "use strict";
 
 /**
- * Learning aid (not OSRS): with ::autopray on, a monster's attacks are prayed against for you.
+ * Learning aid (not OSRS): with ::autopray on, attacks on you are prayed against for you - a
+ * monster's, or in PvP another player's.
  *
  * Content announces each attack on a player with `combat:incoming-attack`
  * ({ attacker, target, type, protects, cycle }): the style to protect against (a CombatType, or
  * "melee" / "ranged" / "magic"), or for fights where that is not the attack's own style (a curse
  * swapping prayers round) `protects(style)`, the share of the hit that protection lets through
  * (`protects(null)` with none up); and the cycle its protection prayer is checked on. The hit
- * queue announces every ordinary NPC hit as it is queued; bosses that judge prayer themselves
+ * queue announces every ordinary hit on a player as it is queued, an NPC's or another player's;
+ * bosses that judge prayer themselves
  * (raid style helpers, the Hunllef, Jad's delayed impacts) announce their own.
  *
  * The protection kept up is for the attack judged next, so it only moves on once the one before
- * has been checked, and the best offensive prayer the player can use for their own weapon's style
- * goes up with it. Once out of combat - no attack judged for OUT_OF_COMBAT_TICKS and the player
+ * has been checked, and - unless ::autoprayoff has turned that off (OFFENSIVE_ATTRIBUTE) - the
+ * best offensive prayer the player can use for their own weapon's style goes up with it. Once out of combat - no attack judged for OUT_OF_COMBAT_TICKS and the player
  * attacking nothing - the prayers it turned on that are still up are turned off again. Prayers the
  * player turned on themselves are left alone.
  */
 
 const AUTOPRAY_ATTRIBUTE = "combat:autopray";
+/** Whether auto-prayer also keeps an offensive prayer up; on unless ::autoprayoff turns it off. */
+const OFFENSIVE_ATTRIBUTE = "combat:autopray-offensive";
 const STYLES = ["melee", "ranged", "magic"];
 // Estimate: about the 6 seconds a boss's slowest ordinary attacks take, so prayers stay up
 // between them and through short phase changes.
@@ -127,6 +131,7 @@ function update(player) {
   }
   const next = entry.attacks.reduce((soonest, attack) => (attack.cycle < soonest.cycle ? attack : soonest));
   pray(player, protectionFor(next.style), entry);
+  if (player.getAttribute?.(OFFENSIVE_ATTRIBUTE) === false) return true;
   for (const prayers of offensivePrayers(ownStyle(player))) {
     if (prayers.every((prayer) => usable(player, prayer))) {
       for (const prayer of prayers) pray(player, prayer, entry);
@@ -183,24 +188,43 @@ function incomingAttack({ attacker, target, type, protects, cycle }) {
   update(target);
 }
 
-/** ::autopray [on|off] - monsters' attacks are prayed against for you while you learn a fight. */
-function toggleAutoPray({ player, parts }) {
+/** `on`/`off` as given, else the opposite of `current`. */
+function toggled(parts, current) {
   const arg = (parts?.[1] ?? "").toLowerCase();
-  const on = arg === "on" ? true : arg === "off" ? false : player.getAttribute(AUTOPRAY_ATTRIBUTE) !== true;
+  return arg === "on" ? true : arg === "off" ? false : !current;
+}
+
+/** ::autopray [on|off] - attacks on you are prayed against for you while you learn a fight. */
+function toggleAutoPray({ player, parts }) {
+  const on = toggled(parts, player.getAttribute(AUTOPRAY_ATTRIBUTE) === true);
   player.setAttribute(AUTOPRAY_ATTRIBUTE, on);
+  const offensive = player.getAttribute(OFFENSIVE_ATTRIBUTE) !== false;
   player.sendMessage(on
-    ? "Auto-prayer is <col=00aa00>on</col>: your protection and offensive prayers are switched for you against monsters' attacks."
+    ? `Auto-prayer is <col=00aa00>on</col>: your protection ${offensive ? "and offensive prayers are" : "prayers are"} switched for you against monsters' and players' attacks.`
     : "Auto-prayer is <col=ff0000>off</col>.");
+  return true;
+}
+
+/** ::autoprayoff [on|off] - whether auto-prayer also keeps up an offensive prayer for your weapon. */
+function toggleOffensive({ player, parts }) {
+  const on = toggled(parts, player.getAttribute(OFFENSIVE_ATTRIBUTE) !== false);
+  player.setAttribute(OFFENSIVE_ATTRIBUTE, on);
+  player.sendMessage(on
+    ? "Auto-prayer's offensive prayers are <col=00aa00>on</col>: it keeps up the best one for your weapon."
+    : "Auto-prayer's offensive prayers are <col=ff0000>off</col>: it only switches your protection prayers.");
   return true;
 }
 
 module.exports = {
   name: "AutoPrayer",
   AUTOPRAY_ATTRIBUTE,
+  OFFENSIVE_ATTRIBUTE,
   register(api) {
     initialize(api);
     api.persistAttribute(AUTOPRAY_ATTRIBUTE, false);
+    api.persistAttribute(OFFENSIVE_ATTRIBUTE, true);
     api.onCustomEvent("combat:incoming-attack", incomingAttack);
-    api.registerCommand("autopray", toggleAutoPray, api.core.PlayerRights.NONE, "Toggle auto-prayer against monsters' attacks (learning aid)");
+    api.registerCommand("autopray", toggleAutoPray, api.core.PlayerRights.NONE, "Toggle auto-prayer against monsters' and players' attacks (learning aid)");
+    api.registerCommand("autoprayoff", toggleOffensive, api.core.PlayerRights.NONE, "Toggle whether auto-prayer also keeps up offensive prayers");
   },
 };
