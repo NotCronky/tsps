@@ -158,7 +158,7 @@ class Items(
 /**
  * Ground items. tsps sends every stack the player can see, keyed by its own stack id, with
  * absolute tiles and tick timers; the client gets OBJ_ADD/DEL/COUNT for the ones in its
- * scene, and the whole scene again after a rebuild clears it.
+ * scene, replacing any retained stacks when the scene rebuilds.
  */
 class GroundItems(private val send: (OutgoingGameMessage) -> Unit) {
     private class Stack(

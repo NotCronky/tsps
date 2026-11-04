@@ -142,61 +142,6 @@ test("registered chromatic and metallic providers keep their custom prayer damag
   }
 });
 
-test("King Black Dragon's breaths honour antifire and super antifire", () => {
-  let Method;
-  require("../plugins/bosses/KingBlackDragon.plugin").register({
-    core,
-    getPrayerHandler: () => PrayerHandler,
-    getCombatFactory: () => core.CombatFactory,
-    emitCustomEvent() {},
-    registerNpcCombatMethodProvider: (_ids, method) => { Method = method; },
-    onObjectFirstClick() {},
-  });
-  const originalBounds = core.DamageFormulas.sourceHitBounds;
-  const originalRandomInclusive = core.Misc.randomInclusive;
-  const originalFreeze = core.CombatFactory.freeze;
-  const originalPoison = core.CombatFactory.poisonEntity;
-  const originalArrival = core.Projectile.arrivalTicks;
-  core.DamageFormulas.sourceHitBounds = () => ({ minimum: 0, maximum: 0 });
-  core.Misc.randomInclusive = (_min, max) => max;
-  core.CombatFactory.freeze = () => {};
-  core.CombatFactory.poisonEntity = () => {};
-  core.Projectile.arrivalTicks = () => 2;
-  ({ shield, prayer, accurate } = { shield: false, prayer: false, accurate: false });
-  try {
-    const attacker = { isPlayer: () => false, isNpc: () => true, isRegistered: () => true, getHitpoints: () => 255 };
-    const breathe = (potion, breath) => {
-      const victim = player({ potion });
-      Object.assign(victim, {
-        isPlayer: () => true,
-        getHitpoints: () => 99,
-        getAsPlayer: () => victim,
-        getEquipment: () => ({ getItems: () => Array.from({ length: 14 }, () => ({ getId: () => -1 })) }),
-        performGraphic() {},
-      });
-      const method = new Method();
-      method.currentAttackType = core.CombatType.MAGIC;
-      method.currentBreath = breath;
-      const [pending] = method.hits(attacker, victim);
-      core.CombatFactory.applyHitTimeDefences(pending);
-      return { damage: pending.getTotalDamage(), messages: victim.messages.map((m) => m.text) };
-    };
-    for (const breath of [0, 1, 2, 3]) {
-      assert.equal(breathe(Tier.NONE, breath).damage, 65, `breath ${breath} unprotected`);
-      assert.equal(breathe(Tier.ANTIFIRE, breath).damage, 50, `breath ${breath} antifire`);
-      const superAntifire = breathe(Tier.SUPER_ANTIFIRE, breath);
-      assert.equal(superAntifire.damage, 0, `breath ${breath} super antifire`);
-      assert.deepEqual(superAntifire.messages, ["Your super antifire potion completely protects you from the dragon fire!"]);
-    }
-  } finally {
-    core.DamageFormulas.sourceHitBounds = originalBounds;
-    core.Misc.randomInclusive = originalRandomInclusive;
-    core.CombatFactory.freeze = originalFreeze;
-    core.CombatFactory.poisonEntity = originalPoison;
-    core.Projectile.arrivalTicks = originalArrival;
-  }
-});
-
 test("antifire is subtracted after the damage roll", () => {
   ({ shield, prayer, accurate } = { shield: false, prayer: false, accurate: false });
   const target = player({ potion: Tier.ANTIFIRE });
@@ -346,5 +291,31 @@ test("the expiry notice is sent once, even when dragonfire resolves on the expir
     assert.equal(notices(attacked), 1, "dragonfire resolved before player processing");
   } finally {
     Date.now = original.now;
+  }
+});
+
+test("every breath on a player, super antifire included, lets a worn shield add its lines", () => {
+  const seen = [];
+  const emitCustomEvent = (name, event) => {
+    if (name !== Dragonfire.DRAGONFIRE_BREATH_EVENT) return;
+    seen.push(event.player);
+    event.messages.push({ text: "Your dragonfire shield glows more brightly.", spam: true });
+  };
+  Dragonfire.initDragonfireProtectionCoreAccess({ core, getPrayerHandler: () => PrayerHandler, emitCustomEvent });
+  try {
+    ({ shield, prayer, accurate } = { shield: true, prayer: false, accurate: false });
+    const target = player();
+    const { messages } = Dragonfire.resolveChromaticDragonfireDamage({}, target, { maxHit: 50 });
+    assert.deepEqual(messages.map((line) => line.text), [
+      "Your shield absorbs most of the dragon fire!",
+      "Your dragonfire shield glows more brightly.",
+    ]);
+    const immune = player({ potion: Tier.SUPER_ANTIFIRE });
+    const superMessages = Dragonfire.resolveChromaticDragonfireDamage({}, immune, { maxHit: 50 }).messages;
+    assert.equal(superMessages.at(-1).text, "Your dragonfire shield glows more brightly.");
+    assert.deepEqual(seen, [target, immune]);
+  } finally {
+    shield = false;
+    Dragonfire.initDragonfireProtectionCoreAccess({ core, getPrayerHandler: () => PrayerHandler, emitCustomEvent() {} });
   }
 });

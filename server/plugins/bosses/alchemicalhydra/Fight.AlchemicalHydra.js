@@ -158,7 +158,8 @@ class Fight {
   }
 
   /**
-   * A spraying vent by the Hydra: its own takes the shield (it roars), any other empowers it.
+   * A spraying vent by the Hydra: its own takes the shield (it roars) and ends any empowerment;
+   * another empowers it while it is still shielded.
    * `done` holds the vents that already acted this spray, so each acts once.
    */
   eruptVents(players, done = new Set()) {
@@ -174,20 +175,24 @@ class Fight {
       if (colour === want) {
         if (!this.shielded) continue;
         this.shielded = false;
+        this.empowered = false;
         this.npc.forceChat?.(Common.message("roar"));
         for (const player of players) player.sendMessage(Common.message("weakened"));
-      } else if (!this.empowered) {
+      } else if (this.shielded && !this.empowered) {
         this.empowered = true;
         for (const player of players) player.sendMessage(Common.message("empowered"));
       }
     }
   }
 
-  /** The most an auto-attack hits for now: enraged, or raised by a wrong vent. */
+  /**
+   * The most a hit can take off the player: 35, 52 while an incorrect vent empowers it (up
+   * to 50% more, the Wiki's infobox's 35 -> 52), 55 once enraged.
+   */
   maxHit() {
     const { combat } = Common.data;
     if (this.enraged) return combat.enragedMaxHit;
-    return this.empowered ? Math.floor(combat.maxHit * combat.empoweredDamage) : combat.maxHit;
+    return this.empowered ? combat.empoweredMaxHit : combat.maxHit;
   }
 
   /** onNpcHitModify: 75% less damage while shielded (the enraged form keeps no shield). */

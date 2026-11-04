@@ -990,7 +990,8 @@ export class CombatFactory {
             }
 
             // Close interfaces while being hit (except developer rights).
-            if (playerTarget.getRights() != PlayerRights.DEVELOPER && playerTarget.busy()) {
+            if (playerTarget.getRights() != PlayerRights.DEVELOPER &&
+                (playerTarget.busy() || playerTarget.getPacketSender().hasInterruptibleInterface())) {
                 playerTarget.getPacketSender().sendInterfaceRemoval();
             }
 
@@ -1673,10 +1674,9 @@ export class CombatFactory {
 
         if (
             rangedWeapon === RangedWeapon.WEBWEAVER_BOW ||
-            rangedWeapon === RangedWeapon.CRAWS_BOW ||
-            rangedWeapon === RangedWeapon.TONALZTICS_OF_RALOS
+            rangedWeapon === RangedWeapon.CRAWS_BOW
         ) {
-            // TODO: consume a revenant ether / charge; charge storage is not modelled yet.
+            // TODO: consume a revenant ether; charge storage is not modelled yet.
             return;
         }
 

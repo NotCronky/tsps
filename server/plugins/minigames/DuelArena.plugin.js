@@ -14,6 +14,8 @@ const { TaskManager } = require("../../src/main/typescript/elvarg/game/task/Task
 const { FLAG_OP1, TYPE_GRAPHIC, TYPE_TEXT, createWidgetGroup } = require("../interface/widgetGroup");
 const { EQUIPMENT_SLOTS, addEquipmentWidgets } = require("../modes/pvp/PresetsWidget.PvpMode");
 const Scoreboard = require("./duelarena/Scoreboard.DuelArena");
+const Hospital = require("./duelarena/Hospital.DuelArena");
+const Matchmaking = require("./duelarena/Matchmaking.DuelArena");
 
 // Cache 237: confirmation group 756 and rule config varp 286.
 const ARENA = new Boundary(3326, 3383, 3197, 3295, 0);
@@ -338,7 +340,9 @@ function end(session, loser) {
   for (const player of session.players) sessions.delete(player);
   // A duel that reached the arena and has a loser: its record (the Emir's Arena scoreboards hear it).
   const winner = fought && loser ? session.players.find(player => player !== loser) : null;
-  if (winner) pluginApi.emitCustomEvent("duelarena:duel-won", { winner, loser });
+  // A matchmade fight is no Legacy Duel: its own event, so the Legacy record stays Legacy.
+  if (session.ranked) pluginApi.emitCustomEvent("pvp-arena:fight-ended", { players: session.players, winner, loser });
+  else if (winner) pluginApi.emitCustomEvent("duelarena:duel-won", { winner, loser });
   for (const player of session.players) {
     if (fought && player.getHitpoints() <= 0) pendingSafeDeaths.add(player);
     resetState(player);
@@ -626,6 +630,22 @@ function start(session) {
   session.task = new DuelCountdown(session);
   TaskManager.submit(session.task);
 }
+/** A fight the PvP Arena matchmaking arranged: no options or stakes, straight to the countdown. */
+function startArranged(players) {
+  // Staging movement requests placement, so busy() would also reject legitimate arrivals.
+  if (players.some(p => sessions.has(p) || p.getHitpoints() <= 0 || p.isDying
+    || p.isTeleportingReturn() || p.getStatus() !== PlayerStatus.NONE || inCombat(p))
+    || !arenaSpawns()) return false;
+  const session = { players, mask: 0, accepted: new Set(), offers: new Map(players.map(p => [p, new Map()])), stage: "confirm", ranked: true };
+  for (const p of players) {
+    sessions.set(p, session);
+    p.getMovementQueue().reset();
+    resetCombat(p);
+    p.getDueling().setInteract(players.find(other => other !== p));
+  }
+  start(session);
+  return true;
+}
 function accept(player, session, botEvent = "duelarena:accept") {
   if (!session.players.every(inZone) || !nearby(...session.players) || session.players.some(p => p.getHitpoints() <= 0 || inCombat(p))) return end(session);
   if (session.players.some((p, i) => snapshot(p) !== session.snapshots[i])) return showOptions(session, "Items changed. Please review the duel again.");
@@ -810,6 +830,8 @@ module.exports = {
     api.onCanUnequip(canUnequip);
     api.onServerShutdown(shutdown);
     Scoreboard.attach(api);
+    Hospital.attach(api);
+    Matchmaking.attach(api, { startArranged });
   },
   /** For server/tests/pvp-arena-scoreboard.test.cjs and server/tests/ironman.test.cjs. */
   _test: { accept, end, sessions, snapshot },

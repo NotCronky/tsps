@@ -1,6 +1,7 @@
 package gateway.up
 
 import gateway.coverage.DropCounter
+import gateway.session.PlayerOps
 import gateway.session.VarpMirror
 import gateway.tsps.TspsClientPacket
 import gateway.down.ChatStyle
@@ -140,7 +141,11 @@ class Upstream(
                         if (message.clanType == OWN_CLAN) send(TspsClientPacket.clanChat(OWN_CLAN, message.message)) else DropCounter.up(message)
                     message.type == GUEST_CLAN_CHAT_TYPE -> send(TspsClientPacket.clanChat(GUEST_CLAN, message.message))
                     else ->
-                        PUBLIC_CHAT_KINDS[message.type]?.let { send(TspsClientPacket.chat(it, message.message, publicChatStyle(message))) } ?: DropCounter.up(message)
+                        PUBLIC_CHAT_KINDS[message.type]?.let {
+                            // Native chat_send prepends a routing slash only for Friends Chat.
+                            val text = if (message.type == 2) message.message.removePrefix("/") else message.message
+                            send(TspsClientPacket.chat(it, text, publicChatStyle(message)))
+                        } ?: DropCounter.up(message)
                 }
             is ClanChannelKickUser -> clanChannelAction(message, message.clanId, KICK_USER, message.name)
             is AffinedClanSettingsAddBannedFromChannel -> clanChannelAction(message, message.clanId, BAN_USER, message.name)
@@ -165,7 +170,7 @@ class Upstream(
             }
             is ClickWorldMap -> send(WorldOps.worldMapClick(message.level, message.x, message.z))
             is Teleport -> send(WorldOps.teleport(message.level, message.x, message.z))
-            is OpPlayer -> send(TspsClientPacket.playerOp(message.op, message.index))
+            is OpPlayer -> send(TspsClientPacket.playerOp(PlayerOps.toTsps(message.op), message.index))
             is OpNpcV2 -> if (message.op in 1..5) send(TspsClientPacket.npcOp(message.op, message.index)) else DropCounter.up(message)
             is OpNpc6 -> send(TspsClientPacket.examineNpc(message.id))
             is OpLocV2 -> if (message.op in 1..5) send(WorldOps.loc(message.op, message.id, message.x, message.z)) else DropCounter.up(message)

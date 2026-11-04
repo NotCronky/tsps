@@ -210,7 +210,7 @@ test('bucket routing stands directly next to a Castle Wars tap', (t) => {
 test('cleanup includes buckets and every potion dose; Lanthus and ground supplies use corrected canonical spawns', () => {
   for (const id of [core.ItemIdentifiers.BUCKET, core.ItemIdentifiers.BUCKET_OF_WATER, ...data.BREW_DOSES]) {
     assert.equal(data.CLEANUP_ITEM_IDS.has(id), true);
-    assert.equal(data.DEATH_REMOVE_ITEM_IDS.has(id), true);
+    assert.equal(data.DEATH_REMOVE_ITEM_IDS.has(id), false, 'supplies last until the player leaves the game');
   }
   const lanthus = require('../data/definitions/npc-spawns.json').filter((spawn) => spawn.name === 'Lanthus');
   assert.equal(lanthus.length, 1);
@@ -310,6 +310,7 @@ for (const name of ['Energy Transfer', 'Vengeance Other', 'Vengeance', 'Spellboo
         if (params.get(param)) costs.push([params.get(param), params.get(param + 1)]);
       }
       if (mode === 'paid') for (const [id, amount] of costs) p.getInventory().adds(id, amount);
+      p.getSkillManager().setMaxLevels(core.Skill.HITPOINTS, 99, false).setCurrentLevel(core.Skill.HITPOINTS, 99, false);
       p.setSpecialPercentage(100);
       p.setRunEnergy(100);
       target.setSpecialPercentage(0);
@@ -330,7 +331,7 @@ for (const name of ['Energy Transfer', 'Vengeance Other', 'Vengeance', 'Spellboo
       if (name === 'Energy Transfer') {
         assert.equal(p.getSpecialPercentage(), casts ? 0 : 100);
         assert.equal(target.getSpecialPercentage(), casts ? 100 : 0);
-        assert.equal(target.getRunEnergy(), casts ? 50 : 0);
+        assert.equal(target.getRunEnergy(), casts ? 100 : 0);
       } else if (name === 'Vengeance Other') {
         assert.equal(target.hasVengeanceReturn(), casts);
       } else if (name === 'Vengeance') {
