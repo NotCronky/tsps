@@ -1,14 +1,14 @@
 "use strict";
 
-const { Location, Animation, Graphic, Priority, TeleportHandler, TeleportType } = require("./Core.Construction");
+const { Location, TeleportHandler, TeleportType } = require("./Core.Construction");
 const Ids = require("./Ids.Construction");
-const { JEWELLERY, DEFAULT_WILDERNESS_LEVEL } = require("../../items/Teleports.Jewellery");
+const { JEWELLERY, DEFAULT_WILDERNESS_LEVEL, xericsTeleportType } = require("../../items/Teleports.Jewellery");
 const House = require("./House.Construction");
 const Menu = require("./Menu.Construction");
 
 // rsprox captures: the mounted talisman casts arceuus_necromancy_anim with xeric_teleport_spotanim
-// and lands three ticks later, with no landing animation.
-const XERICS_TELEPORT = new TeleportType(3, new Animation(Ids.seq("arceuus_necromancy_anim"), Priority.HIGH), null, null, new Graphic(Ids.spotanim("xeric_teleport_spotanim")), null, null);
+// and lands three ticks later, with no landing animation; the carried talisman shares it.
+const XERICS_TELEPORT = xericsTeleportType();
 const MYTHS_GUILD = [2458, 2850, 0];
 
 const destinationsOf = key => JEWELLERY.find(piece => piece.key === key).destinations;
@@ -18,7 +18,7 @@ const tileOf = (key, label) => destinationsOf(key).find(entry => entry.label ===
  * Mounted amulets in the portal nexus room. Each left-click setting is its own loc, so configuring
  * one swaps the furniture's displayed loc; the base loc has no left-click teleport.
  * Destinations, menu titles and labels are from rsprox captures (script 217 arguments).
- * Xeric's tiles are the middle of the captured landing spots: tsps has no Xeric's talisman item.
+ * Xeric's tiles are the middle of the captured landing spots, shared with the carried talisman.
  */
 const AMULETS = {
   "Xeric's Talisman": {
@@ -27,11 +27,11 @@ const AMULETS = {
     configTitle: "Xeric's Talisman left click",
     teleportType: XERICS_TELEPORT,
     destinations: [
-      { label: "Xeric's Lookout", option: "Look out", loc: Ids.loc("poh_amulet_xeric_lookout"), tile: [1578, 3529, 0] },
-      { label: "Xeric's Glade", option: "Glade", loc: Ids.loc("poh_amulet_xeric_glade"), tile: [1751, 3566, 0] },
-      { label: "Xeric's Inferno", option: "Inferno", loc: Ids.loc("poh_amulet_xeric_inferno"), tile: [1505, 3819, 0] },
-      { label: "Xeric's Heart", option: "Heart", loc: Ids.loc("poh_amulet_xeric_heart"), tile: [1642, 3673, 0] },
-      { label: "Xeric's Honour", option: "Honour", loc: Ids.loc("poh_amulet_xeric_honour"), tile: [1254, 3563, 0] },
+      { label: "Xeric's Lookout", option: "Look out", loc: Ids.loc("poh_amulet_xeric_lookout"), tile: tileOf("xerics_talisman", "Xeric's Lookout") },
+      { label: "Xeric's Glade", option: "Glade", loc: Ids.loc("poh_amulet_xeric_glade"), tile: tileOf("xerics_talisman", "Xeric's Glade") },
+      { label: "Xeric's Inferno", option: "Inferno", loc: Ids.loc("poh_amulet_xeric_inferno"), tile: tileOf("xerics_talisman", "Xeric's Inferno") },
+      { label: "Xeric's Heart", option: "Heart", loc: Ids.loc("poh_amulet_xeric_heart"), tile: tileOf("xerics_talisman", "Xeric's Heart") },
+      { label: "Xeric's Honour", option: "Honour", loc: Ids.loc("poh_amulet_xeric_honour"), tile: tileOf("xerics_talisman", "Xeric's Honour") },
     ],
   },
   "Digsite Pendant": {

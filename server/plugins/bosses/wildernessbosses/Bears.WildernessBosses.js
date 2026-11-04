@@ -88,7 +88,15 @@ function canMelee(npc, bear, target) {
   return at.getZ() === npc.getLocation().getZ() && Common.edgeDistance(npc, at.getX(), at.getY()) === 1;
 }
 
-function protects(player, prayer) {
+/** The style a protection prayer stops. */
+function styleProtectedBy(prayer) {
+  return prayer === PrayerHandler.PROTECT_FROM_MAGIC ? "magic" : prayer === PrayerHandler.PROTECT_FROM_MISSILES ? "ranged" : "melee";
+}
+
+/** Whether `prayer` is up, judged now: the attack is announced first (for ::autopray). */
+function protects(player, prayer, npc = null) {
+  api.emitCustomEvent("combat:incoming-attack",
+    { attacker: npc, target: player, type: styleProtectedBy(prayer), cycle: core.World.getProcessCycle() });
   return PrayerHandler.isActivated(player, prayer);
 }
 
@@ -116,7 +124,7 @@ function melee(npc, bear, method, target) {
   if (!struck.includes(target) && target.isPlayer()) struck.push(target);
   for (const player of struck) {
     const rolled = Common.randomBetween(bear.meleeMin, bear.meleeMax);
-    const damage = protects(player, PrayerHandler.PROTECT_FROM_MELEE) ? Math.floor(rolled / 2) : rolled;
+    const damage = protects(player, PrayerHandler.PROTECT_FROM_MELEE, npc) ? Math.floor(rolled / 2) : rolled;
     Common.bossHit(npc, method, player, damage, 0);
   }
 }
@@ -147,7 +155,7 @@ function ranged(npc, bear, method) {
     projectileTo(npc, bear, player, RANGED, end);
     player.performGraphic(new core.Graphic(RANGED.impactGraphic, end));
     player.getPacketSender().sendSoundEffect(RANGED.impactSound, 1, end);
-    const damage = protects(player, PrayerHandler.PROTECT_FROM_MISSILES) ? 0 : Common.randomBetween(0, bear.rangedMax);
+    const damage = protects(player, PrayerHandler.PROTECT_FROM_MISSILES, npc) ? 0 : Common.randomBetween(0, bear.rangedMax);
     // Splat on the first tick at or after the crescent lands; floor - 1 hit before it (#1862).
     Common.bossHit(npc, method, player, damage, rangedHitTicks(end));
   }
@@ -195,7 +203,7 @@ function orb(npc, bear, target) {
     for (const player of lairPlayers(bear)) {
       const where = player.getLocation();
       if (where.getZ() !== at.getZ() || Math.max(Math.abs(where.getX() - at.getX()), Math.abs(where.getY() - at.getY())) > 1) continue;
-      if (!protects(player, PrayerHandler.PROTECT_FROM_MAGIC)) knockBack(npc, bear, player);
+      if (!protects(player, PrayerHandler.PROTECT_FROM_MAGIC, npc)) knockBack(npc, bear, player);
     }
   }, npc);
 }

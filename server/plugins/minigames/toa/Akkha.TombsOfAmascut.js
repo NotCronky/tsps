@@ -508,6 +508,7 @@ class AkkhaRoom extends Raid.Room {
   }
 
   landStyled(player, style, delay) {
+    Shared.announceAttack(this.akkha, player, style);
     if (!Shared.isProtected(player, style)) {
       this.failPerfect(`${Shared.displayName(player)} didn't pray against a ${style} attack.`);
     }
@@ -823,6 +824,7 @@ class AkkhaRoom extends Raid.Room {
   /** Wiki: scales with raid and path level; Protect from Magic comes off before the cap of 25; shared on a tile. */
   unstableDamage(victim, sharing) {
     let damage = this.maxHit(MAX_HIT.UNSTABLE);
+    Shared.announceAttack(this.akkha, victim, "magic");
     if (Shared.isProtected(victim, "magic")) damage = Math.floor(damage * UNSTABLE_PRAYER_THROUGH);
     return Math.floor(Math.min(MAX_HIT.UNSTABLE_CAP, damage) / sharing);
   }

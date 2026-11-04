@@ -27,6 +27,11 @@ const COINS = 995;
 const PVP_LAYOUT_SCRIPT = 386;
 const VARBIT_PVPA_BATTLEAREA_STATUS = 14017;
 const VARBIT_PVPA_TRANSMIT_CHALLENGE_OR_BATTLEAREA = 14022;
+// pvptut_active_tutorial: the PvP Arena tutorial running, -1 for none. The client starts every varp
+// at 0, which its prayer book (scripts 10157/1935) reads as a tutorial running whenever the player
+// stands in an instance (x >= 6400), and swaps in the tutorial's prayer set: Zeal for Piety.
+const VARP_PVPTUT_ACTIVE_TUTORIAL = 5850;
+const NO_TUTORIAL = -1;
 const CACHE_HIDDEN = [2, 3, 5, 29, 42, 70, 82, 83, 84, 88, 98]
   .map(component => (CACHE_OPTIONS << 16) | component);
 const CONFIRM = 756;
@@ -773,6 +778,11 @@ function canAttack(event) {
 function shutdown() {
   for (const session of new Set(sessions.values())) end(session);
 }
+/** No PvP Arena tutorial is running (the tutorial itself isn't built). */
+function clearTutorial({ player }) {
+  player.getPacketSender().sendConfig(VARP_PVPTUT_ACTIVE_TUTORIAL, NO_TUTORIAL);
+}
+
 module.exports = {
   name: "DuelArena",
   enableStaking,
@@ -780,6 +790,7 @@ module.exports = {
     pluginApi = api;
     api.registerCustomInterface(DUEL_INTERFACE);
     api.onPlayerLogin(processPlayer);
+    api.onPlayerLogin(clearTutorial);
     api.onPlayerProcess(processPlayer);
     api.onPlayerOption(handleOption);
     api.onInterfaceActionClick(handleInterface);

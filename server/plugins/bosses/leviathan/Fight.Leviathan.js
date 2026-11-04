@@ -67,6 +67,7 @@ class Fight {
       if (!this.awakened) this.bites++;
       Common.animate(this.boss, "bite");
       this.session.biteTails?.();
+      Common.announceAttack(this.boss, this.player, "melee");
       if (!Common.protectedFrom(this.player, "melee")) {
         const amount = Common.random(0, Common.data.damage.melee);
         if (this.awakened) Common.damage(this, amount);
@@ -94,6 +95,7 @@ class Fight {
     const startup = interval > 1 || !this.shots;
     Common.animate(this.boss, startup ? "orbStart" : "orbLoop");
     Common.projectile(this, style, flight, startup);
+    Common.announceAttack(this.boss, this.player, style, flight);
     const epoch = this.volleyEpoch;
     if (interval > 1) this.at(1, () => {
       if (this.alive() && this.volleyEpoch === epoch && !this.stunnedUntil && !this.special) Common.animate(this.boss, "orb");

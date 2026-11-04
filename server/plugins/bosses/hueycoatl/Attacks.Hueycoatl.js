@@ -30,6 +30,7 @@ const SYMBOL_COUNT = Object.freeze({ mountainside: 15, summit: 22 });
 const SYMBOL_CENTRE = Object.freeze({ mountainside: [1525, 3274], summit: [1512, 3284] });
 const SLAM_SOUND_RADIUS = 15;
 
+let api = null;
 let core = null;
 let PrayerHandler = null;
 
@@ -69,6 +70,9 @@ function launchFeather(session, player, style, generation) {
   sender.sendProjectile(from, at, 0, flight, Shared.GFX.FEATHER[style], FEATHER.startHeight, FEATHER.endHeight,
     player, 0, FEATHER.angle, FEATHER.distanceOffset);
   sender.sendSoundEffect(Shared.SOUND.FEATHER_LAUNCH[style], 1, 0);
+  // Prayer is judged as it lands, outside the hit queue: announced now (for ::autopray).
+  api.emitCustomEvent("combat:incoming-attack", { attacker: null, target: player, type: style === "missiles" ? "ranged" : style,
+    cycle: core.World.getProcessCycle() + Math.floor(flight / CYCLES_PER_TICK) });
   session.schedule(Math.floor(flight / CYCLES_PER_TICK), () => {
     if (session.fight.generation !== generation || !Shared.alive(player)) return;
     const prayed = PrayerHandler.isActivated(player, PROTECTION()[style]);
@@ -173,6 +177,7 @@ function slam(session, side) {
 }
 
 function attach(pluginApi) {
+  api = pluginApi;
   core = pluginApi.core;
   PrayerHandler = core.PrayerHandler;
 }

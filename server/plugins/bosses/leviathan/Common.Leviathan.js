@@ -88,6 +88,10 @@ function biteDamage(fight, amount) {
   // hit on the following NPC turn. Immediate executeHit reflects too early.
   CombatFactory.addPendingHit(hit);
 }
+/** Tells content an attack is on its way (::autopray): its style, its prayer judged `ticks` from now. */
+function announceAttack(npc, player, style, ticks = 0) {
+  api.emitCustomEvent("combat:incoming-attack", { attacker: npc, target: player, type: style, cycle: core.World.getProcessCycle() + Math.max(0, ticks) });
+}
 function protectedFrom(player, style) {
   const prayer = { magic: "PROTECT_FROM_MAGIC", ranged: "PROTECT_FROM_MISSILES", melee: "PROTECT_FROM_MELEE" }[style];
   return core.PrayerHandler.isActivated(player, core.PrayerHandler[prayer]);
@@ -120,7 +124,7 @@ function shadowSpell(spell) {
   return ["SHADOW_RUSH", "SHADOW_BURST", "SHADOW_BLITZ", "SHADOW_BARRAGE"].some(name =>
     core.CombatSpells[name].getSpell().spellId() === spell?.spellId?.());
 }
-module.exports = { init, random, pick, count, normalKills, MONSTER, location, tile, sourceTile, later, animate, graphic, tileGraphic, damage, biteDamage, protectedFrom, projectile, tileProjectile,
+module.exports = { init, random, pick, count, normalKills, MONSTER, location, tile, sourceTile, later, animate, graphic, tileGraphic, damage, biteDamage, protectedFrom, announceAttack, projectile, tileProjectile,
   shadowSpell,
   INSIDE_ATTRIBUTE, KILLS_ATTRIBUTE, AWAKENED_KILLS_ATTRIBUTE, BEST_ATTRIBUTE, AWAKENED_BEST_ATTRIBUTE, DEATHS_ATTRIBUTE,
   get api() { return api; }, get core() { return core; }, get data() { return data; }, get ids() { return ids; } };

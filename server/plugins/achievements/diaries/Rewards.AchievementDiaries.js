@@ -95,4 +95,24 @@ module.exports = function attachRewards(api) {
   api.onCustomEvent("npc-dialogue:action", reclaim);
 };
 
-Object.assign(module.exports, { claimableTier, talkTo, reclaim, owns });
+/**
+ * Claims every finished, unclaimed tier as the diary NPC would, lowest first, stopping at a level
+ * the reward needs or a full inventory. Returns the tiers claimed and why it stopped, if it did.
+ */
+function claimAll(player, diary) {
+  const claimed = [];
+  for (let tier = claimableTier(player, diary); tier; tier = claimableTier(player, diary)) {
+    const data = diary.tiers[tier];
+    if (!meetsRequirement(player, data.requirement)) {
+      return { claimed, stopped: `${tier} needs ${data.requirement.level} ${data.requirement.skill}` };
+    }
+    if (player.getInventory().getFreeSlots() < data.rewardItems.length) {
+      return { claimed, stopped: `${tier} needs ${data.rewardItems.length} free inventory spaces` };
+    }
+    grant(player, diary, tier);
+    claimed.push(tier);
+  }
+  return { claimed, stopped: null };
+}
+
+Object.assign(module.exports, { claimableTier, talkTo, reclaim, owns, claimAll });

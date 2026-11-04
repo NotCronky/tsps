@@ -19,6 +19,9 @@
  * The Wiki gives no Crystalline maxes without prayer: they are the Corrupted ratio per tier
  * (51 / 42 / 36 / 26), and its stomp the unprotected, unarmoured max.
  *
+ * Its attacks judge prayer as they land, outside the hit queue, so each one is announced with
+ * `combat:incoming-attack` as it is thrown (for ::autopray).
+ *
  * Near-Reality's (the Wiki gives none): the ids, animations and projectiles, a tornado summon
  * every 56 ticks, a floor pattern every 30, orange for 6 ticks, and a 15% chance for a magic
  * attack to disable prayers. The patterns are Near-Reality's three sets.
@@ -296,7 +299,10 @@ class HunllefFight {
     Projectile.createProjectile(this.npc, player, projectileId, 45, speed, 50, 25).sendProjectile();
     const tier = armourTier(player, this.mode);
     const style = this.style;
-    Shared.later(this, Math.max(1, Math.ceil(speed / 30)), () => {
+    const ticks = Math.max(1, Math.ceil(speed / 30));
+    Shared.api().emitCustomEvent("combat:incoming-attack",
+      { attacker: this.npc, target: player, type: style, cycle: Shared.core().World.getProcessCycle() + ticks });
+    Shared.later(this, ticks, () => {
       if (this.run.stage !== "boss") return;
       const prayed = protects(player, style);
       const amount = randomInt(this.random, 0, MAX_HIT[this.mode][prayed ? "prayed" : "unprayed"][tier]);

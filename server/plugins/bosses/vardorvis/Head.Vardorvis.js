@@ -74,6 +74,7 @@ function launch(fight, style) {
   player.performGraphicInSlot(2, Common.graphic(spec.impact, head.impact));
   fight.heads ??= [];
   fight.heads.push(npc);
+  Common.announceAttack(npc, player, spec.prayer, head.flightTicks);
   fight.at(head.flightTicks, () => {
     if (npc.isRegistered()) Common.api.removeNpc(npc);
     fight.heads = fight.heads.filter((other) => other !== npc);

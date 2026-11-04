@@ -356,6 +356,10 @@ class AttackCycle {
     const player = this.player;
     const hit = new PendingHit(this.boss, player, styleMethod(style), { delay, rollAccuracy: false });
     CombatFactory.applyStyleDamage(hit, maxHit, { bypassProtectionPrayer: halvedByPrayer });
+    if (halvedByPrayer) {
+      Shared.api().emitCustomEvent("combat:incoming-attack",
+        { attacker: this.boss, target: player, type: style, cycle: Shared.core().World.getProcessCycle() });
+    }
     if (halvedByPrayer && Shared.isProtected(player, style)) {
       for (const part of hit.getHits()) part.setDamage(Math.floor(part.getDamage() / 2));
       hit.updateTotalDamage();
@@ -376,6 +380,9 @@ class AttackCycle {
     boss.performAnimation(new Animation(ANIM.ORB));
     const lands = Shared.projectile(this.run.area, boss, this.player, ORB[style].projectile, orbFlight(this.run.level));
     Shared.sound(this.player, Shared.SOUND.ORB_LAUNCH[style], { delay: Shared.SOUND.ORB_LAUNCH_DELAY });
+    // Prayer is judged as it lands, outside the hit queue: announced now (for ::autopray).
+    Shared.api().emitCustomEvent("combat:incoming-attack",
+      { attacker: boss, target: this.player, type: style, cycle: Shared.core().World.getProcessCycle() + lands });
     this.after(lands, () => this.orbLands(style));
   }
 

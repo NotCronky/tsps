@@ -183,8 +183,14 @@ class GroundItems(private val send: (OutgoingGameMessage) -> Unit) {
         this.tick = tick
     }
 
-    /** A rebuild: the client has dropped every obj, so the new scene's stacks go again. */
+    /**
+     * A rebuild: the new scene's stacks go again. Each one shown is deleted first, by its absolute
+     * tile: a client that dropped every obj with the old scene ignores the delete, and one that kept
+     * them (a rebuild of an instance it already has, as the Gauntlet sends each time a room is lit)
+     * would otherwise show another copy per rebuild that nothing can pick up.
+     */
     fun rebuild(zoneX: Int, zoneZ: Int) {
+        for (id in shown) stacks[id]?.let { send(ObjDelSpecific(it.item, it.quantity, it.level, it.x, it.z)) }
         sceneX = (zoneX - SCENE_RADIUS_ZONES) shl 3
         sceneZ = (zoneZ - SCENE_RADIUS_ZONES) shl 3
         shown.clear()

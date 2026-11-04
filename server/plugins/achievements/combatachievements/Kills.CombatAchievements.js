@@ -25,6 +25,7 @@
 const Data = require("./Data.CombatAchievements");
 const Progress = require("./Progress.CombatAchievements");
 const LEGACY_KEYS = require("./data/legacy-monster-keys.json").names;
+const ANNOUNCED_BY_PLUGIN = new Set(require("./data/monsters.json").announcedByPlugin);
 
 const KILLS_ATTRIBUTE = "combat-achievements:kills";
 
@@ -86,7 +87,16 @@ function onNpcDeath(event) {
   if (!player?.isPlayer?.() && !player?.getPacketSender) return;
   const monster = Data.monsterForNpc(npcName(event.npc) ?? "");
   if (!monster || monster.byEvent) return;
-  addKill(player, monster);
+  addKill(player, monster, { announce: announcesKill(monster) ? (kills) => tellKillCount(player, npcName(event.npc), kills) : null });
+}
+
+/** A boss page's kill is told to the player, unless its own plugin tells it (data/monsters.json). */
+function announcesKill(monster) {
+  return monster.killVarps.length > 0 && !ANNOUNCED_BY_PLUGIN.has(monster.name);
+}
+
+function tellKillCount(player, name, kills) {
+  player.sendMessage?.(`Your ${name} kill count is: <col=ff0000>${kills}</col>.`);
 }
 
 function onKill(request) {

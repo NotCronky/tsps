@@ -55,8 +55,13 @@ module.exports = function registerInfernoMonsters(api, hooks) {
     }(Math.max(1, ticks), npc, false));
   }
 
-  /** Lands a hit of `style` after `ticks`, rolled (prayer included) at that moment. */
+  /**
+   * Lands a hit of `style` after `ticks`, rolled (prayer included) at that moment. The hit queue
+   * only hears of it then, so it is announced as it is thrown.
+   */
   function land(npc, target, style, ticks, onLand) {
+    api.emitCustomEvent("combat:incoming-attack",
+      { attacker: npc, target, type: style, cycle: World.getProcessCycle() + Math.max(1, ticks) });
     TaskManager.submit(new class extends Task {
       execute() {
         this.stop();

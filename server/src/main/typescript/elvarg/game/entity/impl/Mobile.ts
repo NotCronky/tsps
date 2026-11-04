@@ -34,8 +34,6 @@ const getRegionManager = () =>
   require("../../collision/RegionManager").RegionManager as typeof import("../../collision/RegionManager").RegionManager;
 const getWorld = () =>
   require("../../World").World as typeof import("../../World").World;
-const getPlayerRights = () =>
-  require("../../model/rights/PlayerRights").PlayerRights as typeof import("../../model/rights/PlayerRights").PlayerRights;
 const getPluginManager = () =>
   require("../../../plugins/PluginManager").PluginManager as typeof import("../../../plugins/PluginManager").PluginManager;
 
@@ -51,7 +49,7 @@ class MobileTask extends Task {
 }
 
 /** An actor tint: cycles from now, HSL (-1 keeps the model's own) and how strongly (0-255). */
-/** Set (true) on a developer who takes damage and loses items on death after all; ::mortal toggles it. Not saved. */
+/** Set (true) on an owner or developer who loses items on death after all; ::mortal toggles it. Not saved. */
 export const MORTAL_DEVELOPER_ATTRIBUTE = "dev:mortal";
 
 export type ActorTint = {
@@ -718,21 +716,14 @@ export abstract class Mobile extends Entity {
         // Final damage includes direct hits (poison, recoil, scripted hazards) as well as
         // ordinary combat impacts. Plugins mutate the HitDamage before the HP cap.
         getPluginManager().emitCustomEvent("combat:damage-apply", { target: this, hit });
-        const PlayerRights = getPlayerRights();
-        // Developers take no damage unless they turned it on (::mortal, for this session).
-        const protectedDeveloper =
-          this.isPlayer() &&
-          this.getAsPlayer()?.getRights?.() === PlayerRights.DEVELOPER &&
-          this.getAttribute?.(MORTAL_DEVELOPER_ATTRIBUTE) !== true;
+        // Developers take damage like anyone (::infhp makes them invulnerable); they keep their
+        // items on death unless ::mortal (PlayerDeath.keepsEverything).
         if (hit.getDamage() > this.getHitpoints())
             // Clamp overkill to an integer: HitDamage floors its damage, so passing a legacy
             // fractional HP (0.5) here turned the killing hit into 0 and left the target alive.
             hit.setDamage(Math.max(1, Math.ceil(this.getHitpoints())));
         if (hit.getDamage() < 0)
             hit.setDamage(0);
-        if (protectedDeveloper) {
-            return hit;
-        }
         let outcome = this.getHitpoints() - hit.getDamage();
         if (outcome < 0)
             outcome = 0;

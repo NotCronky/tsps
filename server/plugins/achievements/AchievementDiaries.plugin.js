@@ -18,6 +18,7 @@
  *   ::diary <name>                          each tier's progress
  *   ::diary <name> <tier|all> complete      complete the tier(s) task by task
  *   ::diary <name> <tier|all> reset         clear the tier(s), rewards included
+ *   ::diary <name> claim                    claim every finished tier's rewards, as its NPC gives them
  */
 const { TIERS, DIARIES, BY_KEY } = require("./diaries/Data.AchievementDiaries");
 const Progress = require("./diaries/Progress.AchievementDiaries");
@@ -25,7 +26,7 @@ const Journal = require("./diaries/Journal.AchievementDiaries");
 const Rewards = require("./diaries/Rewards.AchievementDiaries");
 const Lamps = require("./diaries/Lamps.AchievementDiaries");
 
-const USAGE = "Usage: ::diary <name> [easy|medium|hard|elite|all] [complete|reset]";
+const USAGE = "Usage: ::diary <name> [easy|medium|hard|elite|all] [complete|reset], or ::diary <name> claim";
 
 function normalise(text) {
   return String(text).toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
@@ -75,10 +76,10 @@ function describe(player, diary) {
 
 function diaryCommand({ player, parts }) {
   const args = parts.slice(1).map((part) => part.toLowerCase());
-  const action = ["complete", "reset"].includes(args.at(-1)) ? args.pop() : null;
+  const action = ["complete", "reset", "claim"].includes(args.at(-1)) ? args.pop() : null;
   const tierArg = [...TIERS, "all"].includes(args.at(-1)) ? args.pop() : null;
   const name = args.join(" ");
-  if (!name || (action && !tierArg)) {
+  if (!name || (action && action !== "claim" && !tierArg)) {
     player.sendMessage(USAGE);
     return true;
   }
@@ -95,6 +96,9 @@ function diaryCommand({ player, parts }) {
     for (const tier of tiers) for (const task of diary.tiers[tier].tasks) Progress.completeTask(player, diary, task.key);
   } else if (action === "reset") {
     Progress.resetTiers(player, diary, tiers);
+  } else if (action === "claim") {
+    const { claimed, stopped } = Rewards.claimAll(player, diary);
+    player.sendMessage(`${diary.name}: claimed ${claimed.length > 0 ? claimed.join(", ") : "nothing"}${stopped ? ` (stopped: ${stopped})` : ""}.`);
   }
   player.sendMessage(describe(player, diary));
   return true;
@@ -114,7 +118,7 @@ module.exports = {
     api.onCustomEvent("diary:is-reward-claimed", onIsRewardClaimed);
     api.onCustomEvent("diary:all-complete", onAllComplete);
     api.onCustomEvent("diary:tokkul", onTokkul);
-    api.registerCommand("diary", diaryCommand, api.core.PlayerRights.ADMINISTRATOR, "Show or set achievement diary progress: ::diary <name> [tier|all] [complete|reset]");
+    api.registerCommand("diary", diaryCommand, api.core.PlayerRights.ADMINISTRATOR, "Show or set achievement diary progress: ::diary <name> [tier|all] [complete|reset], or ::diary <name> claim");
   },
   _test: { diaryCommand, findDiaries, onTask, onIsComplete, onAllComplete, onTokkul },
 };

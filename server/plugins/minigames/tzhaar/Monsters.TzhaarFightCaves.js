@@ -6,7 +6,7 @@ const CombatAchievements = require("./CombatAchievements.TzhaarFightCaves");
 module.exports = function registerTzhaarMonsters(api) {
   const {
     Animation, CombatFactory, CombatMethod, CombatType, Graphic, HitDamage, HitMask,
-    MeleeCombatMethod, Misc, NpcIdentifiers: Npcs, PendingHit, Projectile, Skill, Task, TaskManager,
+    MeleeCombatMethod, Misc, NpcIdentifiers: Npcs, PendingHit, Projectile, Skill, Task, TaskManager, World,
   } = api.core;
 
   const HEAL_GRAPHIC = new Graphic(444); // TZHAAR_HEAL
@@ -160,6 +160,9 @@ module.exports = function registerTzhaarMonsters(api) {
 
     hits(jad, target) {
       if (this.style === CombatType.MELEE) return [new PendingHit(jad, target, this, 0)];
+      // Prayer is judged at impact, which the hit queue only hears of then: announced as thrown.
+      api.emitCustomEvent("combat:incoming-attack",
+        { attacker: jad, target, type: this.style, cycle: World.getProcessCycle() + JAD_IMPACT_TICKS });
       TaskManager.submit(new JadImpact(jad, target, JAD_STYLES[this.style].method));
       return [];
     }

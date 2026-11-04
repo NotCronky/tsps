@@ -478,6 +478,12 @@ function frozen(entity) {
   return !!entity.getTimers?.().has?.(TimerKey.FREEZE);
 }
 
+/** Tells content an attack is on its way (::autopray): its style, its prayer judged `ticks` from now. */
+function announceAttack(npc, target, style, ticks = 0) {
+  if (!target?.isPlayer?.()) return;
+  api().emitCustomEvent("combat:incoming-attack", { attacker: npc, target, type: style, cycle: cycle() + Math.max(0, ticks) });
+}
+
 function isProtected(player, style) {
   const { PrayerHandler } = core();
   const prayer = style === "magic" ? PrayerHandler.PROTECT_FROM_MAGIC
@@ -521,7 +527,7 @@ function removeDawnbringer(player) {
 
 module.exports = {
   removeDawnbringer, unscript, restoreDefence, random, randomOf, shuffle, gfx, graphicAt, sound, areaSound, damage, heal, projectile, lineOfSight, floorFree,
-  distanceTo, covers, walkStraight, frozen, isProtected,
+  distanceTo, covers, walkStraight, frozen, isProtected, announceAttack,
   bind, core, api,
   THEATRE, THEATRE_PLANES, VER_SINHAZA, OUTSIDE, NPC, OBJECT, ITEM, INTERFACE, SCRIPT, VARP, VARBIT,
   HEALTH_BAR, MAX_PARTY_SIZE, MAX_APPLICANTS, LIST_ROWS, OVERLAY_HUD_UID, MODES, ROOMS, ROOM_ORDER,

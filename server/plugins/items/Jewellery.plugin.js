@@ -39,6 +39,17 @@ for (const piece of JEWELLERY) {
 let pluginApi;
 let BonusManager;
 
+/**
+ * The charges a carried piece has now. Most pieces are one item id per charge count; a piece with
+ * `chargesMeta` is one item holding a count on its meta (Xeric's talisman's 1,000).
+ */
+function chargesOf(entry, item) {
+  const meta = entry.piece.chargesMeta;
+  if (!meta || entry.charges <= 0) return entry.charges;
+  const value = Math.floor(Number(item?.getMetaValue?.(meta.key)) || 0);
+  return Math.max(0, Math.min(meta.max, value));
+}
+
 function nextItemId(piece, charges) {
   if (charges === 1) return piece.spent;
   return piece.charged.find(([, remaining]) => remaining === charges - 1)?.[0] ?? piece.spent;
@@ -85,10 +96,20 @@ function findItem(player, item, itemId = item.getId()) {
 function useCharge(player, item, castId = item.getId()) {
   const location = findItem(player, item, castId);
   const entry = location ? JEWELLERY_BY_ITEM.get(location.item.getId()) : null;
-  if (!entry || entry.charges <= 0) return;
-  const { piece, charges } = entry;
+  if (!entry) return;
+  const { piece } = entry;
+  const charges = chargesOf(entry, location.item);
+  if (charges <= 0) return;
   player.sendMessage(`<col=${CHARGE_COLOUR}>${chargeMessage(piece, charges)}</col>`);
   if (charges === Infinity) return;
+  if (piece.chargesMeta) {
+    // One item holding a count: the last charge leaves the spent (inert) piece behind.
+    location.item.setMetaValue(piece.chargesMeta.key, charges > 1 ? charges - 1 : undefined);
+    if (charges === 1 && piece.spent != null) location.item.setId(piece.spent);
+    location.container.refreshItems();
+    if (location.container === player.getEquipment()) player.getUpdateFlag().flag(Flag.APPEARANCE);
+    return;
+  }
   const nextId = nextItemId(piece, charges);
   const equipped = location.container === player.getEquipment();
   if (nextId != null) {
@@ -116,11 +137,16 @@ function teleport(player, item, destination) {
   const { piece } = entry;
   // A spent/uncharged piece must never teleport for free, whatever menu path
   // reached here (Rub already checks, the worn/right-click options did not).
-  if (entry.charges <= 0) {
+  if (chargesOf(entry, item) <= 0) {
     player.sendMessage(piece.emptyMessage);
     return;
   }
+  // A locked destination costs nothing (Wiki, Xeric's talisman: no charge since 2019).
   if (destination.colosseumRank && !colosseumRankReached(player, destination.colosseumRank)) {
+    statement(player, destination.lockedMessage);
+    return;
+  }
+  if (destination.unlockAttribute && player.getAttribute(destination.unlockAttribute) !== true) {
     statement(player, destination.lockedMessage);
     return;
   }
@@ -129,7 +155,8 @@ function teleport(player, item, destination) {
     return;
   }
   const castId = item.getId();
-  TeleportHandler.teleport(player, target, TeleportType.NORMAL, false, () => useCharge(player, item, castId));
+  const teleportType = piece.teleportType?.() ?? TeleportType.NORMAL;
+  TeleportHandler.teleport(player, target, teleportType, false, () => useCharge(player, item, castId));
 }
 
 /** Whether the player has reached a Fortis Colosseum Glory title (the Colosseum plugin answers). */
@@ -180,7 +207,7 @@ function promptDestinations(player, item, destinations, includeNowhere) {
 
 function rub(player, item) {
   const entry = JEWELLERY_BY_ITEM.get(item.getId());
-  if (entry.charges <= 0) {
+  if (chargesOf(entry, item) <= 0) {
     player.sendMessage(entry.piece.emptyMessage);
     return;
   }
@@ -252,7 +279,7 @@ function subOp(player, item, entry, action) {
   if (action === "teleport") {
     rub(player, item);
   } else if (action === "check") {
-    player.sendMessage(checkMessage(entry.piece, entry.charges));
+    player.sendMessage(checkMessage(entry.piece, chargesOf(entry, item)));
     // The slayer ring's Check also shows the task (Slayer.plugin.js).
     if (entry.piece.key === "slayer") pluginApi.emitCustomEvent("slayer:check", { player, handled: false });
   } else {
@@ -297,7 +324,7 @@ function handleJewelleryAction(event) {
   if (subOpDestination) {
     event.handled = true;
     // A Rub submenu teleport rubs first, as Rub does (rsprox 723, 3170).
-    if (piece.rubMessage && entry.charges > 0) player.sendMessage(piece.rubMessage);
+    if (piece.rubMessage && chargesOf(entry, item) > 0) player.sendMessage(piece.rubMessage);
     confirmAndTeleport(player, item, subOpDestination);
     return;
   }
@@ -318,7 +345,7 @@ function handleJewelleryAction(event) {
     if (destination) {
       event.handled = true;
       // A Rub submenu teleport rubs first, as Rub does (rsprox 723, 3170).
-      if (piece.rubMessage && entry.charges > 0) player.sendMessage(piece.rubMessage);
+      if (piece.rubMessage && chargesOf(entry, item) > 0) player.sendMessage(piece.rubMessage);
       confirmAndTeleport(player, item, destination);
     }
     return;
@@ -345,7 +372,8 @@ module.exports = {
     BonusManager = api.getBonusManager();
     api.onItemAction(handleJewelleryAction);
     require("./Recharge.Jewellery")(api);
+    require("./XericsTalisman.Jewellery")(api);
     api.onSpellCast(castRechargeDragonstone.bind(null, api));
   },
-  _test: { JEWELLERY_BY_ITEM, chargeMessage, nextItemId, useCharge },
+  _test: { JEWELLERY_BY_ITEM, chargeMessage, chargesOf, nextItemId, useCharge, teleport, rub },
 };

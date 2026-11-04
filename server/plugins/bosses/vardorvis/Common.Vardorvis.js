@@ -113,6 +113,14 @@ function styleMethod(style) {
   return method;
 }
 
+const STYLE_OF_PRAYER = { PROTECT_FROM_MELEE: "melee", PROTECT_FROM_MISSILES: "ranged", PROTECT_FROM_MAGIC: "magic" };
+
+/** Tells content an attack is on its way (::autopray): the protection prayer it needs, judged `ticks` from now. */
+function announceAttack(npc, player, prayer, ticks = 0) {
+  api.emitCustomEvent("combat:incoming-attack",
+    { attacker: npc, target: player, type: STYLE_OF_PRAYER[prayer], cycle: core.World.getProcessCycle() + Math.max(0, ticks) });
+}
+
 /**
  * A styled hit from the boss landing `delay` ticks from now, rolled like any NPC attack. The
  * protection prayer of its style leaves `prayerShare` of the damage; `accurate` skips the roll.
@@ -121,6 +129,7 @@ function strike(npc, player, style, maxHit, delay, { prayer = null, prayerShare 
   const { PendingHit, CombatFactory, World } = core;
   const hit = new PendingHit(npc, player, styleMethod(style), { delay, rollAccuracy: !accurate });
   CombatFactory.applyStyleDamage(hit, Math.max(0, Math.floor(maxHit)), { bypassProtectionPrayer: true });
+  if (prayer) announceAttack(npc, player, prayer);
   if (prayer && protectedFrom(player, prayer)) {
     for (const part of hit.getHits()) part.setDamage(Math.floor(part.getDamage() * prayerShare));
     hit.updateTotalDamage();
@@ -159,7 +168,7 @@ const count = (player, key) => Math.max(0, Math.trunc(Number(player.getAttribute
 
 module.exports = {
   init, later, randomInt, pick, shuffle, toWorld, facing, tile, siteTile, graphic, sound, areaSound,
-  protectedFrom, strike, damage, lifesteal, formatTicks, count,
+  protectedFrom, announceAttack, strike, damage, lifesteal, formatTicks, count,
   CYCLES_PER_TICK,
   INSIDE_ATTRIBUTE, KILLS_ATTRIBUTE, AWAKENED_KILLS_ATTRIBUTE, BEST_TICKS_ATTRIBUTE, AWAKENED_BEST_TICKS_ATTRIBUTE,
   get api() { return api; },

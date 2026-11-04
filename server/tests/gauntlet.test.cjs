@@ -98,6 +98,21 @@ test('only the start and boss rooms are drawn at first; lighting a room opens th
   }
 });
 
+test('items dropped in the maze stay for the run (instances keep drops about three hours)', () => {
+  const { ItemOnGround, State } = require('../dist/game/entity/impl/grounditem/ItemOnGround');
+  const { ItemOnGroundManager } = require('../dist/game/entity/impl/grounditem/ItemOnGroundManager');
+  const { Item } = require('../dist/game/model/Item');
+  const map = GauntletMap.createMap({ corrupted: true, random: seeded(3) });
+  try {
+    const stack = (area) => new ItemOnGround(State.SEEN_BY_PLAYER, 'Dropper', new Location(0, 0, 1), new Item(23834, 1), true, -1, area);
+    assert.equal(stack(map).getDespawnDelay(), 18000);
+    assert.equal(stack(null).getDespawnDelay(), ItemOnGroundManager.DESPAWN_DELAY, 'the world is unchanged');
+    assert.equal(stack(map).setDespawnDelay(50).getDespawnDelay(), 50, 'a stack\'s own timer still wins');
+  } finally {
+    map.destroy();
+  }
+});
+
 test('rooms are found from their tiles', () => {
   const map = GauntletMap.createMap({ random: seeded(5) });
   try {
@@ -188,7 +203,7 @@ function fakeApi() {
     getItemOnGroundManager: () => ({ registerLocation: (player, item) => (hooks.ground ??= []).push(item.getId()) }),
     spawnNpc: ({ id, x, y, z }) => { const npc = fakeNpc(id, x, y, z); spawnedNpcs.push(npc); return npc; },
     removeNpc: (npc) => { npc.removed = true; },
-    emitCustomEvent() {},
+    emitCustomEvent: (name, payload) => PluginManager.emitCustomEvent(name, payload),
   };
 }
 
@@ -738,8 +753,10 @@ test('nothing attacks into the start room', () => {
 const Hunllef = require('../plugins/minigames/gauntlet/Hunllef.Gauntlet');
 const Weapons = require('../plugins/minigames/gauntlet/Weapons.Gauntlet');
 const Commands = require('../plugins/minigames/gauntlet/Commands.Gauntlet');
-const { PrayerHandler } = require('../dist/game/content/PrayerHandler');
+const { PrayerHandler, PrayerData } = require('../dist/game/content/PrayerHandler');
 const { CombatType } = require('../dist/game/content/combat/CombatType');
+const AutoPrayer = require('../plugins/combat/AutoPrayer.plugin');
+const { World } = require('../dist/game/World');
 
 function bossRun(name, options = {}) {
   bindHooks();
@@ -875,6 +892,68 @@ test('floor tiles turn blue, then orange, and orange ones hurt', () => {
   } finally {
     run.end('exit', { fade: false });
   }
+});
+
+/** PrayerHandler's activation needs a whole player; these stand in for it on the fake one. */
+function withFakePrayers(action) {
+  const saved = ['canUse', 'activatePrayerPrayerId', 'deactivatePrayers'].map((name) => [name, PrayerHandler[name]]);
+  PrayerHandler.canUse = () => true;
+  PrayerHandler.activatePrayerPrayerId = (player, prayer) => {
+    if (PrayerHandler.PROTECTION_PRAYERS.includes(prayer)) for (const other of PrayerHandler.PROTECTION_PRAYERS) player.prayers[other] = false;
+    player.prayers[prayer] = true;
+  };
+  PrayerHandler.deactivatePrayers = (player) => { player.prayers.length = 0; };
+  try {
+    return action();
+  } finally {
+    for (const [name, fn] of saved) PrayerHandler[name] = fn;
+  }
+}
+
+/** ::autopray, listening on the real plugin hooks, with the Hunllef's announcements sent to them. */
+function withAutoPrayer(action) {
+  PluginManager.customEventHooks.delete('combat:incoming-attack');
+  const api = PluginManager.createApi('GauntletAutoPrayerTest');
+  AutoPrayer.register({
+    core: PluginManager.getCoreApi(),
+    onCustomEvent: (name, handler) => api.onCustomEvent(name, handler),
+    persistAttribute() {},
+    registerCommand() {},
+  });
+  try {
+    return action();
+  } finally {
+    PluginManager.customEventHooks.delete('combat:incoming-attack');
+  }
+}
+
+/** Ticks that also move the world's cycle on, which auto-prayer reads. */
+function cycles(count) {
+  for (let i = 0; i < count; i++) {
+    World.processCycle++;
+    TaskManager.process();
+  }
+}
+
+test('auto-prayer keeps the right protection up through the Hunllef\'s style switches', () => {
+  withFakePrayers(() => withAutoPrayer(() => {
+    for (const autopray of [true, false]) {
+      const { player, run, fight } = bossRun(autopray ? 'Learner' : 'Unaided');
+      try {
+        player.setAttribute(AutoPrayer.AUTOPRAY_ATTRIBUTE, autopray);
+        fight.random = () => 0.5;
+        fight.nextTornado = Infinity;
+        fight.nextPattern = Infinity;
+        player.moveTo(fight.npc.getLocation().transform(-4, 0));
+        cycles(60);
+        assert.ok(fight.attacks >= 9, `${fight.attacks} attacks, past two switches`);
+        if (autopray) assert.equal(fight.taken.offPrayer, 0, 'every attack landed on the right prayer');
+        else assert.ok(fight.taken.offPrayer > 0, 'without it, nothing prays');
+      } finally {
+        run.end('exit', { fade: false });
+      }
+    }
+  }));
 });
 
 test('killing the Hunllef completes the run', () => {

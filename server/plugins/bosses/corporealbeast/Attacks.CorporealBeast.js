@@ -88,6 +88,8 @@ function rollMagic(npc, player, method, max, delay) {
   const hit = new PendingHit(npc, player, method, delay);
   method.stance = stance;
   CombatFactory.applyStyleDamage(hit, max, { bypassProtectionPrayer: true });
+  Shared.api().emitCustomEvent("combat:incoming-attack",
+    { attacker: npc, target: player, type: "magic", cycle: Shared.core().World.getProcessCycle() });
   if (PrayerHandler.isActivated(player, PrayerHandler.PROTECT_FROM_MAGIC)) {
     for (const part of hit.getHits()) part.setDamage(Math.floor(part.getDamage() * PROTECT_MAGIC_KEEPS));
     hit.updateTotalDamage();

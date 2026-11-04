@@ -204,6 +204,8 @@ function soulAttack(soul) {
   soul.npc.performAnimation(new Animation(seq));
   if (!soul.target?.isRegistered?.()) return;
   // The prayer that counts is the one up as the soul attacks (Wiki).
+  Common.api.emitCustomEvent("combat:incoming-attack",
+    { attacker: soul.npc, target: soul.target, type: soul.kind, cycle: Common.core.World.getProcessCycle() });
   const prayers = Common.api.getPrayerHandler();
   soul.prayed = prayers.isActivated(soul.target, prayers[SOUL_PRAYER[soul.kind]]);
   const projectile = soul.kind === "ranged" ? ids.spotanims.ranged : soul.kind === "magic" ? ids.spotanims.magic : ids.spotanims.soulMelee;

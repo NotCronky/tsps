@@ -171,4 +171,4 @@ An instance scene is drawn from its REBUILD_REGION centre chunk less 6, not from
 
 Developer commands: `::yamahp <hitpoints>` (1666 or 833 reach a phase change at his next attack), `::yamakill` (a hit of his remaining hitpoints from the player, in phase 3), `::yamajudgehp <hitpoints>`, `::yamajudgekill`.
 
-Developers take no damage and keep everything on death. `::mortal` turns both off for the session (and back on), to test deaths and the Voice holding the items.
+Developers keep everything on death. `::mortal` turns that off for the session (and back on), to test deaths and the Voice holding the items.

@@ -191,6 +191,7 @@ class Fight {
       this.boss.performAnimation(new Animation(Common.data.animations[style + ((hand + index) % 2 ? 'Alt' : '')]));
       // This owner-only instance uses the captured fixed-lifetime tile projectile.
       this.player.getPacketSender().sendProjectile(Projectile.centreOf(this.boss), this.player.getLocation(), 0, geometry.arrivalCycles, Common.data.projectiles[style], geometry.startHeight, geometry.endHeight, this.player, geometry.launchDelay, geometry.angle, geometry.progress);
+      Common.api.emitCustomEvent('combat:incoming-attack', { attacker: this.boss, target: this.player, type: style, cycle: Common.core.World.getProcessCycle() + geometry.impactTicks });
       this.at(geometry.impactTicks, () => this.impact(style), true);
       if (this.enraged)
         this.spawnTentacles();

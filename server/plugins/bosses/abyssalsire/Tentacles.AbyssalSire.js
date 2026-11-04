@@ -55,6 +55,7 @@ class Tentacles {
     const { max, prayedFactor } = Common.data.tentacles;
     const hit = new PendingHit(npc, fight.player, tentacleMethod(), { delay: 0 });
     CombatFactory.applyStyleDamage(hit, max, { bypassProtectionPrayer: true });
+    Common.api.emitCustomEvent("combat:incoming-attack", { attacker: npc, target: fight.player, type: "melee", cycle: World.getProcessCycle() });
     if (PrayerHandler.isActivated(fight.player, PrayerHandler.PROTECT_FROM_MELEE)) {
       for (const part of hit.getHits()) part.setDamage(Math.floor(part.getDamage() * prayedFactor));
       hit.updateTotalDamage();

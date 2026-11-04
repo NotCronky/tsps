@@ -541,6 +541,12 @@ function floorFree(area, tile) {
   return !RegionManager.blocked(location, area);
 }
 
+/** Tells content an attack is on its way (::autopray): its style, its prayer judged `ticks` from now. */
+function announceAttack(npc, target, style, ticks = 0) {
+  if (!target?.isPlayer?.()) return;
+  api().emitCustomEvent("combat:incoming-attack", { attacker: npc, target, type: style, cycle: cycle() + Math.max(0, ticks) });
+}
+
 function isProtected(player, style) {
   const { PrayerHandler } = core();
   const prayer = style === "magic" ? PrayerHandler.PROTECT_FROM_MAGIC
@@ -581,5 +587,5 @@ module.exports = {
   LOBBY, ARCHIVE_SQUARES, ARCHIVE_BOXES, ARCHIVE_PLANES, CHASM, TILE, MAX_PARTY_SIZE, MAX_APPLICANTS, LIST_ROWS, SLOT,
   loc, tileOf, inBox, inLobby, inArchive, cycle, later, repeat, cancel, mesbox, options, fade, closeFade,
   displayName, random, randomOf, shuffle, gfx, graphicAt, sound, areaSound, damage, projectile,
-  distanceTo, floorFree, forceMove, standingOn, damageNow, isProtected, triggerInts, questComplete, attr,
+  distanceTo, floorFree, forceMove, standingOn, damageNow, isProtected, announceAttack, triggerInts, questComplete, attr,
 };

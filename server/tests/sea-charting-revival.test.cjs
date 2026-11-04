@@ -125,7 +125,7 @@ test('existing preventDeath observers cannot spend a corpse life', t => {
   sparedNpc = null;
   damage(npc, [90], f.player); assert.equal(npc.getHitpoints(), 90);
 });
-test('actual damage observers retain overkill caps, mitigation, dead, locked HP and protected developer rules', t => {
+test('actual damage observers retain overkill caps, mitigation, dead, locked HP and developer damage rules', t => {
   const f = captain(t), npc = drink(f, 'fish_stoutier'), observed = [];
   const hit = n => new core.HitDamage(n, core.HitMask.RED).onApplied(taken => observed.push(taken));
   npc.setHitpoints(20); npc.getCombat().getHitQueue().addPendingDamage([hit(50), hit(50)]);
@@ -133,9 +133,11 @@ test('actual damage observers retain overkill caps, mitigation, dead, locked HP 
   const other = drink(f, 'fish_stoutier'); other.setHitpointsLocked(true);
   other.getCombat().getHitQueue().addPendingDamage([hit(50)]); other.getCombat().getHitQueue().process(++core.World.processCycle);
   assert.deepEqual(observed.splice(0), [0]); assert.equal(other.getHitpoints(), 140);
+  // Developers take damage like anyone; only their items are safe on death.
   f.player.setRights(core.PlayerRights.DEVELOPER); f.player.setHitpoints(50);
-  f.player.getCombat().getHitQueue().addPendingDamage([hit(50)]); f.player.getCombat().getHitQueue().process(++core.World.processCycle);
-  assert.deepEqual(observed.splice(0), [0]); assert.equal(f.player.getHitpoints(), 50);
+  f.player.getCombat().getHitQueue().addPendingDamage([hit(20)]); f.player.getCombat().getHitQueue().process(++core.World.processCycle);
+  assert.deepEqual(observed.splice(0), [20]); assert.equal(f.player.getHitpoints(), 30);
+  f.player.setHitpoints(50);
   f.player.setRights(core.PlayerRights.PLAYER);
   const api = PluginManager.createApi('ChartingDamageObserverTest');
   api.onCustomEvent('combat:damage-apply', ({ target, hit }) => { if (target === f.player) hit.setDamage(7); });

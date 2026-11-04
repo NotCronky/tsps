@@ -184,6 +184,28 @@ test("kill counts: a named NPC's death counts and finishes the kill-count tasks 
   assert.equal(Progress.isComplete(player, kbd.tasks.find((task) => task.killCount === 25).id), false);
 });
 
+test("kill counts: a boss without its own message is told its count; one with its own is not told twice", () => {
+  const player = createPlayer();
+  const thermy = { getCurrentDefinition: () => ({ getName: () => "Thermonuclear smoke devil" }) };
+  Kills.onNpcDeath({ killer: player, npc: thermy });
+  Kills.onNpcDeath({ killer: player, npc: thermy });
+  assert.equal(Kills.killCount(player, Data.monsterNamed("Thermonuclear Smoke Devil")), 2);
+  assert.ok(player.log.includes("varp 1524=2"), "total_thermonuclear_smoke_devil_kills");
+  assert.ok(player.log.includes("Your Thermonuclear smoke devil kill count is: <col=ff0000>2</col>."));
+
+  const zulrah = createPlayer();
+  Kills.onNpcDeath({ killer: zulrah, npc: { getCurrentDefinition: () => ({ getName: () => "Zulrah" }) } });
+  assert.equal(zulrah.log.filter((line) => /kill count is/.test(line)).length, 0, "Zulrah's shrine tells it");
+  const blackDragon = createPlayer();
+  Kills.onNpcDeath({ killer: blackDragon, npc: { getCurrentDefinition: () => ({ getName: () => "Black dragon" }) } });
+  assert.equal(blackDragon.log.filter((line) => /kill count is/.test(line)).length, 0, "not a boss page");
+});
+
+test("kill counts: every name in announcedByPlugin is a boss page", () => {
+  const listed = require("../plugins/achievements/combatachievements/data/monsters.json").announcedByPlugin;
+  assert.deepEqual(listed.filter((name) => !(Data.monsterNamed(name)?.killVarps.length > 0)), []);
+});
+
 test("kill counts: saves keyed by the old cache's monster keys read by name, and save by name", () => {
   const player = createPlayer();
   // osrs-241_2026-09-30 keys: 32 King Black Dragon, 71 Zulrah (both moved up one with the Fractured Archive).

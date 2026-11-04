@@ -3,8 +3,9 @@
  * - she punches (4658) in reach, or casts (7173) an earth blast (139) that lands at 46 + 10 cycles
  *   a tile (its heights are the capture's 172/124 in the server's quarter units); her melee can
  *   poison (8);
- * - each attack has a 1/5 chance to summon three growthlings, one batch at a time and at least
- *   20 ticks apart; while any lives, she takes no damage;
+ * - once she is below ~75% health, each attack she makes or takes has a 1/5 chance to summon
+ *   three growthlings, one batch at a time and at least 20 ticks apart; while any lives, she
+ *   takes no damage;
  * - a growthling hit with an axe or magic secateurs equipped dies at once ("You prune the
  *   Growthling."); otherwise "Cut the growthling down with an axe or secateurs.", and it can be
  *   hurt but never killed;
@@ -70,10 +71,19 @@ function freeTileNear(npc, session) {
   return null;
 }
 
-/** On an attack: the 1/5 roll, when no batch is alive and the last was 20+ ticks ago. */
+/** Whether she has lost enough health (~25%, Wiki) to start summoning. */
+function hurtEnough(npc) {
+  const max = npc.getMaxHitpoints?.() ?? 0;
+  return max > 0 && npc.getHitpoints() < max * DATA.growthlings.belowHealth;
+}
+
+/**
+ * When she attacks or is attacked: the 1/5 roll, once she is below 75% health, no batch is alive
+ * and the last was 20+ ticks ago.
+ */
 function maybeSummon(npc, target) {
   const session = Lair.sessionForNpc(npc);
-  if (!session || !roll(DATA.growthlings.chance)) return;
+  if (!session || !hurtEnough(npc) || !roll(DATA.growthlings.chance)) return;
   const growth = state(session);
   const now = core.World.getProcessCycle();
   if (liveGrowthlings(session).length > 0 || now - growth.lastSummon < DATA.growthlings.cooldown) return;
@@ -156,6 +166,8 @@ function modifyHit({ npc, hit }) {
   if (id === LAIR.boss) {
     const session = Lair.sessionForNpc(npc);
     if (session && liveGrowthlings(session).length > 0) zero(hit);
+    const attacker = hit?.getAttacker?.();
+    if (session && attacker?.isPlayer?.()) maybeSummon(npc, attacker);
     return;
   }
   if (id !== DATA.growthling) return;

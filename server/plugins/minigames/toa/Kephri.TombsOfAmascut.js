@@ -507,6 +507,7 @@ class KephriRoom extends Raid.Room {
   fireballHit(player, what) {
     const top = this.maxHit(FIREBALL_MAX_HIT * (this.aerialAssault ? AERIAL_FACTOR : 1));
     let damage = Shared.random(Math.floor(top / 2), top);
+    Shared.announceAttack(this.kephri, player, "magic");
     if (Shared.isProtected(player, "magic")) damage = Math.floor(damage / PRAYER_THIRD);
     Shared.damage(player, damage);
     if (damage > 0) this.failPerfect(player, what);
@@ -825,6 +826,7 @@ class KephriRoom extends Raid.Room {
     for (const player of players) {
       if (player.getLocation().getDistance(npc.getLocation()) > SPITTER_RANGE) continue;
       const ticks = Shared.tileProjectile(this.area, npc, player, PROJECTILE.SPIT, { delay: 36, duration: 14, perTile: 5, startHeight: 24, endHeight: 31 });
+      Shared.announceAttack(npc, player, "ranged", ticks);
       this.later(ticks, () => {
         if (!this.inChallenge(player) || player.getHitpoints() <= 0) return;
         let damage = Shared.random(0, this.maxHit(SPIT_MAX_HIT));
@@ -855,6 +857,7 @@ class KephriRoom extends Raid.Room {
       const origin = npc.getLocation().transform(1, 1);
       for (const player of players) {
         const ticks = Shared.tileProjectile(this.area, origin, player, PROJECTILE.ARCANE, { duration: 115, perTile: 0, startHeight: 0, endHeight: 0, angle: 20 });
+        Shared.announceAttack(npc, player, "magic", ticks);
         this.later(ticks, () => {
           if (!this.inChallenge(player) || player.getHitpoints() <= 0) return;
           const top = this.maxHit(ARCANE_MAX_HIT);

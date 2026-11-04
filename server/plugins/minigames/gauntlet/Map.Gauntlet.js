@@ -15,6 +15,8 @@
 
 const Shared = require("./Shared.Gauntlet");
 
+/** Three hours of ticks: how long instances usually keep dropped items (Wiki, Items). */
+const GROUND_ITEM_DESPAWN_TICKS = 3 * 60 * 100;
 const GRID = 7;
 const CENTRE = 3;
 const ROOM_CHUNKS = 2;
@@ -130,6 +132,11 @@ function mapClass() {
 
     allowSummonPet() {
       return false;
+    }
+
+    /** Drops stay for the whole run: instances keep them about three hours (Wiki, Items). */
+    getGroundItemDespawnDelay() {
+      return GROUND_ITEM_DESPAWN_TICKS;
     }
 
     isMulti() {

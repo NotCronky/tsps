@@ -911,6 +911,7 @@ class WardensRoom extends WardenRoomBase {
       for (const prayer of PrayerHandler.PROTECTION_PRAYERS) PrayerHandler.deactivatePrayer(player, prayer);
       player.sendMessage(kind.message);
       player.sendMessage("<col=ff3045>Your protection prayers have been disabled!</col>");
+      Shared.announceAttack(moving, player, kind.style, 4);
     }
     this.later(4, () => {
       if (!this.movingCanAttack) return;

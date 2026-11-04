@@ -35,7 +35,9 @@ function equippedNames(player) {
 function protectedFrom(player, monster) {
   const names = equippedNames(player);
   if (monster.protection.some((prefix) => names.some((name) => name.startsWith(prefix)))) return true;
-  return monster.protection.includes(HELMET) && helmetGiven(player);
+  if (!monster.protection.includes(HELMET)) return false;
+  // Every variant (Black, Hooded, Araxyte... and their (i) forms) protects, not only the plain one.
+  return names.some((name) => name.toLowerCase().includes("slayer helmet")) || helmetGiven(player);
 }
 
 /** Whether content gives the player a Slayer helmet's effects without one ("slayer:helmet", a league relic). */

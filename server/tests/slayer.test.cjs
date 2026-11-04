@@ -473,6 +473,22 @@ test("protective gear: a dust devil hits a bare face for 16 and drains", () => {
   assert.equal(Equipment.protectedFrom(helmet, Equipment.GEAR.monsters[0]), true, "a Slayer helmet covers earmuffs");
 });
 
+test("protective gear: every Slayer helmet variant and its (i) protects", () => {
+  const ids = Object.entries(core.ItemIdentifiers)
+    .filter(([key, id]) => typeof id === "number" && /SLAYER_HELMET/.test(key) && !/DISPLAY/.test(key))
+    .map(([, id]) => id);
+  assert.ok(ids.includes(core.ItemIdentifiers.HOODED_SLAYER_HELMET_I_), "the hooded (i) is among them");
+  const covered = Equipment.GEAR.monsters.filter((monster) => monster.protection.includes("Slayer helmet"));
+  const unprotected = [];
+  for (const id of ids) {
+    const player = equip(createPlayer(), { 0: id });
+    for (const monster of covered) {
+      if (!Equipment.protectedFrom(player, monster)) unprotected.push(`${id} vs ${monster.names[0]}`);
+    }
+  }
+  assert.deepEqual(unprotected, []);
+});
+
 test("kurask only take damage from leaf-bladed weapons", () => {
   const kurask = npcNamed("Kurask");
   const hitWith = (weapon) => {

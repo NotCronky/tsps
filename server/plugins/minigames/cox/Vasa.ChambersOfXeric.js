@@ -151,7 +151,11 @@ class VasaRoom extends Raid.Room {
     if (!this.alive()) return;
     if (this.state !== "asleep" && this.state !== "waking") {
       // Wiki: up to 8 a tick; Strategies: Protect from Melee when running through him.
-      for (const player of this.raiders()) if (this.under(player) && !Shared.isProtected(player, "melee")) Shared.damage(player, Shared.random(1, STOMP_MAX));
+      for (const player of this.raiders()) {
+        if (!this.under(player)) continue;
+        Shared.announceAttack(this.vasa, player, "melee");
+        if (!Shared.isProtected(player, "melee")) Shared.damage(player, Shared.random(1, STOMP_MAX));
+      }
     }
     switch (this.state) {
       case "asleep": return this.watch();
@@ -265,6 +269,7 @@ class VasaRoom extends Raid.Room {
     if (close.length > 0 && this.blast > 0) {
       const damage = Math.min(99, Math.floor(this.blast / close.length));
       for (const player of close) {
+        if (far.includes(player)) Shared.announceAttack(this.vasa, player, "magic");
         if (far.includes(player) && Shared.isProtected(player, "magic")) continue;
         Shared.damage(player, damage);
       }

@@ -873,15 +873,15 @@ module.exports = {
       return true;
     }, PlayerRights.ADMINISTRATOR, "Teleport to coordinates");
 
-    // Developers take no damage; this turns it on (and off again) to test fights for real.
+    // Owners and developers keep their items on death; this turns that off (and on again) to test deaths for real.
     api.registerCommand("mortal", ({ player }) => {
       const mortal = player.getAttribute(MORTAL_DEVELOPER_ATTRIBUTE) !== true;
       player.setAttribute(MORTAL_DEVELOPER_ATTRIBUTE, mortal ? true : null);
       player.sendMessage(mortal
-        ? "You now take damage and lose items on death, like any player. ::mortal again to stop."
-        : "You no longer take damage, and keep everything on death.");
+        ? "You now lose items on death, like any player. ::mortal again to stop."
+        : "You keep everything on death again.");
       return true;
-    }, PlayerRights.DEVELOPER, "Toggle taking damage and losing items on death as a developer (this session)");
+    }, PlayerRights.DEVELOPER, "Toggle losing items on death as an owner or developer (this session)");
 
     api.registerCommand("coords", ({ player }) => {
       const location = player.getLocation();

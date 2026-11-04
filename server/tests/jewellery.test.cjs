@@ -18,12 +18,19 @@ TeleportHandler.checkReqs = (player, target, wildernessLevel) => {
 };
 /** When set, arrivals wait here instead of landing at once (something can happen mid-teleport). */
 let pendingArrivals = null;
-TeleportHandler.teleport = (player, target, type, warning, onArrival) =>
-  (pendingArrivals ? pendingArrivals.push(onArrival) : onArrival?.());
+/** The teleport type of each teleport, for the pieces with their own (Xeric's talisman). */
+const teleportTypes = [];
+TeleportHandler.teleport = (player, target, type, warning, onArrival) => {
+  teleportTypes.push(type);
+  return pendingArrivals ? pendingArrivals.push(onArrival) : onArrival?.();
+};
 
 let prompts = [];
 let itemAction;
 let itemOnObject;
+/** Named item actions and item-on-item uses registered by name (Xeric's talisman's unit). */
+const namedActions = {};
+const itemOnItems = [];
 const completeQuests = new Set();
 require("../plugins/quests/QuestRuntime").getRegisteredQuests = () =>
   ["Heroes' Quest", "Legends' Quest"].map((name) => ({ name, isComplete: () => completeQuests.has(name) }));
@@ -44,8 +51,13 @@ class StatementDialogue {
 Jewellery.register({
   getBonusManager: () => ({ update() {} }),
   core: { ObjectIdentifiers, ItemIdentifiers, ItemDefinition, ObjectDefinition, Flag: require("../dist/game/model/Flag").Flag, DialogueChainBuilder, StatementDialogue },
-  onItemAction: (handler) => { itemAction = handler; },
+  onItemAction: (nameOrHandler, actions) => {
+    if (typeof nameOrHandler === "function") itemAction = nameOrHandler;
+    else namedActions[nameOrHandler] = actions;
+  },
   onItemOnObject: (handler) => { itemOnObject = handler; },
+  persistAttribute() {},
+  onItemOnItem: (a, b, handler) => itemOnItems.push({ names: [a, b], handler }),
   onSpellCast() {},
   emitCustomEvent: (name, payload) => {
     customEvents.push([name, payload]);
@@ -737,3 +749,140 @@ test("desktop and mobile cache transforms both resolve the charging sites", () =
     }
   }
 });
+
+// --- Xeric's talisman (Teleports.Jewellery.js "xerics_talisman", XericsTalisman.Jewellery.js) --
+
+const CHARGES = "xerics-talisman-charges";
+const talismanWith = (charges) => {
+  const item = new Item(ItemIdentifiers.XERICS_TALISMAN, 1);
+  if (charges) item.setMetaValue(CHARGES, charges);
+  return item;
+};
+/** A player with attributes and a stacking inventory, enough for charging and unlocking. */
+function talismanPlayer() {
+  const player = createPlayer();
+  const attributes = new Map();
+  player.getAttribute = (key) => attributes.get(key);
+  player.setAttribute = (key, value) => attributes.set(key, value);
+  const items = player.inventory.getItems();
+  Object.assign(player.inventory, {
+    getAmount: (id) => items.reduce((sum, item) => sum + (item?.getId() === id ? item.getAmount() : 0), 0),
+    contains: (id) => items.some((item) => item?.getId() === id),
+    getFreeSlots: () => items.filter((item) => item == null).length,
+    deleteNumber(id, amount) {
+      const slot = items.findIndex((item) => item?.getId() === id);
+      const left = items[slot].getAmount() - amount;
+      items[slot] = left > 0 ? new Item(id, left) : null;
+    },
+    adds(id, amount) {
+      const slot = items.findIndex((item) => item?.getId() === id);
+      if (slot >= 0) items[slot] = new Item(id, items[slot].getAmount() + amount);
+      else items[items.indexOf(null)] = new Item(id, amount);
+    },
+  });
+  return player;
+}
+function use(player, used, usedWith) {
+  const event = { player, usedItem: used, usedWithItem: usedWith, usedItemId: used.getId(), usedWithItemId: usedWith.getId(), handled: false };
+  const name = (item) => ItemDefinition.forId(item.getId()).getName();
+  const hook = itemOnItems.find(({ names }) => names.includes(name(used)) && names.includes(name(usedWith)) && name(used) !== name(usedWith));
+  assert.ok(hook, `no use of ${name(used)} on ${name(usedWith)}`);
+  hook.handler(event);
+  return event;
+}
+
+test("Xeric's talisman: Rub lists its five teleports and one costs a charge, with Xeric's own teleport", () => {
+  const player = talismanPlayer();
+  const talisman = talismanWith(3);
+  player.inventory.setItem(0, talisman);
+  assert.equal(inventoryClick(player, talisman, "Rub").handled, true);
+  assert.deepEqual(prompts[0].options.map((entry) => entry.text), ["Xeric's Lookout", "Xeric's Glade", "Xeric's Inferno", "Xeric's Heart", "Xeric's Honour"]);
+  pick("Xeric's Inferno");
+  assert.deepEqual(teleports[0].target, [1505, 3819, 0]);
+  assert.equal(teleportTypes.at(-1), require("../plugins/items/Teleports.Jewellery").xericsTeleportType(), "arceuus_necromancy_anim and xeric_teleport_spotanim, not the standard teleport");
+  assert.equal(talisman.getMetaValue(CHARGES), 2);
+  assert.ok(player.messages.includes("<col=7f007f>Your talisman has 2 charges left.</col>"));
+});
+
+test("Xeric's talisman: the Rub submenu and the worn options teleport straight there", () => {
+  const player = talismanPlayer();
+  const talisman = talismanWith(10);
+  player.inventory.setItem(0, talisman);
+  inventoryClick(player, talisman, "Rub", { subOpId: 2 });
+  assert.deepEqual(teleports.at(-1).target, [1751, 3566, 0], "Xeric's Glade");
+  player.inventory.setItem(0, null);
+  player.equipment.setItem(Equipment.AMULET_SLOT, talisman);
+  assert.equal(equippedClick(player, talisman, 2, "Xeric's Lookout").handled, true);
+  assert.deepEqual(teleports.at(-1).target, [1578, 3529, 0]);
+  assert.equal(talisman.getMetaValue(CHARGES), 8);
+});
+
+test("Xeric's talisman: the last charge leaves it inert; with none it never teleports", () => {
+  const player = talismanPlayer();
+  const talisman = talismanWith(1);
+  player.inventory.setItem(0, talisman);
+  inventoryClick(player, talisman, "Rub");
+  pick("Xeric's Heart");
+  assert.equal(talisman.getId(), ItemIdentifiers.XERICS_TALISMAN_INERT_);
+  assert.equal(talisman.getMetaValue(CHARGES), undefined);
+  assert.ok(player.messages.includes("<col=7f007f>Your talisman has run out of charges.</col>"));
+
+  const empty = talismanWith(0);
+  player.inventory.setItem(1, empty);
+  prompts = [];
+  teleports.length = 0;
+  inventoryClick(player, empty, "Rub");
+  assert.equal(prompts.length, 0);
+  assert.equal(teleports.length, 0);
+  assert.equal(player.messages.at(-1), "Your talisman has no charges left.");
+});
+
+test("Xeric's Honour is locked until an ancient tablet is used on it, and a locked try costs nothing", () => {
+  const player = talismanPlayer();
+  const talisman = talismanWith(5);
+  player.inventory.setItem(0, talisman);
+  inventoryClick(player, talisman, "Rub");
+  pick("Xeric's Honour");
+  assert.equal(teleports.length, 0);
+  assert.equal(talisman.getMetaValue(CHARGES), 5, "no charge for a locked teleport (Wiki)");
+  assert.match(player.statements.at(-1), /ancient tablet/);
+
+  const tablet = new Item(ItemIdentifiers.ANCIENT_TABLET, 1);
+  player.inventory.setItem(1, tablet);
+  use(player, tablet, talisman);
+  assert.equal(player.inventory.getItems()[1], null, "the tablet is used up");
+  inventoryClick(player, talisman, "Rub");
+  pick("Xeric's Honour");
+  assert.deepEqual(teleports.at(-1).target, [1254, 3563, 0]);
+  assert.equal(talisman.getMetaValue(CHARGES), 4);
+});
+
+test("Xeric's talisman: fangs charge it one each to 1,000, Check counts, Uncharge gives them back inert", () => {
+  const player = talismanPlayer();
+  const talisman = new Item(ItemIdentifiers.XERICS_TALISMAN_INERT_, 1);
+  player.inventory.setItem(0, talisman);
+  player.inventory.setItem(1, new Item(ItemIdentifiers.LIZARDMAN_FANG, 1200));
+  use(player, player.inventory.getItems()[1], talisman);
+  assert.equal(talisman.getId(), ItemIdentifiers.XERICS_TALISMAN, "the inert talisman wakes up");
+  assert.equal(talisman.getMetaValue(CHARGES), 1000, "at most 1,000 charges (Wiki)");
+  assert.equal(player.inventory.getAmount(ItemIdentifiers.LIZARDMAN_FANG), 200);
+
+  namedActions["Xeric's talisman"].Check({ player, item: talisman });
+  assert.equal(player.messages.at(-1), "Your talisman has 1,000 charges.");
+
+  namedActions["Xeric's talisman"].Uncharge({ player, item: talisman });
+  assert.equal(talisman.getId(), ItemIdentifiers.XERICS_TALISMAN_INERT_);
+  assert.equal(player.inventory.getAmount(ItemIdentifiers.LIZARDMAN_FANG), 1200, "every fang back");
+});
+
+test("an inert talisman dismantles into 100 fangs, after asking", () => {
+  const player = talismanPlayer();
+  const talisman = new Item(ItemIdentifiers.XERICS_TALISMAN_INERT_, 1);
+  player.inventory.setItem(4, talisman);
+  namedActions["Xeric's talisman (inert)"].Dismantle({ player, item: talisman });
+  assert.equal(player.inventory.getItems()[4], talisman, "nothing until confirmed");
+  pick("Yes, dismantle it.");
+  assert.equal(player.inventory.getAmount(ItemIdentifiers.XERICS_TALISMAN_INERT_), 0);
+  assert.equal(player.inventory.getAmount(ItemIdentifiers.LIZARDMAN_FANG), 100);
+});
+

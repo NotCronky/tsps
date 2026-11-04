@@ -255,6 +255,7 @@ class BloatRoom extends Raid.Room {
     const ticks = Shared.projectile(this.area, source, player, graphic, FLIES_PROJECTILE);
     const damage = Shared.random(flies.min, flies.max);
     Shared.areaSound(this.area, player, Shared.randomOf(SOUND.FLIES));
+    Shared.announceAttack(source, player, "ranged", Math.max(0, ticks - 1));
     this.later(Math.max(0, ticks - 1), () => {
       if (player.getHitpoints() <= 0) return;
       Shared.damage(player, Shared.isProtected(player, "ranged") ? Math.floor(damage * flies.protected) : damage);

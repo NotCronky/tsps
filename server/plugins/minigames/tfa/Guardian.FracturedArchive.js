@@ -493,6 +493,7 @@ class GuardianRoom extends Raid.Room {
           for (const target of this.fighters()) {
             if (Shared.distanceTo(vine, target.getLocation()) > VINE_REACH) continue;
             // Damage with no attacker, so it doesn't pull the player's auto retaliate onto the vine.
+            Shared.announceAttack(vine, target, "melee");
             const prayed = Shared.isProtected(target, "melee");
             Shared.damage(target, Math.floor(Shared.random(0, DAMAGE.VINE) * (prayed ? DAMAGE.VINE_PRAYED : 1)));
           }

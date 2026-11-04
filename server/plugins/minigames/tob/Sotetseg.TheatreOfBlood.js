@@ -196,6 +196,7 @@ class SotetsegRoom extends Raid.Room {
     }
     this.balls++;
     const ticks = Shared.projectile(this.area, npc, target, GRAPHIC.MAGIC, PROJECTILE.BALL);
+    Shared.announceAttack(npc, target, "magic", ticks);
     this.later(ticks, () => {
       if (this.maze || !this.fighters().includes(target)) return;
       this.ballLands(target, "magic");
@@ -212,6 +213,7 @@ class SotetsegRoom extends Raid.Room {
       const ticks = style === "magic"
         ? Shared.projectile(this.area, from, player, GRAPHIC.MAGIC, PROJECTILE.SPLIT_MAGIC)
         : Shared.projectile(this.area, from, player, GRAPHIC.RANGED, PROJECTILE.SPLIT_RANGED);
+      Shared.announceAttack(from, player, style, ticks);
       this.later(ticks, () => {
         if (!this.maze && this.fighters().includes(player)) this.ballLands(player, style);
       });

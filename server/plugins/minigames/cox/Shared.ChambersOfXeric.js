@@ -426,6 +426,12 @@ function damage(target, amount) {
   target.getCombat().getHitQueue().addPendingDamage([new HitDamage(Math.trunc(amount), HitMask.RED)]);
 }
 
+/** Tells content an attack is on its way (::autopray): its style, its prayer judged `ticks` from now. */
+function announceAttack(npc, target, style, ticks = 0) {
+  if (!target?.isPlayer?.()) return;
+  api().emitCustomEvent("combat:incoming-attack", { attacker: npc, target, type: style, cycle: cycle() + Math.max(0, ticks) });
+}
+
 function isProtected(player, style) {
   const { PrayerHandler } = core();
   const prayer = style === "magic" ? PrayerHandler.PROTECT_FROM_MAGIC
@@ -497,6 +503,7 @@ function strike(npc, player, style, maxHit, delay, { prayable = true, prayerMult
   const { PendingHit, CombatFactory } = core();
   const hit = new PendingHit(npc, player, styleMethod(style), delay);
   CombatFactory.applyStyleDamage(hit, maxHit, { bypassProtectionPrayer: true });
+  if (prayable) announceAttack(npc, player, style);
   if (prayable && isProtected(player, style)) {
     for (const part of hit.getHits()) part.setDamage(Math.floor(part.getDamage() * prayerMultiplier));
     hit.updateTotalDamage();
@@ -592,6 +599,6 @@ module.exports = {
   MAX_POINTS, PARTY_SKILLS, ATTR, OVERLAY_UID, MAIN_MODAL_UID, EVENT,
   LAYOUT_POOL, LAYOUT_NAMES, isRaidItem, loc, inBox, onMount, cycle, later, repeat, statement, options, raidNotice, raidMessage, fadeMove, sound,
   channelOf, channelByKey, joinChannel, leaveChannel, formatTicks, displayName,
-  balanceWalk, crossFire, random, randomOf, shuffle, gfx, graphicAt, areaSound, healSplat, damage, isProtected, projectile, besideFootprint, walkStraight, styleMethod, strike,
+  balanceWalk, crossFire, random, randomOf, shuffle, gfx, graphicAt, areaSound, healSplat, damage, isProtected, announceAttack, projectile, besideFootprint, walkStraight, styleMethod, strike,
   onObjectIds, replaceObject, action, stopAction, level, baseLevel, addXp, has, wielding, give, animate, axeOf, pickaxeOf, PICKAXES,
 };

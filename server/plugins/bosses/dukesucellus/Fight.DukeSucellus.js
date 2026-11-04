@@ -114,6 +114,7 @@ class Fight {
       const chip = () => {
         if (!Model.near(Common.source(this.session, this.player.getLocation()), target))
           return;
+        Common.api.emitCustomEvent("combat:incoming-attack", { attacker: this.boss, target: this.player, type: "melee", cycle: Common.core.World.getProcessCycle() });
         const maximum = Common.protectedFrom(this.player, "PROTECT_FROM_MELEE")
           ? normal.protectedChip : normal.chip;
         Common.strike(this, "melee", maximum, { accurate: false, avoidable: false });
@@ -126,6 +127,7 @@ class Fight {
         if (!Model.near(Common.source(this.session, this.player.getLocation()), target, 0) ||
           Model.hidden(target))
           return;
+        Common.api.emitCustomEvent("combat:incoming-attack", { attacker: this.boss, target: this.player, type: "melee", cycle: Common.core.World.getProcessCycle() });
         const maximum = Common.protectedFrom(this.player, "PROTECT_FROM_MELEE")
           ? normal.protectedSlam : normal.slam;
         Common.strike(this, "melee", maximum);
@@ -136,6 +138,8 @@ class Fight {
     const destination = this.player.getLocation().clone();
     this.player.getPacketSender().sendProjectile(this.session.tile(Common.data.site.mouth), destination, 0, magic.endCycle, graphics.magicProjectile, magic.startHeight, magic.endHeight, this.player, magic.startCycle, magic.slope, magic.distanceOffset, null);
     this.player.performGraphicInSlot(magic.impactSlot, new Common.core.Graphic(graphics.magicImpact, magic.endCycle));
+    Common.api.emitCustomEvent("combat:incoming-attack",
+      { attacker: this.boss, target: this.player, type: "magic", cycle: Common.core.World.getProcessCycle() + timing.magic });
     this.at(timing.magic, () => {
       const maximum = Common.protectedFrom(this.player, "PROTECT_FROM_MAGIC")
         ? normal.protectedMagic : normal.magic;

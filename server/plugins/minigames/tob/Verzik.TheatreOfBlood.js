@@ -388,6 +388,7 @@ class VerzikRoom extends Raid.Room {
         }
         const ticks = Shared.projectile(this.area, npc, player, GRAPHIC.BLAST, PROJECTILE.BLAST);
         Shared.areaSound(this.area, player, SOUND.BLAST_HIT, ticks * 30);
+        Shared.announceAttack(npc, player, "magic", ticks);
         this.later(ticks, () => {
           if (this.phase !== 1 || !this.fighters().includes(player)) return;
           player.performGraphic(Shared.gfx(GRAPHIC.BLAST_PLAYER));
@@ -699,6 +700,7 @@ class VerzikRoom extends Raid.Room {
     for (const player of this.fighters()) {
       const tile = Shared.tileOf(player);
       const ticks = Shared.projectile(this.area, this.verzik, tile, GRAPHIC.URN, PROJECTILE.URN);
+      Shared.announceAttack(this.verzik, player, "ranged", ticks);
       this.later(ticks, () => {
         Shared.graphicAt(this.area, GRAPHIC.URN_LAND, tile);
         Shared.areaSound(this.area, tile, SOUND.URN_LAND);
@@ -858,6 +860,7 @@ class VerzikRoom extends Raid.Room {
     this.animate(ANIMATION.P2_ATTACK);
     Shared.areaSound(this.area, this.verzik, SOUND.BLOOD, PROJECTILE.BLOOD.delay);
     const ticks = Shared.projectile(this.area, this.verzik, target, GRAPHIC.BLOOD, PROJECTILE.BLOOD);
+    for (const player of this.fighters()) Shared.announceAttack(this.verzik, player, "magic");
     const prayed = new Set(this.fighters().filter((player) => Shared.isProtected(player, "magic")));
     this.later(ticks, () => {
       if (this.phase !== 2 || this.transition) return;

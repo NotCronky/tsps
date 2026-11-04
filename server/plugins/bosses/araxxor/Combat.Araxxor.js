@@ -215,6 +215,8 @@ function combatClass() {
     hits(character, target) {
       if (!character || !target) return [];
       if (!this.attack || this.attack === Shared.Attack.CLEAVE) return [];
+      // Prayer is judged now, as the hit is built: announced first (for ::autopray).
+      api.emitCustomEvent("combat:incoming-attack", { attacker: character, target, type: this.attack, cycle: core.World.getProcessCycle() });
       const protect = protections(target);
       if (this.attack === Shared.Attack.MELEE) {
         const hit = new core.PendingHit(character, target, this, 0);

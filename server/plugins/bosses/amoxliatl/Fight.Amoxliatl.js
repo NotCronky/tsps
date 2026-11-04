@@ -242,6 +242,7 @@ class Fight {
     this.player.getPacketSender().sendSoundEffect(icicle.impactSound, 1, 0);
     const hit = new PendingHit(this.boss, this.player, magicStyle(), { delay: 0 });
     CombatFactory.applyStyleDamage(hit, icicle.maxHit, { bypassProtectionPrayer: true });
+    Common.api.emitCustomEvent("combat:incoming-attack", { attacker: this.boss, target: this.player, type: "magic", cycle: World.getProcessCycle() });
     if (PrayerHandler.isActivated(this.player, PrayerHandler.PROTECT_FROM_MAGIC)) {
       for (const part of hit.getHits()) part.setDamage(0);
       hit.updateTotalDamage();

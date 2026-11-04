@@ -15,7 +15,7 @@ const { PluginManager } = require('../dist/plugins/PluginManager');
 const DuelArena = require('../plugins/minigames/DuelArena.plugin');
 const Scoreboard = require('../plugins/minigames/duelarena/Scoreboard.DuelArena');
 
-const hooks = { objects: {}, custom: {}, persisted: new Map(), options: [], deaths: [], logouts: [] };
+const hooks = { objects: {}, custom: {}, persisted: new Map(), options: [], deaths: [], logouts: [], logins: [] };
 let INTERFACE, BOARD, TEXT;
 let index = 1;
 
@@ -31,6 +31,7 @@ before(() => {
     onPlayerOption: (handler) => hooks.options.push(handler),
     onPlayerDeath: (handler) => hooks.deaths.push(handler),
     onPlayerLogout: (handler) => hooks.logouts.push(handler),
+    onPlayerLogin: (handler) => hooks.logins.push(handler),
   }, { get: (target, key) => target[key] ?? noop }); // DuelArena's other hooks are not under test
   DuelArena.register(api);
   const cache = api.core.CacheDefinitions;
@@ -175,4 +176,15 @@ test('the cache places both boards at the arena, each with an open tile beside i
     }
     assert.ok(reachable > 0, `an open tile reaches the board at ${x},${y}`);
   }
+});
+
+test('login says no PvP Arena tutorial is running, so instances keep the ordinary prayer book', () => {
+  const sent = [];
+  const sender = { sendConfig: (id, value) => { sent.push([id, value]); return sender; } };
+  const player = { getPacketSender: () => sender };
+  for (const login of hooks.logins) {
+    try { login({ player }); } catch {} // the other login hook wants a whole Player
+  }
+  const cache = PluginManager.getCoreApi().CacheDefinitions;
+  assert.deepEqual(sent.find(([id]) => id === cache.getVarpId('pvptut_active_tutorial')), [5850, -1]);
 });

@@ -153,6 +153,11 @@ function strike(npc, player, style, maxHit, delay, { accurate = false, prayed = 
   const { PendingHit, CombatFactory, World } = core;
   const hit = new PendingHit(npc, player, styleMethod(style), { delay, rollAccuracy: !accurate });
   CombatFactory.applyStyleDamage(hit, Math.max(0, Math.floor(maxHit)), { bypassProtectionPrayer: true });
+  // Prayer is judged now, outside the hit queue: announced first (for ::autopray).
+  if (prayed) {
+    api.emitCustomEvent("combat:incoming-attack",
+      { attacker: npc, target: player, protects: (prayer) => prayed(style, prayer), cycle: World.getProcessCycle() });
+  }
   const factor = prayed ? prayed(style, protectedStyle(player)) : 1;
   if (factor !== 1) {
     for (const part of hit.getHits()) part.setDamage(Math.floor(part.getDamage() * factor));

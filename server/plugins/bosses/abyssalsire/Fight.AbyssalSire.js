@@ -328,6 +328,9 @@ class Fight {
     const { Animation, PrayerHandler } = this.core;
     this.sire.performAnimation(new Animation(anim));
     this.sire.setMobileInteraction(this.player);
+    // Prayer is judged as it lands, outside the hit queue: announced now (for ::autopray).
+    Common.api.emitCustomEvent("combat:incoming-attack",
+      { attacker: this.sire, target: this.player, type: "melee", cycle: this.core.World.getProcessCycle() + 1 });
     this.at(1, () => {
       if (!this.playerHere() || this.phase === PHASE.DEAD) return;
       const prayed = PrayerHandler.isActivated(this.player, PrayerHandler.PROTECT_FROM_MELEE);

@@ -265,6 +265,26 @@ test("::diary shows, completes and resets, matching names like ::quest", () => {
   assert.match(player.log.at(-1), /^Usage/);
 });
 
+test("::diary claim gives every finished tier's rewards in order, stopping at a level the reward needs", () => {
+  const player = createPlayer();
+  const run = (command) => Diaries._test.diaryCommand({ player, parts: command.split(" ") });
+  run("diary ardougne easy complete");
+  run("diary ardougne medium complete");
+  run("diary ardougne claim");
+  assert.equal(player.log.at(-2), "Ardougne: claimed easy, medium.");
+  assert.deepEqual(player.inventory, [...ARDOUGNE.tiers.easy.rewardItems, ...ARDOUGNE.tiers.medium.rewardItems]);
+  assert.deepEqual([...Progress.claimedTiers(player, ARDOUGNE)].sort(), ["easy", "medium"]);
+  run("diary ardougne claim");
+  assert.equal(player.log.at(-2), "Ardougne: claimed nothing.", "a claimed tier isn't given twice");
+
+  const smith = createPlayer({ levels: { Smithing: 90 } });
+  const runSmith = (command) => Diaries._test.diaryCommand({ player: smith, parts: command.split(" ") });
+  runSmith("diary ardougne all complete");
+  runSmith("diary ardougne claim");
+  assert.equal(smith.log.at(-2), "Ardougne: claimed easy, medium, hard (stopped: elite needs 91 Smithing).");
+  assert.ok(!Progress.claimedTiers(smith, ARDOUGNE).has("elite"));
+});
+
 test("the Elite Karamja Diary doubles Tokkul, and only that diary's elite tier does", () => {
   const player = createPlayer();
   const run = (command) => Diaries._test.diaryCommand({ player, parts: command.split(" ") });

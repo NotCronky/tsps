@@ -159,6 +159,15 @@ const COMBAT_AUTO_RETALIATE_CHILD = 32;
  * the older bar, now under a container the cache keeps hidden. 67 is the offhand bar.
  */
 const COMBAT_SPECIAL_ATTACK_CHILDREN = new Set([41, 57]);
+/** The minimap's special attack orb, in each orb layout (fixed, resizable, with and without the map). */
+const SPECIAL_ORB_COMPONENTS = ["orbs:specbutton", "orbs_nomap:specbutton", "orbs_osm:specbutton", "orbs_osm_nomap:specbutton"];
+let specialOrbIds: Set<number> | null = null;
+const isSpecialOrb = (groupId: number, childId: number): boolean => {
+  specialOrbIds ??= new Set(SPECIAL_ORB_COMPONENTS
+    .map((name) => CacheDefinitions.getComponentId(name))
+    .filter((id): id is number => id !== null));
+  return specialOrbIds.has((groupId << 16) | childId);
+};
 const WORLD_INTERACTIONS = new Set([
   "move",
   "teleport",
@@ -778,7 +787,11 @@ export class ClientConnection {
                 172,
                 this.player.autoRetaliateReturn() ? 0 : 1,
               );
-            } else if (actionPacket.groupId === COMBAT_INTERFACE && COMBAT_SPECIAL_ATTACK_CHILDREN.has(actionPacket.childId)) {
+            } else if (
+              (actionPacket.groupId === COMBAT_INTERFACE && COMBAT_SPECIAL_ATTACK_CHILDREN.has(actionPacket.childId)) ||
+              isSpecialOrb(actionPacket.groupId, actionPacket.childId)
+            ) {
+              // The combat tab's bar and the minimap's orb toggle the same special attack.
               CombatSpecial.activate(this.player);
             } else if (WeaponInterfaceManager.handleStyleButton(this.player, actionPacket.groupId, actionPacket.childId)) {
               BonusManager.update(this.player);

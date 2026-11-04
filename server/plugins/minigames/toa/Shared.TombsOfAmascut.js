@@ -525,6 +525,12 @@ function skipAttackDelay(player, target = null) {
   if (target) player.setPositionToFace(target.getLocation());
 }
 
+/** Tells content an attack is on its way (::autopray): its style, its prayer judged `ticks` from now. */
+function announceAttack(npc, target, style, ticks = 0) {
+  if (!target?.isPlayer?.()) return;
+  api().emitCustomEvent("combat:incoming-attack", { attacker: npc, target, type: style, cycle: cycle() + Math.max(0, ticks) });
+}
+
 function isProtected(player, style) {
   const { PrayerHandler } = core();
   const prayer = style === "magic" ? PrayerHandler.PROTECT_FROM_MAGIC
@@ -592,7 +598,7 @@ module.exports = {
   formatTicks,
   formatTicksHundredths,
   displayName,
-  isProtected,
+  isProtected, announceAttack,
   onObject,
   floorFree,
   tileProjectile,

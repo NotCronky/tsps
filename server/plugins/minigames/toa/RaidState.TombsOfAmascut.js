@@ -342,6 +342,7 @@ class Room {
     const { PendingHit, CombatFactory } = Shared.core();
     const hit = new PendingHit(npc, target, method, delay);
     CombatFactory.applyStyleDamage(hit, scale ? this.maxHit(baseMaxHit) : baseMaxHit, { bypassProtectionPrayer: true });
+    if (prayable) Shared.announceAttack(npc, target, style);
     if (prayable && target.isPlayer?.() && Shared.isProtected(target, style)) {
       const through = Math.min(1, prayerMultiplier + (this.settings.isActive("QUIET_PRAYERS") ? 0.1 : 0));
       for (const part of hit.getHits()) part.setDamage(Math.floor(part.getDamage() * through));

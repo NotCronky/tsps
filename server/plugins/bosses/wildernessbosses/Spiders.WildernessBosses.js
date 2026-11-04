@@ -95,7 +95,15 @@ function centre(npc) {
   return { x: base.getX() + 2, y: base.getY() + 2, z: base.getZ() };
 }
 
+/** The style a protection prayer stops. */
+function styleProtectedBy(prayer) {
+  return prayer === PrayerHandler.PROTECT_FROM_MAGIC ? "magic" : prayer === PrayerHandler.PROTECT_FROM_MISSILES ? "ranged" : "melee";
+}
+
+/** Whether `prayer` blocks the spider's attack, judged now: announced first (for ::autopray). */
 function prayerBlocks(player, prayer, npc) {
+  api.emitCustomEvent("combat:incoming-attack",
+    { attacker: npc, target: player, type: styleProtectedBy(prayer), cycle: core.World.getProcessCycle() });
   return PrayerHandler.isActivated(player, prayer) && broodOf(npc).spiderlings.length === 0;
 }
 

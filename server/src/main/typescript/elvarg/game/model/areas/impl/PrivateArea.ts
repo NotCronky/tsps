@@ -93,6 +93,15 @@ export abstract class PrivateArea extends Area {
         return false;
     }
 
+    /**
+     * Ticks a stack dropped in this area lasts on the floor, or null for the world's
+     * {@link ItemOnGroundManager.DESPAWN_DELAY}. Instances often keep drops far longer (Wiki, Items:
+     * "typically, but not always, set to three hours").
+     */
+    public getGroundItemDespawnDelay(): number | null {
+        return null;
+    }
+
     /** Allows an instance to validate client-only dynamic locs on demand. */
     public resolveObject(_id: number, _location: Location, _player?: Player): GameObject | null {
         return null;

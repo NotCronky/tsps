@@ -221,6 +221,12 @@ class Fight {
     // must run on that scripted damage, not on the zero placeholder.
     hit.deferIncomingDamageUntilImpact();
     blows.set(hit, kind);
+    // Judged as it lands this tick, outside the hit queue: announced now (for ::autopray). The
+    // smite's protection goes up after the prayer was last sampled, so it counts as a switch.
+    Common.api.emitCustomEvent("combat:incoming-attack", {
+      attacker: this.npc, target: this.player, type: kind === "sweep" ? "melee" : "magic",
+      cycle: this.core.World.getProcessCycle(),
+    });
     CombatFactory.addPendingHit(hit);
   }
 

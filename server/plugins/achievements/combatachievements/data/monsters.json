@@ -60,6 +60,27 @@
     "Tombs of Amascut: Expert Mode": "Tombs of Amascut",
     "The Royal Titans": "Royal Titans"
   },
+  "_announcedByPlugin": "Bosses counted by their NPC's death whose plugin sends the kill-count message itself; every other boss page gets \"Your <NPC> kill count is: N.\" from Kills.CombatAchievements.",
+  "announcedByPlugin": [
+    "Kree'arra",
+    "General Graardor",
+    "Commander Zilyana",
+    "K'ril Tsutsaroth",
+    "Zulrah",
+    "Shellbane Gryphon",
+    "Grotesque Guardians",
+    "Alchemical Hydra",
+    "Zalcano",
+    "Nightmare, The",
+    "Phosani's Nightmare",
+    "Phantom Muspah",
+    "Duke Sucellus",
+    "Whisperer, The",
+    "Leviathan, The",
+    "Hueycoatl, The",
+    "Mad Angel, The",
+    "Yama"
+  ],
   "ownRules": [
     "Zulrah",
     "Grotesque Guardians",

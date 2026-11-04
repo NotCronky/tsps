@@ -1375,6 +1375,7 @@ class OcellusRoom extends Raid.Room {
       let dealt = 0;
       for (const player of this.fighters()) {
         const before = player.getHitpoints();
+        Shared.announceAttack(this.boss, player, style);
         Shared.damageNow(player, Shared.isProtected(player, style) ? Shared.random(...DAMAGE.HYBRID_PRAYED) : Shared.random(DAMAGE.HYBRID - 5, DAMAGE.HYBRID + 5));
         dealt += before - player.getHitpoints();
       }

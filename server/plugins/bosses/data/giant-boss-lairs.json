@@ -170,7 +170,7 @@
     "anim": { "melee": 4658, "magic": 7173 },
     "projectile": { "id": 139, "startCycle": 51, "startHeight": 43, "endHeight": 31, "curve": 16, "sound": 128, "impactGraphic": 140, "impactHeight": 124, "impactSound": 129 },
     "poison": { "damage": 8, "chance": 4 },
-    "growthlings": { "chance": 5, "count": 3, "cooldown": 20, "radius": 5 },
+    "growthlings": { "chance": 5, "count": 3, "cooldown": 20, "radius": 5, "belowHealth": 0.75 },
     "pruneMessage": "You prune the Growthling.",
     "noAxeMessage": "Cut the growthling down with an axe or secateurs.",
     "logs": { "withAxe": 32536, "withoutAxe": 5582, "x": 3228, "y": 9932, "z": 0, "type": 10, "face": 0, "axe": 1351, "returnTicks": 49, "take": "You take a bronze axe from the logs.", "haveAxe": "You already have an axe." }

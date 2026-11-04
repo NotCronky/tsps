@@ -23,6 +23,7 @@ before(async () => {
   plugin.register({
     core: { Animation, Graphic, Task, TaskManager, Sounds: { playAreaSound: (sound) => areaSounds.push(sound) } },
     onItemAction: (name, handlers) => { if (name === "Summon boat") actions = handlers; },
+    onSpellCast() {},
     persistAttribute() {},
   });
 });

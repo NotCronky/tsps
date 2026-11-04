@@ -663,6 +663,9 @@ function defineCombatMethod() {
       }
       if (this.action !== "ranged" && this.action !== "magic") return [];
       const kind = this.action;
+      // Its prayer is judged as it lands, outside the hit queue: announced now (for ::autopray).
+      api.emitCustomEvent("combat:incoming-attack",
+        { attacker: character, target, type: kind, cycle: core.World.getProcessCycle() + DISTANT_HIT_DELAY });
       // Queued at 0 as the flight ends and rolled by distantHitLands in the player's turn, so a
       // prayer clicked on the landing tick counts (the task runs before the player's clicks).
       Common.later(DISTANT_HIT_DELAY, () => {

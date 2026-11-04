@@ -23,7 +23,7 @@ export class ItemOnGround {
     /** A static world spawn: never despawns on its own and is visible to everyone.
      * Respawning after a pickup still comes from the respawn timer. */
     staticSpawn: boolean;
-    /** Ticks this stack lasts on the floor; null keeps {@link ItemOnGroundManager.DESPAWN_DELAY}. */
+    /** Ticks this stack lasts on the floor; null keeps its area's, else {@link ItemOnGroundManager.DESPAWN_DELAY}. */
     despawnDelay: number | null = null;
     /** While set, the stack neither ages nor goes public (a mark of grace while its owner is logged out). */
     agingPaused: boolean = false;
@@ -151,7 +151,7 @@ export class ItemOnGround {
     }
 
     public getDespawnDelay(): number {
-        return this.despawnDelay ?? ItemOnGroundManager.DESPAWN_DELAY;
+        return this.despawnDelay ?? this.privateArea?.getGroundItemDespawnDelay?.() ?? ItemOnGroundManager.DESPAWN_DELAY;
     }
 
     public setDespawnDelay(ticks: number): ItemOnGround {

@@ -310,6 +310,7 @@ class BaBaRoom extends Raid.Room {
       return [];
     }
     this.baba.performAnimation(new Animation(ANIMATION.ATTACK));
+    Shared.announceAttack(this.baba, target, "melee");
     if (target.isPlayer?.() && !Shared.isProtected(target, "melee")) {
       this.failPerfect(`${Shared.displayName(target)} didn't pray against a melee attack.`);
     }

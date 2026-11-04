@@ -607,6 +607,8 @@ class OlmRoom extends Raid.Room {
         "<col=3366ff>The Great Olm fires a sphere of magical power your way.</col>"][type];
       player.sendMessage(text + (praying ? " Your prayers have been sapped." : ""));
       const lands = this.headShot(player, [1345, 1343, 1341][type], SPHERE_END);
+      // Announced once the sap has been judged: any protection up as it is fired is punished.
+      Shared.announceAttack(this.head, player, styles[type], lands);
       Shared.later(this.raid, lands, () => {
         if (player.getHitpoints() <= 0) return;
         player.performGraphic(Shared.gfx([1346, 1344, 1342][type], { height: 64 }));

@@ -45,6 +45,8 @@ function strike(npc, player, style, maxHit, delay, { throughPrayer = 0 } = {}) {
   const { PendingHit, CombatFactory, World } = Common.core;
   const hit = new PendingHit(npc, player, styleMethod(style), { delay, rollAccuracy: true });
   CombatFactory.applyStyleDamage(hit, Math.max(0, Math.floor(maxHit)), { bypassProtectionPrayer: true });
+  // Prayer is judged now, outside the hit queue: announced first (for ::autopray).
+  Common.api.emitCustomEvent("combat:incoming-attack", { attacker: npc, target: player, type: style, cycle: World.getProcessCycle() });
   if (protectedFrom(player, style)) {
     for (const part of hit.getHits()) part.setDamage(Math.floor(part.getDamage() * throughPrayer));
     hit.updateTotalDamage();

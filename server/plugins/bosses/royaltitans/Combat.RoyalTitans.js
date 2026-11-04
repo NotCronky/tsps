@@ -15,6 +15,7 @@ const Shared = require("./Shared.RoyalTitans");
 const Specials = require("./Specials.RoyalTitans");
 const CombatAchievements = require("./CombatAchievements.RoyalTitans");
 
+let api = null;
 let core = null;
 let PrayerHandler = null;
 
@@ -41,6 +42,7 @@ function startMelee(npc, target) {
     if (!Shared.fighting(npc) || !alive(target)) return;
     const pos = tileOf(target);
     const inside = pos && blocks.some(([x, y]) => x === pos.x && y === pos.y);
+    if (inside) api.emitCustomEvent("combat:incoming-attack", { attacker: npc, target, type: "melee", cycle: core.World.getProcessCycle() });
     const protect = protectedMelee(target);
     let damage = 0;
     if (inside && (!protect || pierce)) {
@@ -170,6 +172,7 @@ function hitSound({ attacker, target }) {
 }
 
 function attach(pluginApi) {
+  api = pluginApi;
   core = pluginApi.core;
   PrayerHandler = pluginApi.getPrayerHandler();
   pluginApi.onNpcHitModify(modifyHit);

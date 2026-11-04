@@ -15,6 +15,7 @@ const { teleportFocusOf } = require("./BoatFacilities.Sailing");
 const { openBoatSelection, MODE } = require("./BoatSelection.plugin");
 const { dropLostOnRecovery } = require("./Cargo.Sailing");
 const { sendBoatVarbits } = require("./BoatVarbits.Sailing");
+const Spells = require("./Spells.Sailing");
 
 const LAST_SUMMONED_ATTRIBUTE = "sailing:last-summoned-boat";
 const SUMMON_RANGE = 16;
@@ -34,6 +35,7 @@ const BUSY_TICKS = 4;
 const NOT_NEAR_DOCK = "You need to be near a dock or mooring point to use this tablet.";
 
 let core;
+let pluginApi;
 
 function later(player, ticks, action) {
   core.TaskManager.submit(new (class extends core.Task {
@@ -87,6 +89,55 @@ function summon(player, itemId, dock, slot) {
   later(player, BUSY_TICKS, () => sender.sendVarbit(VARBIT_BUSY, 0));
 }
 
+/**
+ * The standard spellbook's Summon Boat (Wiki): as the tablet, a boat with a teleport focus to the
+ * dock the player is near, with the runes used and the experience given as it arrives. "Last Boat"
+ * summons the boat last summoned without the selection.
+ */
+function castSummonBoat(event) {
+  const data = Spells.sailingSpell(event);
+  if (data !== Spells.SPELLS["summon boat"]) return;
+  event.handled = true;
+  const { player } = event;
+  if (!Spells.canCast(pluginApi, player, data)) return;
+  const dock = !Sailing.instanceAboard(player) && nearbyDock(player);
+  if (!dock) {
+    player.sendMessage("You need to be near a dock or mooring point to cast this spell.");
+    return;
+  }
+  if (event.opId === Spells.LAST_BOAT_OP) {
+    const slot = player.getAttribute(LAST_SUMMONED_ATTRIBUTE);
+    if (!Number.isInteger(slot)) {
+      player.sendMessage("You haven't summoned a boat yet.");
+      return;
+    }
+    summonBySpell(player, data, dock, slot);
+    return;
+  }
+  openBoatSelection(player, MODE.SUMMON, dock, (slot) => summonBySpell(player, data, dock, slot));
+}
+
+function summonBySpell(player, data, dock, slot) {
+  const sender = player.getPacketSender();
+  const boat = player.getSailing().boats.find((owned) => owned.slot === slot);
+  const refusal = summonRefusal(player, boat, dock);
+  if (refusal !== null || !Spells.payFor(pluginApi, player, data)) {
+    if (refusal) player.sendMessage(refusal);
+    sender.sendVarbit(VARBIT_BUSY, 0);
+    return;
+  }
+  Sailing.recover(player, slot, dock.id);
+  dropLostOnRecovery(boat);
+  sendBoatVarbits(player);
+  player.setAttribute(LAST_SUMMONED_ATTRIBUTE, slot);
+  player.performAnimation(new core.Animation(SEQ_CAST));
+  player.performGraphic(new core.Graphic(SPOT_CAST));
+  const at = player.getLocation();
+  core.Sounds.playAreaSound({ soundId: SOUND_CAST, x: at.getX(), y: at.getY(), level: at.getZ(), radius: 10 });
+  player.sendMessage(`Your boat has been summoned to ${dock.theName}.`);
+  later(player, CAST_TICKS, () => sender.sendVarbit(VARBIT_BUSY, 0));
+}
+
 function breakTablet({ player, itemId }) {
   const dock = !Sailing.instanceAboard(player) && nearbyDock(player);
   if (!dock) {
@@ -118,8 +169,10 @@ module.exports = {
   members: true,
   register(api) {
     core = api.core;
+    pluginApi = api;
     content();
     api.persistAttribute(LAST_SUMMONED_ATTRIBUTE);
+    api.onSpellCast(castSummonBoat);
     api.onItemAction("Summon boat", { Break: breakTablet, "Last boat": lastBoat });
   },
   _test: { nearbyDock, hasFocus, summon, SUMMON_RANGE, LAST_SUMMONED_ATTRIBUTE },

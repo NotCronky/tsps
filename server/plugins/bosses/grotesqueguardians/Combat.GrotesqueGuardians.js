@@ -72,6 +72,10 @@ function methods() {
     if (!method.plan) return [];
     return method.plan.map(({ style, delay, max, fixed, nested }) => {
       method.style = style;
+      if (Common.isDusk(character)) {
+        Common.api.emitCustomEvent("combat:incoming-attack",
+          { attacker: character, target, type: method.type(), cycle: Common.core.World.getProcessCycle() });
+      }
       const protectedHit = Common.isDusk(character) && PrayerHandler.isActivated(target, PrayerHandler.getProtectingPrayer(method.type()));
       if (protectedHit && style === "ranged") max = Math.floor(max / 2);
       let damage = fixed ? max : Common.randomInt(0, max);

@@ -441,6 +441,7 @@ class ZebakRoom extends Raid.Room {
       const damage = Shared.random(BARRAGE.MIN, BARRAGE.MAX);
       for (const victim of players) {
         if (victim !== player && victim.getLocation().getDistance(player.getLocation()) > radius) continue;
+        Shared.announceAttack(this.zebak, victim, "magic");
         if (Shared.isProtected(victim, "magic")) continue;
         heal += damage * healRate;
         hits.push([victim, damage]);

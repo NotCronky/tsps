@@ -505,7 +505,13 @@
         "BURNING_AMULET_5_",
         100
       ],
-      "XERICS_TALISMAN",
+      {
+        "item": "XERICS_TALISMAN",
+        "amount": 1,
+        "meta": {
+          "xerics-talisman-charges": 1000
+        }
+      },
       "DRAKANS_MEDALLION",
       "ECTOPHIAL",
       "ROYAL_SEED_POD",

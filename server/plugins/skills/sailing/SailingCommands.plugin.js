@@ -167,6 +167,55 @@ function maxBoat({ player, parts }) {
   player.sendMessage(`${boatName(boat)} has its best parts and the ${parts[1]?.toLowerCase() ?? "default"} facilities.`);
 }
 
+const UPGRADEBOAT_USAGE = "Usage: ::upgradeboat [hull|keel|sails|helm] [tier 0-6 or name]: no part = every part up one tier";
+
+/**
+ * ::upgradeboat [part] [tier]: the boat being customised in the shipyard (else the active one)
+ * gets a part one tier up, or set to the tier named, without its materials or levels; with no
+ * part, every part goes up one tier. Facilities stay. Like ::maxboat, not while aboard it.
+ */
+function upgradeBoat({ player, parts }) {
+  const boat = visitedBoat(player) ?? Sailing.activeBoat(player);
+  if (!boat) {
+    player.sendMessage("You don't own a boat. Use ::raft, ::skiff or ::sloop.");
+    return;
+  }
+  const part = parts[1]?.toLowerCase();
+  const tierArg = parts[2]?.toLowerCase();
+  if ((part !== undefined && !PARTS.includes(part)) || (tierArg !== undefined && part === undefined)) {
+    player.sendMessage(UPGRADEBOAT_USAGE);
+    return;
+  }
+  if (Sailing.instanceAboard(player)) {
+    player.sendMessage("Step off the boat first; it's rebuilt the next time you board.");
+    return;
+  }
+  const changes = [];
+  for (const each of part ? [part] : PARTS) {
+    const best = partOptions(boat.type, each).length - 1;
+    const current = boat.parts?.[each] ?? 0;
+    let tier = current + 1;
+    if (tierArg !== undefined) {
+      tier = /^\d+$/.test(tierArg) ? Number(tierArg) : TIER_NAMES[each].indexOf(tierArg);
+      if (tier < 0 || tier > best) {
+        player.sendMessage(`A ${boat.type}'s ${each} goes from ${TIER_NAMES[each][0]} (0) to ${TIER_NAMES[each][best]} (${best}).`);
+        return;
+      }
+    }
+    if (best < 0 || tier > best || tier === current) continue;
+    boat.parts = { ...boat.parts, [each]: tier };
+    changes.push(`${each} ${TIER_NAMES[each][tier]}`);
+  }
+  if (changes.length === 0) {
+    const where = tierArg !== undefined ? "already that tier" : "already at its best";
+    player.sendMessage(`${boatName(boat)} has nothing to upgrade${part ? ` on its ${part}: it's` : ": every part is"} ${where}.`);
+    return;
+  }
+  sendBoatVarbits(player);
+  refreshShownBoat(player);
+  player.sendMessage(`${boatName(boat)} upgraded: ${changes.join(", ")}.`);
+}
+
 function describe(boat) {
   const where = boat.location.kind === "docked" ? `docked at ${boat.location.dock}`
     : boat.location.kind === "at_sea" ? `at sea (${Math.floor(boat.location.fineX / 128)}, ${Math.floor(boat.location.fineY / 128)})`
@@ -221,6 +270,7 @@ module.exports = {
     api.registerCommand("sailingtools", unlockSailingTools, PlayerRights.DEVELOPER, "Unlock cargo-hold tools");
     api.registerCommand("boatmats", spawnPartMaterials, PlayerRights.DEVELOPER, "Spawn boat-building materials");
     api.registerCommand("maxboat", maxBoat, PlayerRights.DEVELOPER, "Best parts and a facility preset on your boat: ::maxboat [default|salvaging|combat|fishing]");
+    api.registerCommand("upgradeboat", upgradeBoat, PlayerRights.DEVELOPER, "Upgrade your boat's parts: ::upgradeboat [hull|keel|sails|helm] [tier]");
     api.registerCommand("boatinfo", boatInfo, PlayerRights.DEVELOPER, "Show your boats and sailing state");
     api.registerCommand("sailmode", sailMode, PlayerRights.DEVELOPER, "Set boat movement mode");
     api.registerCommand("heading", heading, PlayerRights.DEVELOPER, "Set boat heading");

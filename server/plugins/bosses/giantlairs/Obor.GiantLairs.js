@@ -135,6 +135,8 @@ function boulderLands(target) {
 function rangedDamage(hit, target) {
   const { CombatFactory, PrayerHandler } = core;
   CombatFactory.applyStyleDamage(hit, DATA.maxHit.ranged, { bypassProtectionPrayer: true });
+  Common.api.emitCustomEvent("combat:incoming-attack",
+    { attacker: hit.getAttacker?.() ?? null, target, type: "ranged", cycle: core.World.getProcessCycle() });
   if (!target.isPlayer?.() || !PrayerHandler.isActivated(target, PrayerHandler.PROTECT_FROM_MISSILES)) return;
   const damage = hit.getHits()[0];
   if (damage) damage.setDamage(Math.floor(damage.getDamage() / 2));

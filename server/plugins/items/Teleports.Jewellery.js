@@ -1,6 +1,12 @@
 const { ItemIds } = require("../../src/main/typescript/elvarg/util/IdEnums");
 const { GameConstants } = require("../../src/main/typescript/elvarg/game/GameConstants");
 const { Skill } = require("../../src/main/typescript/elvarg/game/model/Skill");
+const { ItemIdentifiers } = require("../../src/main/typescript/elvarg/util/ItemIdentifiers");
+const { CacheDefinitions } = require("../../src/main/typescript/elvarg/game/cache/CacheDefinitions");
+const { TeleportType } = require("../../src/main/typescript/elvarg/game/model/teleportation/TeleportType");
+const { Animation } = require("../../src/main/typescript/elvarg/game/model/Animation");
+const { Graphic } = require("../../src/main/typescript/elvarg/game/model/Graphic");
+const { Priority } = require("../../src/main/typescript/elvarg/game/model/Priority");
 
 /** Teleport jewellery usable up to this Wilderness level unless a piece says otherwise. */
 const DEFAULT_WILDERNESS_LEVEL = 20;
@@ -8,6 +14,22 @@ const DEFAULT_WILDERNESS_LEVEL = 20;
 const DRAGONSTONE_WILDERNESS_LEVEL = 30;
 
 const FARMING_GUILD_INTERMEDIATE_LEVEL = 45;
+
+/** Xeric's Honour opens once an ancient tablet is used on the talisman (Wiki); saved per player. */
+const XERICS_HONOUR_ATTRIBUTE = "xerics-talisman:honour";
+
+let xericsTeleport = null;
+/**
+ * Xeric's teleport, carried or mounted (rsprox captures of the mounted talisman):
+ * arceuus_necromancy_anim with xeric_teleport_spotanim, landing three ticks later with no
+ * landing animation. Built on first use, once the cache is up.
+ */
+function xericsTeleportType() {
+  xericsTeleport ??= new TeleportType(3,
+    new Animation(CacheDefinitions.getSeqId("arceuus_necromancy_anim"), Priority.HIGH), null, null,
+    new Graphic(CacheDefinitions.getSpotanimId("xeric_teleport_spotanim")), null, null);
+  return xericsTeleport;
+}
 
 /**
  * Charged pieces, most charges first. `spent` is what the last charge leaves
@@ -284,6 +306,33 @@ const JEWELLERY = [
     ],
   },
   {
+    // Xeric's talisman (Wiki): one item holding up to 1,000 charges, one a teleport, charged
+    // with lizardman fangs (XericsTalisman.Jewellery.js). Out of charges it is the inert one.
+    // The messages are not captured: the Wiki quotes none.
+    key: "xerics_talisman",
+    noun: "talisman",
+    charged: [[ItemIdentifiers.XERICS_TALISMAN, 1]],
+    chargesMeta: { key: "xerics-talisman-charges", max: 1000 },
+    spent: ItemIdentifiers.XERICS_TALISMAN_INERT_,
+    digits: true,
+    teleportType: xericsTeleportType,
+    emptyMessage: "Your talisman has no charges left.",
+    lastChargeMessage: "Your talisman has run out of charges.",
+    // Tiles: the middle of the mounted talisman's captured landing spots (Mounted.Construction.js).
+    destinations: [
+      { label: "Xeric's Lookout", tile: [1578, 3529, 0] },
+      { label: "Xeric's Glade", tile: [1751, 3566, 0] },
+      { label: "Xeric's Inferno", tile: [1505, 3819, 0] },
+      { label: "Xeric's Heart", tile: [1642, 3673, 0] },
+      {
+        label: "Xeric's Honour",
+        tile: [1254, 3563, 0],
+        unlockAttribute: XERICS_HONOUR_ATTRIBUTE,
+        lockedMessage: "You need to use an ancient tablet on your talisman to unlock this teleport.",
+      },
+    ],
+  },
+  {
     key: "returning",
     noun: "ring of returning",
     unit: "use",
@@ -325,4 +374,4 @@ const RING_OF_WEALTH_DESTINATIONS = [
   { label: "Dondakan", tile: [2824, 10168, 0] },
 ];
 
-module.exports = { JEWELLERY, RING_OF_WEALTH_DESTINATIONS, DEFAULT_WILDERNESS_LEVEL };
+module.exports = { JEWELLERY, RING_OF_WEALTH_DESTINATIONS, DEFAULT_WILDERNESS_LEVEL, XERICS_HONOUR_ATTRIBUTE, xericsTeleportType };

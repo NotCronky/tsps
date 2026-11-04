@@ -13,6 +13,7 @@ const { teleportFocusOf } = require("./BoatFacilities.Sailing");
 const { openBoatSelection, MODE } = require("./BoatSelection.plugin");
 const { dropLostOnRecovery } = require("./Cargo.Sailing");
 const { sendBoatVarbits } = require("./BoatVarbits.Sailing");
+const Spells = require("./Spells.Sailing");
 
 const NEAR_DOCK_RANGE = 16;
 const PANDEMONIUM_DOCK = "the_pandemonium";
@@ -83,6 +84,44 @@ function capeTeleport(request) {
     const boat = reachableBoats(player).find((candidate) => candidate.slot === slot);
     if (boat) teleportTo(player, Sailing.getDock(boat.location.dock)?.landing);
   });
+}
+
+/**
+ * The standard spellbook's Teleport to Boat (Wiki): as the tablet, a moored boat with a greater
+ * teleport focus picked in the boat selection, landing at its dock; runes and experience on the
+ * teleport. "Last Boat" goes to the boat at the player's last dock without the selection.
+ */
+function castTeleportToBoat(event) {
+  const data = Spells.sailingSpell(event);
+  if (data !== Spells.SPELLS["teleport to boat"]) return;
+  event.handled = true;
+  const { player } = event;
+  if (!Spells.canCast(api, player, data)) return;
+  if (Sailing.instanceAboard(player)) {
+    player.sendMessage("You're already on a boat.");
+    return;
+  }
+  const boats = reachableBoats(player);
+  if (boats.length === 0) {
+    player.sendMessage("You need a moored boat with a greater teleport focus to do that.");
+    return;
+  }
+  const go = (boat) => {
+    const dock = boat && Sailing.getDock(boat.location.dock);
+    if (!dock) {
+      player.sendMessage("You can't choose that boat at the moment.");
+      return;
+    }
+    const landing = new core.Location(dock.landing.x, dock.landing.y, dock.landing.z);
+    if (!core.TeleportHandler.checkReqs(player, landing) || !Spells.payFor(api, player, data)) return;
+    core.TeleportHandler.teleport(player, landing, core.TeleportType.NORMAL, false);
+  };
+  if (event.opId === Spells.LAST_BOAT_OP) {
+    go(boats.find((boat) => boat.location.dock === player.getSailing().lastDock) ?? boats[0]);
+    return;
+  }
+  const current = dockNear(player, NEAR_DOCK_RANGE) ?? dockById(player.getSailing().lastDock) ?? dockById(boats[0].location.dock);
+  openBoatSelection(player, MODE.TELEPORT_TO_BOAT, current, (slot) => go(reachableBoats(player).find((boat) => boat.slot === slot)));
 }
 
 function teleportTo(player, landing) {
@@ -201,11 +240,12 @@ module.exports = {
     core = pluginApi.core;
     content();
     api.onItemAction("Teleport to boat", { Break: breakTablet });
+    api.onSpellCast(castTeleportToBoat);
     api.onCustomEvent("sailing:cape-teleport", capeTeleport);
     api.onCustomEvent("sailing:cape-rename-boat", capeRenameBoat);
   },
   _test: {
-    reachableBoats, hasGreaterFocus, teleportToBoat, capeTeleport,
+    reachableBoats, hasGreaterFocus, teleportToBoat, capeTeleport, castTeleportToBoat,
     teleportBoatToPandemonium, moveBoatToPandemonium, chooseBoat, parseBoatName, renameBoat,
   },
 };

@@ -533,6 +533,7 @@ class CrondisPuzzleRoom extends Raid.Room {
     let damage = Math.min(CROCODILE_BITE_MAX, CROCODILE_BITE + CROCODILE_BITE_PER_HAZARD * hits.at.length);
     const hit = this.styledHit(npc, player, method, "melee", damage, 0, { prayable: false, scale: false });
     if (!hit.isAccurate()) return hit;
+    Shared.announceAttack(npc, player, "melee");
     if (Shared.isProtected(player, "melee")) {
       damage = Math.floor(damage / 3);
       const { Skill } = Shared.core();

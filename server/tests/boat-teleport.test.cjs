@@ -13,6 +13,8 @@ const teleports = [];
 let allowTeleport = true;
 let breakTablet;
 let plugin;
+let castSpell;
+let pandemoniumDone = false;
 
 before(async () => {
   await CachePipeline.initialize();
@@ -28,7 +30,9 @@ before(async () => {
       TeleportType: { TELE_TAB: "TELE_TAB" },
     },
     onItemAction: (name, actions) => { breakTablet = actions.Break; },
+    onSpellCast: (handler) => { castSpell = handler; },
     onCustomEvent() {},
+    emitCustomEvent: (name, request) => { if (name === "quest:is-complete") request.complete = pandemoniumDone; },
   });
 });
 
@@ -118,4 +122,17 @@ test("no moored boat with a greater focus, or a refused teleport, keeps the tabl
   plugin._test.teleportToBoat(blocked, ItemIdentifiers.TELEPORT_TO_BOAT, 0);
   assert.equal(blocked.items.length, 1);
   assert.equal(teleports.length, 0);
+});
+
+test("the Teleport to Boat spell is handled, and needs Pandemonium before anything else", () => {
+  const messages = [];
+  const player = { sendMessage: (text) => messages.push(text) };
+  const other = { player, spellName: "Varrock Teleport", handled: false };
+  castSpell(other);
+  assert.equal(other.handled, false, "other spells are left alone");
+  const event = { player, spellName: "Teleport to Boat", opId: 1, handled: false };
+  pandemoniumDone = false;
+  castSpell(event);
+  assert.equal(event.handled, true);
+  assert.deepEqual(messages, ["You need to complete Pandemonium to cast this spell."]);
 });
