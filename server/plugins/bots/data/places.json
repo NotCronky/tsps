@@ -9,6 +9,9 @@
     { "id": "falador_park", "name": "Falador Park", "x": 2994, "y": 3377, "about": "quiet park to hang out in" },
     { "id": "seers_village", "name": "Seers' Village", "x": 2723, "y": 3484, "about": "bank, maple and yew trees, Camelot nearby" },
     { "id": "catherby", "name": "Catherby", "x": 2809, "y": 3436, "about": "bank, lobster and harpoon fishing" },
-    { "id": "east_ardougne", "name": "East Ardougne", "x": 2661, "y": 3301, "about": "market square and bank" }
+    { "id": "east_ardougne", "name": "East Ardougne", "x": 2661, "y": 3301, "about": "market square and bank" },
+    { "id": "varrock_east", "name": "Varrock east", "x": 3268, "y": 3414, "about": "the tea stall, Varrock east bank to the west" },
+    { "id": "barbarian_village", "name": "Barbarian Village", "x": 3082, "y": 3424, "about": "spinning wheel, potter's wheel and pottery oven; Edgeville bank to the north" },
+    { "id": "falador_farm", "name": "Falador farm", "x": 3039, "y": 3288, "about": "the loom in the farmhouse south of Falador; Draynor bank to the east" }
   ]
 }

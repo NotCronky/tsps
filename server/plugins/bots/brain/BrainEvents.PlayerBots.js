@@ -7,6 +7,7 @@ const PROGRESS_EVENTS = Object.freeze([
   "smelting:success",
   "fishing:success",
   "cooking:success",
+  "thieving:success",
 ]);
 
 /**

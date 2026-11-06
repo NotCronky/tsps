@@ -128,3 +128,55 @@ test("the core never drops a bow of Faerdhinen after a shot", () => {
   assert.equal(bow.getId(), I.BOW_OF_FAERDHINEN_C_);
   assert.equal(bow.getAmount(), 1);
 });
+
+function carrying(items, shards) {
+  const p = player({ shards });
+  const inv = p.getInventory();
+  const amounts = new Map([[I.CRYSTAL_SHARD, shards]]);
+  p.getInventory = () => ({
+    ...inv,
+    getItems: () => items,
+    getAmount: (id) => (id === I.CRYSTAL_SHARD ? p.inventory.shards : items.filter((it) => it?.getId() === id).length),
+    contains: (id) => items.some((it) => it?.getId() === id) || (amounts.get(id) ?? 0) > 0,
+    deleteNumber: (id, count) => {
+      if (id === I.CRYSTAL_SHARD) { p.inventory.shards -= count; return; }
+      for (let n = 0; n < count; n++) { const index = items.findIndex((it) => it?.getId() === id); if (index >= 0) items[index] = null; }
+    },
+  });
+  return p;
+}
+
+test("corrupting at the bowl: 2,000 shards less one per 100 charges, no experience", () => {
+  const { corruptionRecipe } = Bowfa._test;
+  const bow = item(I.BOW_OF_FAERDHINEN);
+  bow.setMetaValue("bow-of-faerdhinen", { charges: 10000 });
+  const p = carrying([bow], 1950);
+  const recipe = corruptionRecipe(p);
+  assert.equal(recipe.productId, I.BOW_OF_FAERDHINEN_C_);
+  assert.deepEqual(recipe.needs, [{ itemId: I.BOW_OF_FAERDHINEN, amount: 1 }, { itemId: I.CRYSTAL_SHARD, amount: 1900 }], "the Wiki's 10,000-charge example");
+  assert.equal(recipe.level, 82);
+  assert.equal(recipe.xp, 0);
+  assert.equal(recipe.make(p, 1), 1);
+  assert.equal(bow.getId(), I.BOW_OF_FAERDHINEN_C_);
+  assert.equal(charges(bow), 0, "no charges kept: it never spends them");
+  assert.equal(p.inventory.shards, 50);
+  assert.equal(corruptionRecipe(carrying([], 5000)), null, "no bow, no recipe");
+  const inactive = carrying([item(I.BOW_OF_FAERDHINEN_INACTIVE_)], 0);
+  assert.equal(corruptionRecipe(inactive).needs[1].amount, 2000);
+});
+
+test("a clan's crystal recolours the corrupted bow and is used up; Hefin brings back the red", () => {
+  const { recolour } = Bowfa._test;
+  const bow = item(I.BOW_OF_FAERDHINEN_C_);
+  const crystal = item(I.CRYSTAL_OF_ITHELL);
+  const p = carrying([bow, crystal, item(I.CRYSTAL_OF_HEFIN)], 0);
+  recolour({ player: p, usedItem: crystal, usedWithItem: bow }, "Ithell");
+  assert.equal(bow.getId(), I.BOW_OF_FAERDHINEN_C__4, "Ithell");
+  assert.ok(!p.getInventory().getItems().some((it) => it?.getId() === I.CRYSTAL_OF_ITHELL), "crystal used up");
+  recolour({ player: p, usedItem: bow, usedWithItem: item(I.CRYSTAL_OF_HEFIN) }, "Hefin");
+  assert.equal(bow.getId(), I.BOW_OF_FAERDHINEN_C_);
+  const plain = item(I.BOW_OF_FAERDHINEN);
+  const event = { player: p, usedItem: item(I.CRYSTAL_OF_HEFIN), usedWithItem: plain };
+  recolour(event, "Hefin");
+  assert.equal(plain.getId(), I.BOW_OF_FAERDHINEN, "an uncorrupted bow isn't recoloured");
+});

@@ -5,7 +5,9 @@ const { attachBrain } = require("../brain/AttachBrain.PlayerBots");
 const { chooseName } = require("../lib/Names.PlayerBots");
 const { TaskAgent } = require("../agent/Agent.PlayerBots");
 const { BotRoster } = require("./Roster.PlayerBots");
-const { rollProfile, setUpNewAccount } = require("./Stages.PlayerBots");
+const { rollProfile, setUpNewAccount, applyStartingKit } = require("./Stages.PlayerBots");
+const HouseHost = require("../lib/HouseHost.PlayerBots");
+const Crowd = require("../lib/Crowd.PlayerBots");
 
 /**
  * The bot population: accounts that play like people. Each is a normal saved account with a
@@ -13,6 +15,9 @@ const { rollProfile, setUpNewAccount } = require("./Stages.PlayerBots");
  * profile (what it likes doing). It logs in and out on its own timers, so who is online changes
  * through the day, and while online a task agent (agent/Agent.PlayerBots.js) picks its work
  * from its levels, items and coins. World config "PlayerBots:population" turns it on.
+ *
+ * One more account never takes a break: the house host (`host` in the config, on by default),
+ * whose max house in Rimmington the others offer their bones in (lib/HouseHost.PlayerBots.js).
  */
 const CONFIG_KEY = "PlayerBots:population";
 /** Marks a population bot while it's online (not saved): it plays by player rules, not a scripted bot's. */
@@ -23,6 +28,8 @@ const DEFAULTS = Object.freeze({
   count: 110,
   sessionMinutes: [45, 150],
   breakMinutes: [20, 90],
+  // The house host: always online, its max house open in Rimmington for the others' Prayer.
+  host: { enabled: true, name: "Gilded Host" },
 });
 const MINUTE_MS = 60000;
 const SPAWN_GAP_MS = 1500;
@@ -46,6 +53,7 @@ function readConfig(raw) {
     if (!(min > 0 && max >= min)) config[key] = DEFAULTS[key];
   }
   config.count = Math.max(0, Math.floor(Number(config.count) || 0));
+  config.host = { ...DEFAULTS.host, ...(config.host && typeof config.host === "object" ? config.host : {}) };
   return config;
 }
 
@@ -69,8 +77,13 @@ function registerPopulation({ api, botApi, runtime, registry, world, catalogue, 
   let nextSpawnAt = 0;
   let tick = 0;
 
+  const hostName = config.host.enabled === false ? null : String(config.host.name).slice(0, 12);
+  /** The house host while it's logged in: never on a break, back within a minute if it drops. */
+  let host = null;
+  let hostRetryAt = 0;
+
   function nameTaken(name) {
-    return roster.has(name) || core.GameConstants.PLAYER_PERSISTENCE?.exists?.(name) === true || !!core.World.getPlayerByName(name);
+    return roster.has(name) || name.toLowerCase() === hostName?.toLowerCase() || core.GameConstants.PLAYER_PERSISTENCE?.exists?.(name) === true || !!core.World.getPlayerByName(name);
   }
 
   function fillRoster() {
@@ -101,6 +114,8 @@ function registerPopulation({ api, botApi, runtime, registry, world, catalogue, 
     bot.setAutoRetaliate(true);
     bot.setAttribute(POPULATION_ATTRIBUTE, true);
     if (isNew) setUpNewAccount(bot, profile);
+    // The stage's quests and teleports: new accounts and ones made before them alike, once.
+    applyStartingKit(bot, profile);
     const agent = new TaskAgent({ player: bot, catalogue, registry, world, profile: { style: profile.style, focus: profile.focus } });
     const first = agent.next(nowMs);
     const attached = attachBrain({
@@ -113,6 +128,29 @@ function registerPopulation({ api, botApi, runtime, registry, world, catalogue, 
     online.set(key, { bot, profile, agent, retryAt: 0, logoutAt: nowMs + rollBetween(config.sessionMinutes) * MINUTE_MS });
     returnAt.delete(profile.name);
     return true;
+  }
+
+  function logInHost(nowMs) {
+    if (!hostName || nowMs < hostRetryAt || host?.isRegistered?.()) return;
+    hostRetryAt = nowMs + BUSY_RETRY_MS;
+    if (core.World.getPlayerByName(hostName)) return;
+    const isNew = core.GameConstants.PLAYER_PERSISTENCE?.exists?.(hostName) !== true;
+    const { x, y, z } = HouseHost.PORTAL;
+    const bot = runtime.spawnPvpBot(new core.Location(x + 1, y - 2, z), { username: hostName, persistent: true, mode: "roaming" });
+    if (!bot) return;
+    bot.setPasswordHashWithSalt(lockedPassword());
+    bot.setRights(core.PlayerRights.NONE);
+    bot.setAttribute(POPULATION_ATTRIBUTE, true);
+    if (isNew) setUpNewAccount(bot, { stage: "late", style: "skiller", focus: "construction" });
+    applyStartingKit(bot, { stage: "late" });
+    const hosting = registry.compile({ id: "house_host", mode: "construction", capacity: 1, repeat: true, actions: [{ type: "hostHouse" }] });
+    const attached = attachBrain({
+      runtime, registry, world, bot, resetMovementState, activity: hosting, home: bot.getLocation(), chooseNext: () => hosting,
+    });
+    if (!attached) return;
+    host = bot;
+    HouseHost.setHost(bot);
+    botApi.log("house_host_online", { name: hostName });
   }
 
   function logOut(member) {
@@ -156,6 +194,12 @@ function registerPopulation({ api, botApi, runtime, registry, world, catalogue, 
   }
 
   function onLogout({ player }) {
+    Crowd.forget(player);
+    if (player === host) {
+      host = null;
+      HouseHost.setHost(null);
+      return;
+    }
     const member = memberOf(player);
     if (!member) return;
     roster.setLocation(member.profile.name, player.getLocation());
@@ -179,7 +223,7 @@ function registerPopulation({ api, botApi, runtime, registry, world, catalogue, 
 
   /** "world:population": online bots count as players on the world list. */
   function countOnline(request) {
-    request.count += online.size;
+    request.count += online.size + (host?.isRegistered?.() ? 1 : 0);
   }
 
   function onShutdown() {
@@ -217,6 +261,7 @@ function registerPopulation({ api, botApi, runtime, registry, world, catalogue, 
     execute() {
       const nowMs = Date.now();
       tick++;
+      logInHost(nowMs);
       spawnDue(nowMs);
       let index = 0;
       for (const member of online.values()) {

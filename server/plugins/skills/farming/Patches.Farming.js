@@ -1190,5 +1190,7 @@ function attach(api) {
     api.registerNpcCombatMethodProvider(core.NpcIdentifiers.HESPORI_2, Hespori.HesporiCombat, { singleton: false });
 }
 
-Object.assign(module.exports, { FARM_ATTRIBUTE, SCARECROW_LEVEL, farmFor, hasLevel, stateFor, hasTool, requireTool, award, give, choose, clearPatch, syncPatch, nearPatch, water, fertilize, pourCompost, cure, harvest, noteSeedling, advanceTime, attach, tick: farmingTick, retrievalItems, startBinWork,
+/** Whether the player is in the middle of patch work (raking, picking, clearing): bots wait it out. */
+function isWorking(player) { return WORK.has(player); }
+Object.assign(module.exports, { isWorking, FARM_ATTRIBUTE, SCARECROW_LEVEL, farmFor, hasLevel, stateFor, hasTool, requireTool, award, give, choose, clearPatch, syncPatch, nearPatch, water, fertilize, pourCompost, cure, harvest, noteSeedling, advanceTime, attach, tick: farmingTick, retrievalItems, startBinWork,
     startClear, after, spam, sound });

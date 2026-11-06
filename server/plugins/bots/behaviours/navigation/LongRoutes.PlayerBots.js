@@ -7,6 +7,7 @@ const { planRoute } = require("./LongRoutePlanner.PlayerBots");
 
 // Walks shorter than this are left to the route finder's own 128-tile window.
 const LONG_ROUTE_MIN_TILES = 32;
+const UNDERGROUND_OFFSET = 6400;
 // A bot this close to a cached route's waypoint joins that route there.
 const REJOIN_TILES = 8;
 // Reaching (or overtaking) a waypoint this closely moves on to the next.
@@ -173,6 +174,13 @@ function canReachSpot(player, goal, nowMs = Date.now()) {
   const spot = { x: goal.x, y: goal.y, z: Number.isFinite(goal.z) ? goal.z : here.z };
   if (spot.z !== here.z || chebyshev(here, spot) <= LONG_ROUTE_MIN_TILES) {
     return true;
+  }
+  // Into or out of the underground (6400 tiles north on plane 0): by a ladder or trapdoor that
+  // leads there (brain/Climbing finds it, as the walk will), not by a walk across the map.
+  const underground = (tile) => tile.y >= UNDERGROUND_OFFSET;
+  if (underground(here) !== underground(spot)) {
+    const { findStairs } = require("../../brain/Climbing.PlayerBots");
+    return findStairs(here, spot, underground(spot) ? -1 : 1, nowMs) !== null;
   }
   const route = routeFor(player, here, spot, nowMs);
   return route === undefined ? undefined : route !== null;

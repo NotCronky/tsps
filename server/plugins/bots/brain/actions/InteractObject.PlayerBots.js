@@ -449,11 +449,15 @@ function createInteractObjectAction(spec, world) {
               y: objectLoc.getY(),
             });
           }
+          // The slot of this action's option on the object ("Steal-from" is a stall's second),
+          // as a player's click on that option is; the first when it isn't found.
+          const definition = world.core?.ObjectDefinition?.forPlayer?.(object.getId(), player) ?? object.getDefinition?.();
+          const slot = (definition?.getActions?.() ?? []).findIndex((action) => String(action ?? "").toLowerCase() === String(option).toLowerCase());
           world.emitObjectInteraction?.({
             player,
             object,
             objectId: object.getId(),
-            clickType: 1,
+            clickType: slot >= 0 ? slot + 1 : 1,
             location: {
               x: objectLoc.getX(),
               y: objectLoc.getY(),

@@ -25,6 +25,7 @@ KeyChests.register({
   onObjectInteraction: (name, options) => objects.set(name, { ...objects.get(name), ...options }),
   onItemOnObject() {},
   onItemOnItem: (a, b, fn) => itemOnItem.push([a, b, fn]),
+  onCustomEvent() {},
 });
 
 const obj = (name) => CacheDefinitions.getObjId(name);
@@ -116,23 +117,11 @@ test("the key halves join into a crystal key; the noted halves don't", () => {
   assert.ok(itemOnItem.some(([a, b]) => a === "Loop half of key" && b === "Tooth half of key"));
 });
 
-test("the Prifddinas singing bowl sings enhanced crystal keys at 80 Smithing and Crafting", () => {
-  const bowl = CacheDefinitions.getLocId("prif_singing_bowl");
-  const keys = [[obj("crystal_key"), 2], [obj("prif_crystal_shard"), 25]];
-  assert.equal(CrystalKey.singCrystal({ player: createPlayer(), objectId: CacheDefinitions.getLocId("gauntlet_singing_bowl") }), false);
-  const empty = createPlayer();
-  CrystalKey.singCrystal({ player: empty, objectId: bowl });
-  assert.equal(empty.menu, null);
-  assert.equal(empty.statements.length, 1);
-  const low = createPlayer({ smithing: 79, items: keys });
-  CrystalKey.singCrystal({ player: low, objectId: bowl });
-  assert.equal(low.menu, null);
-  const player = createPlayer({ items: keys });
-  CrystalKey.singCrystal({ player, objectId: bowl });
-  assert.ok(player.menu);
-  player.menu.execute(obj("prif_crystal_key"), 28);
-  assert.equal(player.inventory.get(obj("prif_crystal_key")), 2, "as many as the shards allow");
-  assert.equal(player.inventory.get(obj("prif_crystal_shard")), 5);
-  assert.equal(player.inventory.get(obj("crystal_key")), 0);
-  assert.deepEqual(player.xp, [[Skill.SMITHING, 1000], [Skill.CRAFTING, 1000]]);
+test("the enhanced crystal key is a crystal singing recipe at 80 Smithing and Crafting", () => {
+  // The bowl's menu is CrystalSinging's (tests/crystal-singing.test.cjs); the key adds its recipe.
+  const recipe = CrystalKey.singingRecipe();
+  assert.equal(recipe.productId, obj("prif_crystal_key"));
+  assert.deepEqual(recipe.needs, [{ itemId: obj("crystal_key"), amount: 1 }, { itemId: obj("prif_crystal_shard"), amount: 10 }]);
+  assert.equal(recipe.level, 80);
+  assert.equal(recipe.xp, 500);
 });

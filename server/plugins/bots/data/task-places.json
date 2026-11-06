@@ -41,6 +41,25 @@
       "edgeville",
       "lumbridge"
     ],
+    "banking": [
+      "grand_exchange",
+      "varrock",
+      "edgeville",
+      "falador",
+      "draynor_village",
+      "seers_village",
+      "catherby",
+      "east_ardougne"
+    ],
+    "crafting_stations": [
+      "barbarian_village"
+    ],
+    "loom": [
+      "falador_farm"
+    ],
+    "anvil": [
+      "varrock"
+    ],
     "hang_around": [
       "grand_exchange",
       "falador_park",

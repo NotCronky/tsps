@@ -153,9 +153,13 @@ class HunllefFight {
     this.style = "ranged";
     this.attacks = 0;
     this.offPrayerHits = 0;
+    this.hitsLanded = 0;
     // For the Combat Achievements: damage taken off prayer, from tornadoes, the floor and the
     // stomp, and the player's hits with a style it protects against.
     this.taken = { offPrayer: 0, avoidable: 0 };
+    // Damage taken by its source (for bots' play and its tests): hits on and off prayer, tornadoes,
+    // the floor and the stomp.
+    this.damageBy = { prayed: 0, unprayed: 0, tornado: 0, floor: 0, stomp: 0 };
     this.wrongStyleHits = 0;
     this.ticks = 0;
     this.nextAttack = 0;
@@ -274,6 +278,7 @@ class HunllefFight {
       const stomp = randomInt(this.random, 0, MAX_HIT[this.mode].stomp);
       this.taken.avoidable += stomp;
       this.taken.offPrayer += stomp;
+      this.damageBy.stomp += stomp;
       damage(player, stomp);
       player.sendMessage(`You're trampled beneath the ${this.mode === "corrupted" ? "Corrupted" : "Crystalline"} Hunllef.`);
       return;
@@ -307,6 +312,7 @@ class HunllefFight {
       const prayed = protects(player, style);
       const amount = randomInt(this.random, 0, MAX_HIT[this.mode][prayed ? "prayed" : "unprayed"][tier]);
       if (!prayed) this.taken.offPrayer += amount;
+      this.damageBy[prayed ? "prayed" : "unprayed"] += amount;
       damage(player, amount);
       if (disable) {
         PrayerHandler.deactivatePrayers(player);
@@ -351,6 +357,7 @@ class HunllefFight {
       if (tornado.npc.getLocation().equals(player.getLocation())) {
         const amount = randomInt(this.random, min, max);
         this.taken.avoidable += amount;
+        this.damageBy.tornado += amount;
         damage(player, amount);
         player.performGraphic(new Graphic(TORNADO_HIT_GRAPHIC));
       }
@@ -389,6 +396,7 @@ class HunllefFight {
       if (tile.state === "orange" && this.arenaTile(tile.x, tile.y).equals(here)) {
         const amount = randomInt(this.random, ...FLOOR_DAMAGE);
         this.taken.avoidable += amount;
+        this.damageBy.floor += amount;
         damage(player, amount);
       }
     }
@@ -409,6 +417,8 @@ class HunllefFight {
 
   /** Hits it protects against do nothing; every 6th other hit changes what it protects against. */
   onHit(hit) {
+    // Every hit that lands, blocked or not (for a player counting theirs, as the 5:1 method does).
+    this.hitsLanded++;
     const style = styleOf(hit.getCombatType?.());
     if (style === this.protecting) {
       this.wrongStyleHits++;

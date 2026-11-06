@@ -3,6 +3,7 @@
 const { createTravelToAction } = require("../brain/actions/TravelTo.PlayerBots");
 const { chooseTask } = require("./Brain.PlayerBots");
 const { level } = require("../tasks/Common.PlayerBots");
+const Crowd = require("../lib/Crowd.PlayerBots");
 
 /**
  * Drives any character - a bot, or a player in bot mode - through tasks. It feeds the executor
@@ -25,6 +26,10 @@ const STUCK_FAILS = 3;
 const RECENT = 3;
 // A character with nothing it can do wanders where it is, and asks again this often.
 const IDLE_RETRY_MS = 30000;
+// Each character already at a place counts as this many tiles further when choosing where to go,
+// and a place with PLACE_FULL of them is passed over for another while there is one.
+const PLACE_CROWD_TILES = 30;
+const PLACE_FULL = 15;
 
 function travelActivity(place, world) {
   return {
@@ -62,6 +67,7 @@ class TaskAgent {
     this.restingUntil = new Map();
     this.quickFails = 0;
     this.idleUntil = 0;
+    this.placeId = null;
   }
 
   /** What the character is doing, for ::botmode and ::bots. */
@@ -70,9 +76,16 @@ class TaskAgent {
     return this.current ? this.current.task.name : "looking for something to do";
   }
 
+  /** Whether its task is in the middle of something it can't walk out of (a Gauntlet run). */
+  busy() {
+    return this.current?.task.busy?.(this.player, this.ctx) === true;
+  }
+
   /** Brain-chosen tasks run their time; a picked one runs until the player stops it. */
   due(nowMs) {
-    return this.taskId === null && this.current !== null && this.pending === null && nowMs >= this.current.endsAt;
+    if (this.taskId !== null || this.current === null || this.pending !== null || nowMs < this.current.endsAt) return false;
+    // A task in the middle of something it can't walk out of (a Gauntlet run) runs on till it's done.
+    return this.current.task.busy?.(this.player, this.ctx) !== true;
   }
 
   /** The executor's chooseNext: the next activity, or "wait" to stay idle and ask again. */
@@ -89,9 +102,11 @@ class TaskAgent {
       this.idleUntil = nowMs + IDLE_RETRY_MS;
       return this.ctx.registry.byId.get("roam") ?? "wait";
     }
-    const place = this.placeFor(task);
-    if (place) {
+    const { place, travel } = this.placeFor(task);
+    this.placeId = place?.id ?? null;
+    if (travel) {
       this.pending = { task, place };
+      Crowd.note(this.player, task.id, this.placeId);
       return travelActivity(place, this.ctx.world);
     }
     return this.start(task, nowMs);
@@ -108,6 +123,7 @@ class TaskAgent {
       return task;
     }
     const tasks = this.catalogue.tasks.filter((task) => (this.restingUntil.get(task.id) ?? 0) <= nowMs);
+    const counts = Crowd.taskCounts(this.player);
     return chooseTask({
       player: this.player,
       tasks,
@@ -115,15 +131,27 @@ class TaskAgent {
       profile: this.profile,
       recent: this.recent,
       levelOf: (skill) => level(this.player, skill),
+      // How crowded a task is: the characters on it, per place it's done at.
+      crowdOf: (task) => (counts.get(task.id) ?? 0) / Math.max(1, task.places?.length ?? 1),
     }, this.random);
   }
 
-  /** Nearest of the task's places, when the character isn't already near one. */
+  /**
+   * Where to do a task: { place, travel }. A place near enough that isn't full is where it is
+   * already (no travel); otherwise the place nearest once crowding is counted (each character
+   * there PLACE_CROWD_TILES further), passing over full ones while there's another.
+   */
   placeFor(task) {
     const here = this.player.getLocation();
     const places = task.places ?? [];
-    if (places.length === 0 || places.some((place) => distance(here, place) <= NEAR_TILES)) return null;
-    return places.reduce((best, place) => (distance(here, place) < distance(here, best) ? place : best));
+    if (places.length === 0) return { place: null, travel: false };
+    const crowd = (place) => Crowd.atPlace(place.id, this.player);
+    const open = places.filter((place) => crowd(place) < PLACE_FULL);
+    const nearby = (open.length ? open : places).find((place) => distance(here, place) <= NEAR_TILES);
+    if (nearby) return { place: nearby, travel: false };
+    const cost = (place) => distance(here, place) + PLACE_CROWD_TILES * crowd(place);
+    const best = (open.length ? open : places).reduce((a, b) => (cost(b) < cost(a) ? b : a));
+    return { place: best, travel: true };
   }
 
   start(task, nowMs) {
@@ -134,6 +162,7 @@ class TaskAgent {
     }
     const [min, max] = task.minutes ?? [20, 40];
     this.current = { task, startedAt: nowMs, endsAt: nowMs + (min + this.random() * (max - min)) * MINUTE_MS };
+    Crowd.note(this.player, task.id, this.placeId ?? null);
     this.recent = [task.id, ...this.recent.filter((id) => id !== task.id)].slice(0, RECENT);
     return activity;
   }

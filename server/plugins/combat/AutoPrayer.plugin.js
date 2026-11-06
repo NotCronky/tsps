@@ -86,6 +86,17 @@ function pray(player, prayer, entry) {
   if (PrayerHandler.isActivated(player, prayer)) entry.prayed.add(prayer);
 }
 
+/** The offensive prayers auto-prayer turned on, and that are still up, go off. */
+function dropOffensive(player, entry) {
+  const { PrayerHandler } = core;
+  const offensive = new Set(STYLES.flatMap((style) => offensivePrayers(style).flat()));
+  for (const prayer of entry.prayed) {
+    if (!offensive.has(prayer)) continue;
+    if (PrayerHandler.isActivated(player, prayer)) PrayerHandler.deactivatePrayer(player, prayer);
+    entry.prayed.delete(prayer);
+  }
+}
+
 /** Whether the player is still fighting something themselves. */
 function attacking(player) {
   const target = player.getCombat?.()?.getTarget?.();
@@ -120,6 +131,8 @@ function update(player) {
   const now = core.World.getProcessCycle();
   entry.attacks = entry.attacks.filter((attack) => attack.cycle >= now);
   if (!enabled(player) || player.isRegistered?.() === false || player.getHitpoints?.() <= 0) {
+    // Turned off mid-fight: what it put up comes down, rather than draining on unwatched.
+    if (!enabled(player) && player.isRegistered?.() !== false) standDown(player, entry);
     incoming.delete(player);
     return false;
   }
@@ -131,7 +144,11 @@ function update(player) {
   }
   const next = entry.attacks.reduce((soonest, attack) => (attack.cycle < soonest.cycle ? attack : soonest));
   pray(player, protectionFor(next.style), entry);
-  if (player.getAttribute?.(OFFENSIVE_ATTRIBUTE) === false) return true;
+  if (player.getAttribute?.(OFFENSIVE_ATTRIBUTE) === false) {
+    // Offensive turned off: the offensive prayers it put up come down too.
+    dropOffensive(player, entry);
+    return true;
+  }
   for (const prayers of offensivePrayers(ownStyle(player))) {
     if (prayers.every((prayer) => usable(player, prayer))) {
       for (const prayer of prayers) pray(player, prayer, entry);
@@ -215,6 +232,21 @@ function toggleOffensive({ player, parts }) {
   return true;
 }
 
+/**
+ * "combat:autopray-set" { player, on, offensive?, was, wasOffensive }: turns auto-prayer on or
+ * off for a player, as ::autopray on/off does, without the message (bots that play a fight with
+ * it); `offensive`, when given, is ::autoprayoff's choice. `was` and `wasOffensive` answer how it
+ * was before, to put it back afterwards.
+ */
+function setAutoPray(request) {
+  const { player } = request;
+  if (!player) return;
+  request.was = player.getAttribute(AUTOPRAY_ATTRIBUTE) === true;
+  request.wasOffensive = player.getAttribute(OFFENSIVE_ATTRIBUTE) !== false;
+  player.setAttribute(AUTOPRAY_ATTRIBUTE, request.on === true);
+  if (typeof request.offensive === "boolean") player.setAttribute(OFFENSIVE_ATTRIBUTE, request.offensive);
+}
+
 module.exports = {
   name: "AutoPrayer",
   AUTOPRAY_ATTRIBUTE,
@@ -224,6 +256,7 @@ module.exports = {
     api.persistAttribute(AUTOPRAY_ATTRIBUTE, false);
     api.persistAttribute(OFFENSIVE_ATTRIBUTE, true);
     api.onCustomEvent("combat:incoming-attack", incomingAttack);
+    api.onCustomEvent("combat:autopray-set", setAutoPray);
     api.registerCommand("autopray", toggleAutoPray, api.core.PlayerRights.NONE, "Toggle auto-prayer against monsters' and players' attacks (learning aid)");
     api.registerCommand("autoprayoff", toggleOffensive, api.core.PlayerRights.NONE, "Toggle whether auto-prayer also keeps up offensive prayers");
   },

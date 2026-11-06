@@ -232,6 +232,8 @@ function createTrainCombatAction(spec, world) {
       // Nothing better owned for the slot: keep what is worn.
       if (!Number.isInteger(id)) continue;
       if (existing?.getId() === id) continue;
+      // `spec.keepWorn(player)`: ids it must keep on (a Slayer task's earmuffs, mirror shield).
+      if (existing?.getId() > 0 && spec.keepWorn?.(player)?.includes?.(existing.getId())) continue;
       // Put it on as a player does: out of the inventory, with what it replaces put back there.
       const carried = Math.min(inventory.getAmount(id), amount ?? 1);
       if (carried <= 0) continue;
@@ -282,8 +284,14 @@ function createTrainCombatAction(spec, world) {
    */
   function selectSite(player, bot, stage, nowMs) {
     const loc = player.getLocation();
-    const clusters = nearestClusters(npcClustersFor(world, `trainCombat:${[...excludedNames]}`, opponentLevel),
-      levelKeys(stage), { x: loc.getX(), y: loc.getY(), z: loc.getZ() })
+    // `spec.targets(player)`: { key, counts(definition) } (a Slayer task's monsters) in place of the
+    // stage's level band; null when there's nothing to fight.
+    const targets = spec.targets ? spec.targets(player) : null;
+    if (spec.targets && !targets) return false;
+    const index = targets
+      ? npcClustersFor(world, `trainCombat:targets:${targets.key}`, (definition) => (opponentLevel(definition) !== null && targets.counts(definition) ? "target" : null))
+      : npcClustersFor(world, `trainCombat:${[...excludedNames]}`, opponentLevel);
+    const clusters = nearestClusters(index, targets ? ["target"] : levelKeys(stage), { x: loc.getX(), y: loc.getY(), z: loc.getZ() })
       .filter((cluster) => (bot.avoidedSites.get(cluster.key) ?? 0) <= nowMs);
     const fresh = clusters.filter((cluster) => cluster.key !== bot.previousSiteId);
     const pool = fresh.length ? fresh : clusters;
@@ -304,7 +312,7 @@ function createTrainCombatAction(spec, world) {
     }
     if (!cluster) return false;
     occupants(cluster.key).add(player);
-    bot.site = { id: cluster.key, npcLevels: stage.npcLevels, anchor: { x: cluster.x, y: cluster.y, z: cluster.z } };
+    bot.site = { id: cluster.key, npcLevels: stage.npcLevels, targets, anchor: { x: cluster.x, y: cluster.y, z: cluster.z } };
     bot.previousSiteId = cluster.key;
     bot.stageId = stage.id;
     bot.endsAt = nowMs + randomInRange(minSeconds, maxSeconds) * 1000;
@@ -343,8 +351,10 @@ function createTrainCombatAction(spec, world) {
     const anchor = bot.site.anchor;
     if (at.getZ() !== anchor.z ||
         Math.max(Math.abs(at.getX() - anchor.x), Math.abs(at.getY() - anchor.y)) > SITE_RADIUS) return false;
-    const level = opponentLevel(npc.getCurrentDefinition(player));
-    if (level === null || level < bot.site.npcLevels.min || level > bot.site.npcLevels.max) return false;
+    const definition = npc.getCurrentDefinition(player);
+    const level = opponentLevel(definition);
+    if (level === null) return false;
+    if (bot.site.targets ? !bot.site.targets.counts(definition) : level < bot.site.npcLevels.min || level > bot.site.npcLevels.max) return false;
     if ((bot.avoided.get(npc) ?? 0) > nowMs) return false;
     const combat = npc.getCombat();
     if ((combat.getTarget() && combat.getTarget() !== player) ||
@@ -365,6 +375,13 @@ function createTrainCombatAction(spec, world) {
         return "running";
       }
       if (player.isTeleportingReturn?.() || player.getForceMovement?.() || player.busy?.()) return "running";
+      // Its targets are done with (a Slayer task finished): this fight is over, the last kill made.
+      const targets = spec.targets ? spec.targets(player) : null;
+      if (spec.targets && (!targets || (bot.site?.targets && bot.site.targets.key !== targets.key)) && !player.getCombat().getTarget()) {
+        release(player, bot);
+        leaveSite(player, bot);
+        return "success";
+      }
       const location = player.getLocation();
       const position = `${location.getX()},${location.getY()},${location.getZ()}`;
       bot.stillTicks = position === bot.position ? (bot.stillTicks ?? 0) + 1 : 0;

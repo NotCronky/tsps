@@ -272,7 +272,7 @@ The lobby Scoreboard (36060) opens interface 639, which has your numbers next to
 | `::gauntletstart [corrupted]` | Starts a run without Bryn's checks; your hands must be empty. |
 | `::gauntletboss` | Ends preparation and takes you to the Hunllef. |
 | `::gauntlettime <seconds>` | Sets the preparation time left. |
-| `::gauntletgear [basic\|attuned\|perfected]` | During a run: a Hunllef loadout of that tier (default perfected): the armour worn, the bow wielded, the staff, the halberd, 4 Egniol potions, 4 crystal paddlefish and paddlefish in the rest. |
+| `::gauntletgear [basic\|attuned\|perfected]` | During a run: a Hunllef loadout (in a Corrupted run, its corrupted items): the bow wielded and the staff of that tier (default perfected), attuned armour worn (basic for basic), 3 Egniol potions and paddlefish in the rest. |
 | `::gauntletreward [corrupted] [incomplete\|junk]` | Puts a reward in the lobby chest as if a run just ended: a Gauntlet kill by default. |
 
 ## Tests

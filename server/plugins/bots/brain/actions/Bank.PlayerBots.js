@@ -2,6 +2,7 @@
 
 const { MapObjects } = require("../../../../src/main/typescript/elvarg/game/entity/impl/object/MapObjects");
 const { Bank } = require("../../../../src/main/typescript/elvarg/game/model/container/impl/Bank");
+const { ItemDefinition } = require("../../../../src/main/typescript/elvarg/game/definition/ItemDefinition");
 const { BANK_BOOTH_IDS, isUsableBankBooth } = require("../../lib/BankBooths.PlayerBots");
 const { playerState } = require("../ActionState.PlayerBots");
 const { createObjectReachChecker } = require("../../behaviours/navigation/ObjectReach.PlayerBots");
@@ -28,6 +29,7 @@ const bankArea = (x, y, z) => `${x >> 5},${y >> 5},${z}`;
 // per floor: the bot climbs to them (brain/Climbing) when they are still nearest.
 const FLOOR_PENALTY_TILES = 15;
 const MAX_PLANE = 3;
+const NO_BOOTH_TICKS = 10;
 
 /**
  * Deposits the inventory at the nearest usable bank booth, then reports success.
@@ -51,21 +53,31 @@ function createBankAction(spec, world) {
       lastClickX: null,
       lastClickY: null,
       failedClicks: 0,
+      noBooth: 0,
       avoid: new Map(),
       skipAreas: new Map(),
     }));
 
   // Already holding some of every input (ores mined on the way): use those first
   // instead of a bank trip; the bank tops up once they run out.
+  // `noted: true` takes an entry out as banknotes (Phials unnotes them).
+  const heldId = (entry) => (entry.noted ? ItemDefinition.forId(entry.item)?.getNoteId?.() ?? entry.item : entry.item);
+
+  // `topUp: true`: some already held isn't enough; it takes the inventory back up to each
+  // entry's amount (or full), as after essence went into the pouches.
+  const topUp = spec.topUp === true;
   function withdrawSatisfied(player) {
     const inventory = player.getInventory();
-    return withdrawSpecs.every((entry) => inventory.getAmount(entry.item) > 0);
+    if (topUp) return inventory.isFull() || withdrawSpecs.every((entry) => inventory.getAmount(heldId(entry)) >= entry.amount);
+    return withdrawSpecs.every((entry) => inventory.getAmount(heldId(entry)) > 0);
   }
 
   function performWithdraw(player) {
     const inventory = player.getInventory();
+    const noting = player.withdrawAsNote?.() === true;
     for (const entry of withdrawSpecs) {
-      let remaining = entry.amount - inventory.getAmount(entry.item);
+      player.setNoteWithdrawal?.(entry.noted === true);
+      let remaining = entry.amount - inventory.getAmount(heldId(entry));
       let guard = 0;
       while (remaining > 0 && guard++ < 40) {
         let withdrew = false;
@@ -95,6 +107,7 @@ function createBankAction(spec, world) {
         }
       }
     }
+    player.setNoteWithdrawal?.(noting);
   }
 
   function findBooth(player, nowMs) {
@@ -203,7 +216,7 @@ function createBankAction(spec, world) {
           // Inputs come from the bank, never from thin air: nothing of an item in
           // the bank fails the step, so the activity backs off and rotates.
           const inventory = player.getInventory();
-          return withdrawSpecs.every((entry) => inventory.getAmount(entry.item) > 0) ? "success" : "failed";
+          return withdrawSpecs.every((entry) => inventory.getAmount(heldId(entry)) > 0) ? "success" : "failed";
         } else if (depositIds) {
           player.getInventory().getItems().forEach((item, slot) => {
             if (item && depositIds.has(item.getId())) Bank.deposit(player, item.getId(), slot, item.getAmount(), true);
@@ -232,8 +245,11 @@ function createBankAction(spec, world) {
 
       const object = resolveBooth(player) ?? findBooth(player, nowMs);
       if (!object) {
-        return "failed";
+        // The area's objects can still be loading (a character just placed or logged in): a
+        // few ticks without a booth in sight before there's none.
+        return ++bot.noBooth > NO_BOOTH_TICKS ? "failed" : "running";
       }
+      bot.noBooth = 0;
       bot.booth = {
         objectId: object.getId(),
         x: object.getLocation().getX(),
@@ -347,6 +363,14 @@ function createBankAction(spec, world) {
       bot.booth = null;
       bot.lastClickAt = 0;
       bot.depositAt = 0;
+      // A click that opened the bank isn't a failed one: the next trip's first click, often
+      // from the same tile, starts the count again (it carried over, and every third trip
+      // wrote a working booth off as unreachable).
+      bot.lastTargetKey = null;
+      bot.lastClickX = null;
+      bot.lastClickY = null;
+      bot.failedClicks = 0;
+      bot.noBooth = 0;
       if (bot.suppressedAutoRetaliate !== null) {
         player.setAutoRetaliate?.(bot.suppressedAutoRetaliate);
         bot.suppressedAutoRetaliate = null;

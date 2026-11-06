@@ -380,6 +380,18 @@ function maybeOpenDoor({ player, state, world, request, select = false }) {
     targetX = request.x;
     targetY = request.y;
   }
+  // On a planned long route, the route's next stop is the yardstick (a gate on the way to a
+  // goal past the route finder's window, Taverley's on the road to Burthorpe, opens nothing
+  // the goal itself could show); a door waypoint, the stop after it.
+  const route = request.route;
+  if (route?.waypoints?.length) {
+    const next = route.waypoints[route.index] ?? null;
+    const after = next?.door ? route.waypoints[route.index + 1] ?? next : next;
+    if (after && Math.max(Math.abs(botLoc.getX() - after.x), Math.abs(botLoc.getY() - after.y)) > 1) {
+      targetX = after.x;
+      targetY = after.y;
+    }
+  }
   if (!Number.isFinite(targetX) || !Number.isFinite(targetY)) {
     return false;
   }

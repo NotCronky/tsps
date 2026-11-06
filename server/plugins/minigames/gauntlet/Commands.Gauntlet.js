@@ -65,11 +65,14 @@ function setPrepTime({ player, parts }) {
 
 const TIERS = ["basic", "attuned", "perfected"];
 const EGNIOL_4 = 23885;
+const EGNIOL_POTIONS = 3;
+// The armour it gives: attuned.
+const ARMOUR_TIER = 1;
 
 /**
  * ::gauntletgear [basic|attuned|perfected] - during a run, swaps what you carry for a Hunllef
- * loadout of that tier (perfected by default): the armour worn and the bow wielded, the staff,
- * the halberd, four Egniol potions, four crystal paddlefish and paddlefish in the rest.
+ * loadout of that tier (perfected by default): the bow wielded and the staff of it, attuned armour
+ * worn (basic armour for basic), three Egniol potions and paddlefish in the rest.
  */
 function gearUp({ player, parts }) {
   const run = Run.runOf(player);
@@ -85,22 +88,21 @@ function gearUp({ player, parts }) {
   }
   const { Item, Equipment } = Shared.core();
   const items = Items.itemsFor(run.mode);
-  Shared.clearItems(player);
   const equipment = player.getEquipment();
-  equipment.setItem(Equipment.HEAD_SLOT, new Item(items.helm[tier], 1));
-  equipment.setItem(Equipment.BODY_SLOT, new Item(items.body[tier], 1));
-  equipment.setItem(Equipment.LEG_SLOT, new Item(items.legs[tier], 1));
+  const armour = Math.min(tier, ARMOUR_TIER);
+  equipment.setItem(Equipment.HEAD_SLOT, new Item(items.helm[armour], 1));
+  equipment.setItem(Equipment.BODY_SLOT, new Item(items.body[armour], 1));
+  equipment.setItem(Equipment.LEG_SLOT, new Item(items.legs[armour], 1));
   equipment.setItem(Equipment.WEAPON_SLOT, new Item(items.bow[tier], 1));
   equipment.refreshItems();
   const inventory = player.getInventory();
+  inventory.resetItems();
   inventory.adds(items.staff[tier], 1);
-  inventory.adds(items.halberd[tier], 1);
-  for (let i = 0; i < 4; i++) inventory.adds(EGNIOL_4, 1);
-  for (let i = 0; i < 4; i++) inventory.adds(items.comboFish, 1);
+  for (let i = 0; i < EGNIOL_POTIONS; i++) inventory.adds(EGNIOL_4, 1);
   while (inventory.getFreeSlots() > 0) inventory.adds(items.paddlefish, 1);
   inventory.refreshItems();
   player.resetAttributes();
-  player.sendMessage(`You are equipped for the Hunllef with ${wanted} gear.`);
+  player.sendMessage(`You are equipped for the Hunllef with ${wanted} weapons.`);
   return true;
 }
 
@@ -137,3 +139,4 @@ module.exports = function registerGauntletCommands(api) {
   api.registerCommand("gauntletgear", gearUp, DEVELOPER, "Give Gauntlet equipment");
   api.registerCommand("gauntletreward", setReward, DEVELOPER, "Set Gauntlet rewards");
 };
+module.exports.gearUp = gearUp;

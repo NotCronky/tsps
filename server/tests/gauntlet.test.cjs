@@ -636,7 +636,20 @@ test('the teleport crystal works only away from the start room and before the fi
     const elsewhere = run.map.room(run.map.start.x === 3 ? 4 : 3, run.map.start.x === 3 ? 3 : 4);
     run.map.lightRoom(elsewhere.gridX, elsewhere.gridY);
     player.moveTo(run.map.roomTile(elsewhere, 7, 7));
-    use();
+    // A walk under way (to a node, say) ends with the teleport rather than carrying on from the start.
+    const { TaskManager } = require('../plugins/minigames/gauntlet/Shared.Gauntlet').core();
+    const cancelWalkToTasks = TaskManager.cancelWalkToTasks;
+    const getMovementQueue = player.getMovementQueue;
+    const stopped = [];
+    TaskManager.cancelWalkToTasks = (key) => stopped.push(`walk-to ${key}`);
+    player.getMovementQueue = () => ({ ...getMovementQueue?.call(player), reset: () => stopped.push('queue') });
+    try {
+      use();
+    } finally {
+      TaskManager.cancelWalkToTasks = cancelWalkToTasks;
+      player.getMovementQueue = getMovementQueue;
+    }
+    assert.deepEqual(stopped, ['queue', `walk-to ${player.getIndex?.()}`], 'the walk it was on is over');
     assert.ok(!player.inventory.contains(I.TELEPORT_CRYSTAL), 'used up');
     assert.ok(run.inStartRoom(player.getLocation()), 'back at the start');
   } finally {
@@ -896,12 +909,13 @@ test('floor tiles turn blue, then orange, and orange ones hurt', () => {
 
 /** PrayerHandler's activation needs a whole player; these stand in for it on the fake one. */
 function withFakePrayers(action) {
-  const saved = ['canUse', 'activatePrayerPrayerId', 'deactivatePrayers'].map((name) => [name, PrayerHandler[name]]);
+  const saved = ['canUse', 'activatePrayerPrayerId', 'deactivatePrayer', 'deactivatePrayers'].map((name) => [name, PrayerHandler[name]]);
   PrayerHandler.canUse = () => true;
   PrayerHandler.activatePrayerPrayerId = (player, prayer) => {
     if (PrayerHandler.PROTECTION_PRAYERS.includes(prayer)) for (const other of PrayerHandler.PROTECTION_PRAYERS) player.prayers[other] = false;
     player.prayers[prayer] = true;
   };
+  PrayerHandler.deactivatePrayer = (player, prayer) => { player.prayers[prayer] = false; };
   PrayerHandler.deactivatePrayers = (player) => { player.prayers.length = 0; };
   try {
     return action();
@@ -965,7 +979,7 @@ test('killing the Hunllef completes the run', () => {
   assert.equal(Run.runOf(player), null, 'the run is over');
   assert.equal(Run.statsOf(player).completions.regular, completed + 1);
   assert.equal(player.getLocation().getX(), 3032, 'back in the lobby');
-  assert.equal(player.varbits.get('varp2353'), 1, 'Enter-corrupted is now offered');
+  assert.equal(player.varbits.get('varp2353'), completed + 1, 'varp 2353 holds the completion count (above 0: Enter-corrupted is offered)');
 });
 
 test('the Gauntlet weapons: staff max hits by tier, the bows need no arrows', () => {
@@ -977,18 +991,21 @@ test('the Gauntlet weapons: staff max hits by tier, the bows need no arrows', ()
   }
 });
 
-test('::gauntletgear sets up a Hunllef loadout of a tier during a run', () => {
+test('::gauntletgear sets up a Hunllef loadout: weapons of a tier, attuned armour', () => {
   bindHooks();
   const commands = {};
   Commands({ ...fakeApi(), registerCommand: (name, handler) => { commands[name] = handler; } });
   const { player, run } = startedRun('Geared', { random: seeded(3) });
   try {
-    commands.gauntletgear({ player, parts: ['gauntletgear', 'attuned'] });
     const items = Items.itemsFor('regular');
-    assert.equal(Hunllef.armourTier(player, 'regular'), 2);
-    assert.equal(player.equipment.slots[3]?.id, items.bow[1]);
-    assert.ok(player.inventory.contains(items.staff[1]) && player.inventory.contains(items.halberd[1]));
-    assert.equal(player.inventory.getAmount(23885), 4);
+    player.inventory.adds(items.halberd[0], 1);
+    commands.gauntletgear({ player, parts: ['gauntletgear'] });
+    assert.equal(Hunllef.armourTier(player, 'regular'), 2, 'attuned armour (tiers count from 1)');
+    assert.equal(player.equipment.slots[3]?.id, items.bow[2]);
+    assert.ok(player.inventory.contains(items.staff[2]));
+    assert.ok(!player.inventory.contains(items.halberd[0]), 'no halberd');
+    assert.equal(player.inventory.getAmount(23885), 3);
+    assert.equal(player.inventory.getAmount(items.comboFish), 0);
     assert.equal(player.inventory.getFreeSlots(), 0, 'the rest is food');
   } finally {
     run.end('exit', { fade: false });

@@ -93,9 +93,15 @@ function hasCompleted(player) {
   return completions.regular + completions.corrupted > 0;
 }
 
-/** The entrance offers Enter-corrupted once any Gauntlet is completed (varp 2353). */
+/**
+ * Varp 2353 is the Gauntlet completion count (total_completed_gauntlet): the boss kill-count
+ * pages read it, and the entrance offers Enter-corrupted at any value above 0 (its multiloc).
+ * Sending 1 here once overwrote the count Combat Achievements sends.
+ */
 function sendCompletionVarp(player) {
-  player.getPacketSender().sendConfig(Shared.VARP.COMPLETED, hasCompleted(player) ? 1 : 0);
+  const { completions } = statsOf(player);
+  const count = completions.regular > 0 ? completions.regular : hasCompleted(player) ? 1 : 0;
+  player.getPacketSender().sendConfig(Shared.VARP.COMPLETED, count);
 }
 
 class GauntletRun {
@@ -241,6 +247,10 @@ class GauntletRun {
   /** Back to the start room, as the teleport crystal does. */
   teleportToStart() {
     if (this.stage !== "prep") return false;
+    // A teleport ends the walk it was on, a walk to a node included: left queued, it would carry
+    // on from the start room back to where it was going.
+    this.player.getMovementQueue?.()?.reset?.();
+    Shared.core().TaskManager?.cancelWalkToTasks?.(this.player.getIndex?.());
     this.player.moveTo(this.map.startTile(this.random));
     return true;
   }
@@ -301,7 +311,11 @@ class GauntletRun {
     const reward = Rewards.rewardFor(this, reason);
     Shared.api()?.emitCustomEvent?.("gauntlet:end", { run: this, player, reason, reward });
 
+    let left = false;
     const leave = () => {
+      if (left) return;
+      left = true;
+      leaving.delete(player.getUsername());
       Shared.clearItems(player);
       player.resetAttributes();
       const sender = player.getPacketSender();
@@ -320,9 +334,26 @@ class GauntletRun {
       Rewards.setReward(player, this.mode, reward);
       if (reward) player.sendMessage("Your reward awaits you in the nearby chest.");
     };
-    if (fade) Shared.fadeMove(player, leave);
-    else leave();
+    if (fade) {
+      // The run is over, but its items and the maze go only once the screen is black: a death in
+      // that moment finishes the leaving at once (finishLeaving), or it would respawn with them.
+      leaving.set(player.getUsername(), leave);
+      Shared.fadeMove(player, leave);
+    } else {
+      leave();
+    }
   }
+}
+
+/** Players whose ended run is fading out, by name: the leaving still to do. */
+const leaving = new Map();
+
+/** Finishes an ended run's leaving now (items taken, back in the lobby); false when none is due. */
+function finishLeaving(player) {
+  const leave = leaving.get(player?.getUsername?.());
+  if (!leave) return false;
+  leave();
+  return true;
 }
 
 const RED = (text) => `<col=ef1020>${text}</col>`;
@@ -352,5 +383,5 @@ function startRun(player, options) {
 }
 
 module.exports = {
-  ATTR_RUN, ATTR_STATS, GauntletRun, runOf, runInside, startRun, statsOf, hasCompleted, sendCompletionVarp, items,
+  ATTR_RUN, ATTR_STATS, GauntletRun, runOf, runInside, startRun, statsOf, hasCompleted, sendCompletionVarp, items, finishLeaving,
 };

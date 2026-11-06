@@ -10,6 +10,12 @@
  * Pieces are sung from crystal armour seeds and shards at a singing bowl
  * (requiring Song of the Elves), and Revert returns the seeds while
  * forfeiting the loaded charges.
+ *
+ * Recolouring (Wiki, Crystal of Hefin and Crystal helm (Hefin)): a clan's crystal
+ * (500,000 coins at Lliann's Wares) used on any variant of a piece makes that clan's
+ * version, and the crystal is used up. The plain pieces are Clan Meilyr's colour, so
+ * the Crystal of Meilyr turns a piece back. Charges and the active/inactive state carry
+ * over (ours: the Wiki doesn't say), and every colour works as the plain piece does.
  */
 const START_CHARGES = 2500;
 const MAX_CHARGES = 20000;
@@ -28,6 +34,18 @@ const PIECES = [
   { slotName: "LEG", itemName: "Crystal legs", activeIdName: "CRYSTAL_LEGS", inactiveIdName: "CRYSTAL_LEGS_INACTIVE_", accuracy: 0.10, damage: 0.05, label: "crystal legs", seeds: 2, shards: 100, level: 72, xp: 5000 },
 ];
 
+// Each clan's recoloured pieces, from the Wiki's item ids (helm (Hefin) 27705, (Ithell) 27717,
+// (Iorwerth) 27729, (Trahaearn) 27741, (Cadarn) 27753, (Crwys) 27765, (Amlodd) 27777): a block of
+// twelve from `base`, the body at +0, the legs at +4 and the helm at +8, each inactive at +2.
+// Meilyr has none: its colour is the plain pieces'.
+const CLANS = [
+  { clan: "Hefin", base: 27697 }, { clan: "Ithell", base: 27709 }, { clan: "Iorwerth", base: 27721 },
+  { clan: "Trahaearn", base: 27733 }, { clan: "Cadarn", base: 27745 }, { clan: "Crwys", base: 27757 },
+  { clan: "Amlodd", base: 27769 }, { clan: "Meilyr", base: null },
+];
+const OFFSET = { BODY: 0, LEG: 4, HEAD: 8 };
+const INACTIVE_OFFSET = 2;
+
 let core = null;
 let pluginApi = null;
 let inactiveByActive = new Map();
@@ -35,6 +53,8 @@ let activeByInactive = new Map();
 let activeIds = new Set();
 let pieceByItemId = new Map();
 let crystalWeaponIds = new Set();
+// Item id -> { piece, clan, inactive }, for every colour.
+let variantById = new Map();
 
 const activeId = (piece) => core.ItemIdentifiers[piece.activeIdName];
 const inactiveId = (piece) => core.ItemIdentifiers[piece.inactiveIdName];
@@ -163,6 +183,32 @@ function addShardCharges(event) {
   event.handled = true;
 }
 
+/** A piece's id in a clan's colour: the plain ids for Meilyr. */
+function variantId(piece, clan, inactive) {
+  const entry = CLANS.find((candidate) => candidate.clan === clan);
+  if (entry.base === null) return inactive ? inactiveId(piece) : activeId(piece);
+  return entry.base + OFFSET[piece.slotName] + (inactive ? INACTIVE_OFFSET : 0);
+}
+
+/** A clan's crystal used on a piece: the piece takes the clan's colour and the crystal is used up. */
+function recolour(event, clan) {
+  const { player } = event;
+  const crystalId = core.ItemIdentifiers[`CRYSTAL_OF_${clan.toUpperCase()}`];
+  const target = [event.usedItem, event.usedWithItem].find((candidate) => variantById.has(candidate?.getId?.()));
+  if (!target) return;
+  event.handled = true;
+  const variant = variantById.get(target.getId());
+  if (variant.clan === clan) {
+    player.sendMessage(`Your ${variant.piece.label} is already in the colours of the ${clan} clan.`);
+    return;
+  }
+  if (!player.getInventory().contains(crystalId)) return;
+  player.getInventory().deleteNumber(crystalId, 1);
+  target.setId(variantId(variant.piece, clan, variant.inactive));
+  refresh(player);
+  player.sendMessage(`You recolour your ${variant.piece.label} in the colours of the ${clan} clan.`);
+}
+
 function songOfTheElvesComplete(player) {
   const request = { player, key: SONG_OF_THE_ELVES, complete: false };
   pluginApi.emitCustomEvent("quest:is-complete", request);
@@ -232,6 +278,19 @@ function makeArmour(player, piece, amount = 1) {
   return true;
 }
 
+/** The pieces as crystal singing recipes: seeds and shards, the level and XP in both skills. */
+function singingRecipes() {
+  return PIECES.map((piece) => ({
+    productId: activeId(piece),
+    level: piece.level,
+    xp: piece.xp,
+    needs: [
+      { itemId: core.ItemIdentifiers.CRYSTAL_ARMOUR_SEED, amount: piece.seeds },
+      { itemId: core.ItemIdentifiers.CRYSTAL_SHARD, amount: piece.shards },
+    ],
+  }));
+}
+
 /** Using a seed on a singing bowl opens the three armour recipes. */
 function useSeedOnBowl(event) {
   const { player } = event;
@@ -291,13 +350,18 @@ function attach(pluginApiInstance) {
   inactiveByActive = new Map();
   activeByInactive = new Map();
   pieceByItemId = new Map();
+  variantById = new Map();
   for (const piece of PIECES) {
-    const active = activeId(piece);
-    const inactive = inactiveId(piece);
-    inactiveByActive.set(active, inactive);
-    activeByInactive.set(inactive, active);
-    pieceByItemId.set(active, piece);
-    pieceByItemId.set(inactive, piece);
+    for (const { clan } of CLANS) {
+      const active = variantId(piece, clan, false);
+      const inactive = variantId(piece, clan, true);
+      inactiveByActive.set(active, inactive);
+      activeByInactive.set(inactive, active);
+      pieceByItemId.set(active, piece);
+      pieceByItemId.set(inactive, piece);
+      variantById.set(active, { piece, clan, inactive: false });
+      variantById.set(inactive, { piece, clan, inactive: true });
+    }
   }
   activeIds = new Set(inactiveByActive.keys());
   crystalWeaponIds = new Set(BOW_OF_FAERDHINEN_IDS);
@@ -322,12 +386,19 @@ module.exports = {
       api.onItemAction(`${piece.itemName} (inactive)`, { Revert: dismantle });
       api.onItemOnItem("Crystal shard", piece.itemName, addShardCharges, { noted: false });
       api.onItemOnItem("Crystal shard", `${piece.itemName} (inactive)`, addShardCharges, { noted: false });
+      for (const { clan } of CLANS) {
+        for (const name of [piece.itemName, `${piece.itemName} (inactive)`]) {
+          api.onItemOnItem(`Crystal of ${clan}`, name, (event) => recolour(event, clan), { noted: false });
+        }
+      }
     }
     api.onItemOnObject("Crystal armour seed", "Singing bowl", useSeedOnBowl, { noted: false });
+    // The pieces in the bowl's Sing-crystal menu (CrystalSinging).
+    api.onCustomEvent("crystal-singing:recipes", ({ recipes }) => recipes.push(...singingRecipes()));
   },
   _test: {
     bonus, charges, useCharge, applyCrystalAccuracy, applyCrystalDamage, onIncomingDamage,
     PIECES, START_CHARGES, MAX_CHARGES, addShardCharges, makeArmour, useSeedOnBowl,
-    dismantle, canEquip, songOfTheElvesComplete,
+    dismantle, canEquip, songOfTheElvesComplete, recolour, variantId, CLANS, singingRecipes,
   },
 };

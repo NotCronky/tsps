@@ -8,6 +8,15 @@
  *
  * A charged bow with no saved count (spawned, or from before charges were tracked) counts as
  * full.
+ *
+ * Corruption (Wiki, Bow of Faerdhinen (c)): at a Prifddinas singing bowl a bow and 2,000 crystal
+ * shards, less one per 100 charges it holds, make the Bow of Faerdhinen (c): 82 Smithing and
+ * Crafting (boostable), no experience, "With the help of the crystal bowl, you sing a dark song
+ * which corrupts the crystals." It's offered in the bowl's menu (CrystalSinging).
+ *
+ * Recolouring (Wiki, Crystal of Hefin): a clan's crystal used on any colour of the corrupted bow
+ * gives that clan's colour and is used up; the Crystal of Hefin brings back the original red.
+ * The ids by clan are the ones CrystalBow's arrow table names (their colours match the clans').
  */
 const MAX_CHARGES = 20000;
 const SHARD_CHARGES = 100;
@@ -18,6 +27,14 @@ let api = null;
 let chargedId = -1;
 let inactiveIds = new Set();
 let bowIds = new Set();
+// The corrupted bow's id by clan, and the clan by id.
+let corruptedByClan = new Map();
+let clanByCorrupted = new Map();
+
+const CORRUPT_SHARDS = 2000;
+const CORRUPT_LEVEL = 82;
+const CORRUPT_MESSAGE = "With the help of the crystal bowl, you sing a dark song which corrupts the crystals.";
+const CLANS = ["Hefin", "Ithell", "Iorwerth", "Trahaearn", "Cadarn", "Crwys", "Meilyr", "Amlodd"];
 
 function charges(item) {
   const saved = Number(item?.getMetaValue?.(CHARGES_META_KEY)?.charges);
@@ -136,6 +153,62 @@ function uncharge({ player, item }) {
     : "You uncharge the bow.");
 }
 
+/** The bow to corrupt: the one carried with the most charges (the fewest shards to pay). */
+function bowToCorrupt(player) {
+  const items = player.getInventory().getItems?.() ?? [];
+  let best = null;
+  for (const item of items) {
+    const id = item?.getId?.();
+    if (id !== chargedId && !inactiveIds.has(id)) continue;
+    if (!best || charges(item) > charges(best)) best = item;
+  }
+  return best;
+}
+
+/** The corruption as a crystal singing recipe, priced for the bow carried. */
+function corruptionRecipe(player) {
+  const bow = bowToCorrupt(player);
+  if (!bow) return null;
+  const I = core.ItemIdentifiers;
+  const shards = Math.max(0, CORRUPT_SHARDS - Math.floor(charges(bow) / SHARD_CHARGES));
+  return {
+    productId: I.BOW_OF_FAERDHINEN_C_,
+    level: CORRUPT_LEVEL,
+    xp: 0,
+    needs: shards > 0
+      ? [{ itemId: bow.getId(), amount: 1 }, { itemId: I.CRYSTAL_SHARD, amount: shards }]
+      : [{ itemId: bow.getId(), amount: 1 }],
+    message: CORRUPT_MESSAGE,
+    make(who) {
+      const inventory = who.getInventory();
+      const slot = inventory.getItems().indexOf(bow);
+      if (slot < 0) return 0;
+      if (shards > 0) inventory.deleteNumber(I.CRYSTAL_SHARD, shards);
+      bow.setId(I.BOW_OF_FAERDHINEN_C_);
+      bow.setMetaValue(CHARGES_META_KEY, undefined);
+      return 1;
+    },
+  };
+}
+
+/** A clan's crystal on a corrupted bow: the clan's colour, the crystal used up. */
+function recolour(event, clan) {
+  const { player } = event;
+  const bow = [event.usedItem, event.usedWithItem].find((candidate) => clanByCorrupted.has(candidate?.getId?.()));
+  if (!bow) return;
+  event.handled = true;
+  if (clanByCorrupted.get(bow.getId()) === clan) {
+    player.sendMessage(`Your bow of Faerdhinen is already in the colours of the ${clan} clan.`);
+    return;
+  }
+  const crystalId = core.ItemIdentifiers[`CRYSTAL_OF_${clan.toUpperCase()}`];
+  if (!player.getInventory().contains(crystalId)) return;
+  player.getInventory().deleteNumber(crystalId, 1);
+  bow.setId(corruptedByClan.get(clan));
+  refresh(player);
+  player.sendMessage(`You recolour your bow of Faerdhinen in the colours of the ${clan} clan.`);
+}
+
 /** The inactive bow has no stats; it must be charged before it can be wielded. */
 function canEquip(event) {
   if (!inactiveIds.has(event?.item?.getId?.())) {
@@ -153,6 +226,11 @@ function attach(pluginApi) {
   chargedId = I.BOW_OF_FAERDHINEN;
   inactiveIds = new Set([I.BOW_OF_FAERDHINEN_INACTIVE_]);
   bowIds = new Set(BOW_OF_FAERDHINEN_IDS);
+  // CrystalBow's arrow table: the original (Hefin's red), then Ithell to Amlodd two ids apart.
+  const ids = [I.BOW_OF_FAERDHINEN_C_, I.BOW_OF_FAERDHINEN_C__4, I.BOW_OF_FAERDHINEN_C__6, I.BOW_OF_FAERDHINEN_C__8,
+    I.BOW_OF_FAERDHINEN_C__10, I.BOW_OF_FAERDHINEN_C__12, I.BOW_OF_FAERDHINEN_C__14, I.BOW_OF_FAERDHINEN_C__16];
+  corruptedByClan = new Map(CLANS.map((clan, index) => [clan, ids[index]]));
+  clanByCorrupted = new Map(CLANS.map((clan, index) => [ids[index], clan]));
 }
 
 module.exports = {
@@ -165,8 +243,15 @@ module.exports = {
     pluginApi.onCanEquip(canEquip);
     pluginApi.onItemAction("Bow of Faerdhinen", { Check: checkCharges, Uncharge: uncharge });
     pluginApi.onItemOnItem(addShardCharges, { noted: false });
+    pluginApi.onCustomEvent("crystal-singing:recipes", ({ player, recipes }) => {
+      const recipe = corruptionRecipe(player);
+      if (recipe) recipes.push(recipe);
+    });
+    for (const clan of CLANS) {
+      pluginApi.onItemOnItem(`Crystal of ${clan}`, "Bow of Faerdhinen (c)", (event) => recolour(event, clan), { noted: false });
+    }
   },
   MAX_CHARGES,
   SHARD_CHARGES,
-  _test: { charges, useCharges, ammoHandler, checkCharges, addShardCharges, uncharge, canEquip },
+  _test: { charges, useCharges, ammoHandler, checkCharges, addShardCharges, uncharge, canEquip, corruptionRecipe, recolour, CLANS },
 };

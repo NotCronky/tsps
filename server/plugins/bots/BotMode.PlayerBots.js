@@ -1,5 +1,6 @@
 "use strict";
 
+const Crowd = require("./lib/Crowd.PlayerBots");
 const { BotBrain } = require("./brain/Brain.PlayerBots");
 const { createInitialState, resetMovementState } = require("./behaviours/state/State.PlayerBots");
 const { TaskAgent } = require("./agent/Agent.PlayerBots");
@@ -31,6 +32,7 @@ function isActive(player) {
 }
 
 function stop(player, message) {
+  Crowd.forget(player);
   const session = sessions.get(player);
   if (!session) return false;
   sessions.delete(player);
@@ -100,31 +102,50 @@ function taskEntry(player, task, label = task.name) {
   }];
 }
 
-/** A group's tasks; a group of skills with tiers (Gathering) lists the skills first. */
-function groupMenu(player, group) {
-  const tasks = catalogue.tasks.filter((task) => task.group === group);
-  const subgroups = [...new Set(tasks.map((task) => task.subgroup).filter(Boolean))];
-  const back = () => openPicker(player);
-  if (subgroups.length === 0) {
-    pagedMenu(player, `Bot mode: ${group}`, tasks.map((task) => taskEntry(player, task)), back);
+/**
+ * Tasks sorted into menus by `keys` (subgroup: the skill; family: what it makes, "Bows",
+ * "Potions"), one level a key. A level with a single value is skipped, and tasks without that
+ * key are listed beside the others.
+ */
+function sortedMenu(player, title, tasks, keys, back) {
+  const [key, ...rest] = keys;
+  if (!key) {
+    pagedMenu(player, title, tasks.map((task) => taskEntry(player, task, task.shortName ?? task.name)), back);
     return;
   }
-  pagedMenu(player, `Bot mode: ${group}`, subgroups.map((subgroup) => [subgroup, () => {
-    const tiers = tasks.filter((task) => task.subgroup === subgroup);
-    pagedMenu(player, `Bot mode: ${subgroup}`, tiers.map((task) => taskEntry(player, task, task.shortName ?? task.name)),
-      () => groupMenu(player, group));
-  }]), back);
+  const values = [...new Set(tasks.map((task) => task[key]).filter(Boolean))];
+  if (values.length <= 1) {
+    sortedMenu(player, title, tasks, rest, back);
+    return;
+  }
+  const self = () => sortedMenu(player, title, tasks, keys, back);
+  pagedMenu(player, title, [
+    ...values.map((value) => [value, () => sortedMenu(player, `Bot mode: ${value}`, tasks.filter((task) => task[key] === value), rest, self)]),
+    ...tasks.filter((task) => !task[key]).map((task) => taskEntry(player, task)),
+  ], back);
+}
+
+/** The picker's sections: every skill under Skills, then Combat and Quests. */
+const SECTIONS = [
+  { name: "Skills", groups: ["Gathering", "Processing", "Activities"] },
+  { name: "Combat", groups: ["Combat"] },
+  { name: "Quests", groups: ["Quests"] },
+];
+
+function sectionMenu(player, section) {
+  const tasks = catalogue.tasks.filter((task) => section.groups.includes(task.group));
+  sortedMenu(player, `Bot mode: ${section.name}`, tasks, ["subgroup", "family"], () => openPicker(player));
 }
 
 function openPicker(player) {
   const last = player.getAttribute(LAST_TASK_ATTRIBUTE);
   const lastTask = last && last !== BRAIN_CHOICE ? catalogue.get(last) : null;
   // Quests only show while one is open (Tutorial Island), so the picker stays within five options.
-  const shown = catalogue.groups.filter((group) => group !== "Quests"
-    || catalogue.tasks.some((task) => task.group === group && task.check(player, { registry, world }).ok));
+  const shown = SECTIONS.filter((section) => section.name !== "Quests"
+    || catalogue.tasks.some((task) => task.group === "Quests" && task.check(player, { registry, world }).ok));
   const options = [
     "Let the brain choose", () => start(player, BRAIN_CHOICE),
-    ...shown.flatMap((group) => [group, () => groupMenu(player, group)]),
+    ...shown.flatMap((section) => [section.name, () => sectionMenu(player, section)]),
   ];
   if (lastTask) options.push(`Resume ${lastTask.name}`, () => start(player, lastTask.id));
   pluginApi.sendMultiChatboxPrompt(player, "What should your character do?", ...options.slice(0, 10));
@@ -167,8 +188,14 @@ function loggedOut({ player }) {
 /** One tick for every character in bot mode: its executor acts, and a finished task makes way. */
 function tickAll(nowMs = Date.now()) {
   for (const [player, session] of sessions) {
-    if (player.isRegistered?.() === false || player.getHitpoints?.() <= 0) {
+    if (player.isRegistered?.() === false) {
       stop(player);
+      continue;
+    }
+    if (player.getHitpoints?.() <= 0) {
+      // A death its task lives through (the Gauntlet's: the run ends, back in the lobby) just
+      // waits out the tick; any other ends bot mode.
+      if (!session.agent.busy()) stop(player);
       continue;
     }
     try {
@@ -184,7 +211,13 @@ function tickAll(nowMs = Date.now()) {
   }
 }
 
+/** The catalogue, registry and bot world bot mode runs with (for tests and tools). */
+function context() {
+  return { catalogue, registry, world };
+}
+
 module.exports = {
+  context,
   LAST_TASK_ATTRIBUTE,
   BRAIN_CHOICE,
   init,

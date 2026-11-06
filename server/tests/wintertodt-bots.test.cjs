@@ -113,6 +113,15 @@ test('one that brews its own makes a batch of four when low, and only then', () 
   assert.equal(Bots._test.OWN_POTIONS, 4);
 });
 
+test('with a full pack it burns its fuel to make room before brewing, instead of clicking the crate', () => {
+  const brewer = { corner: 0, healer: false, brews: true, fletcher: false };
+  const full = self({ doses: 1, roots: 26, free: 0 });
+  assert.equal(plan({ role: brewer, self: full, brewing: true, canBrew: false, phase: 'burn' }), 'feed', 'no room: feeds the brazier');
+  assert.equal(plan({ role: brewer, self: self({ doses: 1, roots: 25, free: 1 }), brewing: true, canBrew: true, phase: 'burn' }), 'brew', 'a slot free: brews');
+  const healer = { corner: 0, healer: true, fletcher: false };
+  assert.equal(plan({ role: healer, self: full, canBrew: false, phase: 'burn' }), 'feed', 'a healer too');
+});
+
 test('the round left is its energy over the drain of the lit braziers', () => {
   const Round = require('../plugins/minigames/wintertodt/Round.Wintertodt');
   const Corners = require('../plugins/minigames/wintertodt/Corners.Wintertodt');

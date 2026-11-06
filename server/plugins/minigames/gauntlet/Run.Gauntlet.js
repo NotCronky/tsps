@@ -8,6 +8,7 @@
 const Shared = require("./Shared.Gauntlet");
 const GauntletMap = require("./Map.Gauntlet");
 const Run = require("./RunState.Gauntlet");
+const Items = require("./Items.Gauntlet");
 const Monsters = require("./Monsters.Gauntlet");
 
 // Instances sit at tile 8192+ (TemplatedInstanceArea); a player saved there was in a run.
@@ -142,9 +143,43 @@ function keepNothingOnDeath(event) {
   if (runIn(event.player)) event.shouldDrop = false;
 }
 
+function inLobby(player) {
+  const at = player.getLocation();
+  const zone = Shared.LOBBY_ZONE;
+  return zone.levels.includes(at.getZ()) && at.getX() >= zone.minX && at.getX() <= zone.maxX && at.getY() >= zone.minY && at.getY() <= zone.maxY;
+}
+
+/** Takes every Gauntlet item a player holds outside a run; true when there were any. */
+function takeRunItems(player) {
+  const ids = Items.allItemIds();
+  let took = false;
+  for (const container of [player.getInventory(), player.getEquipment()]) {
+    container.getItems().forEach((item, slot) => {
+      if (!item || !ids.has(item.getId())) return;
+      container.setItem?.(slot, new (Shared.core().Item)(-1, 0));
+      took = true;
+    });
+    container.refreshItems();
+  }
+  return took;
+}
+
 function dieInRun(event) {
   const run = runIn(event.player);
-  if (!run) return;
+  if (!run) {
+    // A death while an ended run fades out: the leaving is done now, back in the lobby with nothing.
+    if (Run.finishLeaving(event.player)) {
+      event.handled = true;
+      return;
+    }
+    // A death begun in the maze that lands after the run ended (in the lobby), or anyone dying
+    // with the run's items (which never leave it): those go, and the respawn is the lobby's.
+    if (inLobby(event.player) || takeRunItems(event.player)) {
+      event.player.moveTo(Shared.loc(Shared.LOBBY));
+      event.handled = true;
+    }
+    return;
+  }
   event.handled = true;
   run.end("death");
 }

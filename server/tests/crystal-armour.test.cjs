@@ -396,3 +396,38 @@ test("ranged hit modifiers now reach the ranged max-hit formula", () => {
   assert.equal(DamageFormulas.calculateMaxRangedHit(player), 22, "the registered modifier applies");
   void CombatType;
 });
+
+test("a clan's crystal recolours a piece, keeps its charges and is used up", () => {
+  const { recolour, variantId, PIECES, CHARGES = "crystal-armour" } = CrystalArmour._test;
+  const helm = PIECES.find((piece) => piece.slotName === "HEAD");
+  const inventory = createInventory({ [ItemIdentifiers.CRYSTAL_OF_HEFIN]: 1, [ItemIdentifiers.CRYSTAL_OF_MEILYR]: 1 });
+  inventory.contains = (id) => inventory.getAmount(id) > 0;
+  const player = createPlayer({}, null, {}, inventory);
+  const piece = item(ItemIds.CRYSTAL_HELM, { [CHARGES]: { charges: 1234 } });
+
+  const hefin = { player, usedItem: item(ItemIdentifiers.CRYSTAL_OF_HEFIN), usedWithItem: piece, handled: false };
+  recolour(hefin, "Hefin");
+  assert.equal(hefin.handled, true);
+  assert.equal(piece.getId(), 27705, "Crystal helm (Hefin), the Wiki's id");
+  assert.equal(piece.getMetaValue(CHARGES).charges, 1234, "charges kept");
+  assert.equal(inventory.getAmount(ItemIdentifiers.CRYSTAL_OF_HEFIN), 0, "the crystal is used up");
+
+  const again = { player, usedItem: piece, usedWithItem: item(ItemIdentifiers.CRYSTAL_OF_HEFIN), handled: false };
+  recolour(again, "Hefin");
+  assert.match(player.messages.at(-1), /already/);
+
+  recolour({ player, usedItem: item(ItemIdentifiers.CRYSTAL_OF_MEILYR), usedWithItem: piece, handled: false }, "Meilyr");
+  assert.equal(piece.getId(), ItemIds.CRYSTAL_HELM, "Meilyr's colour is the plain helm's");
+
+  assert.equal(variantId(helm, "Amlodd", false), 27777, "Crystal helm (Amlodd)");
+  assert.equal(variantId(helm, "Cadarn", true), 27755, "Crystal helm (inactive) (Cadarn)");
+});
+
+test("recoloured pieces count as crystal armour: bonus, charges and inactive state", () => {
+  const { bonus, charges } = CrystalArmour._test;
+  const player = createPlayer({ [Equipment.HEAD_SLOT]: 27729, [Equipment.BODY_SLOT]: 27697, [Equipment.LEG_SLOT]: 27701 });
+  const { accuracy, damage } = bonus(player);
+  assert.ok(Math.abs(accuracy - 0.3) < 1e-9 && Math.abs(damage - 0.15) < 1e-9, "the full set's bonus in clan colours");
+  assert.equal(charges(item(27729)), CrystalArmour._test.START_CHARGES);
+  assert.equal(charges(item(27731)), 0, "an inactive clan helm holds none");
+});

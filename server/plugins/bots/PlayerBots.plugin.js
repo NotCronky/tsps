@@ -283,6 +283,8 @@ module.exports = {
     });
 
     const catalogue = createCatalogue(boot.brainRegistry);
+    // Task lists other plugins answer once they've all registered (the enchant spells').
+    api.onServerStartup(() => catalogue.refresh());
     registerPopulation({
       api,
       botApi,
@@ -294,6 +296,8 @@ module.exports = {
     });
     BotMode.init({ api, catalogue, registry: boot.brainRegistry, world: boot.brainWorld, behaviorMode: BOT_CONFIG.behaviorMode });
     api.persistAttribute(BotMode.LAST_TASK_ATTRIBUTE, "");
+    // The starting kit's version (population/Stages.PlayerBots.js): given once, kept with the save.
+    api.persistAttribute(require("./population/Stages.PlayerBots").KIT_ATTRIBUTE, 0);
     api.registerCommand("botmode", BotMode.botModeCommand, api.core.PlayerRights.NONE,
       "Let your character play itself: ::botmode (pick a task), ::botmode <task>, ::botmode list, ::botmode off");
     api.onCustomEvent("player:world-input", BotMode.tookOver);

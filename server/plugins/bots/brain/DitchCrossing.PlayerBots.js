@@ -118,6 +118,11 @@ function maybeCrossDitch({ player, state, world, request }) {
   }
   const from = player.getLocation();
   const to = { x: request.x, y: request.y, z: request.z ?? from.getZ() };
+  // Only a walk into or out of the Wilderness crosses it: a straight line from Taverley to
+  // Burthorpe clips the ditch's west end, but the road goes round it.
+  if (!inWilderness(from.getX(), from.getY()) && !inWilderness(to.x, to.y)) {
+    return false;
+  }
   const object = world.objectSearch?.findObjectOnRoute?.(
     player,
     from,
@@ -135,6 +140,11 @@ function maybeCrossDitch({ player, state, world, request }) {
     return false;
   }
   return startCross({ player, state, world, object, objectY, axis, request, nowMs: now });
+}
+
+/** The Wilderness's main stretch, north of the ditch (Ferox Enclave's included). */
+function inWilderness(x, y) {
+  return x >= 2944 && x <= 3392 && y >= 3520 && y <= 3968;
 }
 
 module.exports = {

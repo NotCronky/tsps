@@ -36,7 +36,35 @@ const CATALOGS = {
       ids: [...(Smithing.FURNACE_OBJECT_IDS ?? [])].filter(Number.isInteger),
     },
   ],
+  anvil: () => [{ name: "anvil", objectNames: ["Anvil"], ids: [] }],
+  "spinning wheel": () => [{ name: "spinning wheel", objectNames: ["Spinning wheel", "Spinning Wheel"], ids: [] }],
+  "potter's wheel": () => [{ name: "potter's wheel", objectNames: ["Potter's Wheel", "Potter's wheel"], ids: [] }],
+  "pottery oven": () => [{ name: "pottery oven", objectNames: ["Pottery Oven"], ids: [] }],
+  loom: () => [{ name: "loom", objectNames: ["Loom"], ids: [] }],
+  // Thieving stalls, by the names the Thieving plugin steals from (a tier is a stall's name).
+  stall: () => stallNames().map((name) => ({ name, objectNames: [name], ids: [] })),
+  // Agility courses' obstacles, by course key (their ids are the course data's own).
+  agility: () => agilityCourses().map((course) => ({
+    name: course.key,
+    objectNames: [],
+    ids: course.obstacles.flatMap((obstacle) => [obstacle.object ?? []].flat()).filter(Number.isInteger),
+  })),
+  // What a lap takes that isn't one of its obstacles (tasks/Activities.PlayerBots.js): the Barbarian
+  // Outpost's pipe in, and the ladder down off its ledge.
+  "agility extras": () => [{ name: "barbarian", objectNames: [], ids: [20210, 16682, 42487] }],
 };
+
+let stalls = null;
+function stallNames() {
+  stalls ??= [...require("../../skills/thieving/Stalls.Thieving")._test.STALLS.keys()];
+  return stalls;
+}
+
+let courses = null;
+function agilityCourses() {
+  courses ??= require("../../skills/agility/courses/Courses.Agility").COURSES;
+  return courses;
+}
 
 let idsByName = null;
 // Cache options per id: many objects share a resource's name without being one

@@ -14,8 +14,9 @@
  * Every bot plays as the player bots' Wintertodt task does (and that task uses this same play,
  * through "wintertodt:play"). Each has a home corner (dealt round the four in turn) and works it
  * the way the Wiki's strategy page describes a team doing it:
- *   1. keep warm: no food - it brews four rejuvenation potions at a time (concoctions from the
- *      crate, herbs from the sprouting roots) once it runs low, and drinks one when cold;
+ *   1. keep warm: no food - it restocks four rejuvenation potions between rounds (concoctions
+ *      from the crate then, herbs from the sprouting roots and the mix as the round starts, the
+ *      pack still empty), brews mid-round only if it runs low and has room, and drinks one when cold;
  *   2. step out from under the falling snow, and clear of a brazier heavy snow will break;
  *   3. heal a downed pyromancer with a dose (75 points), fix its brazier when broken, light it
  *      when out (and its pyromancer is up);
@@ -164,6 +165,11 @@ function dosesOf(player) {
   return Shared.POTIONS.reduce((sum, id, index) => sum + countOf(player, id) * (4 - index), 0);
 }
 
+/** What its doses come to in whole potions (a 1-dose potion isn't one): what a restock counts. */
+function fullPotions(doses) {
+  return Math.floor(doses / 4);
+}
+
 function nearest(location, tiles) {
   let best = tiles[0];
   for (const tile of tiles) if (Shared.distance(location, tile) < Shared.distance(location, best)) best = tile;
@@ -175,7 +181,7 @@ function nearest(location, tiles) {
  * hitpoints, kit and current action), its home `corner`, the `downed` corners and its `role`.
  * Returns one of: eat, leave, busy, heal, brew, fix, light, fletch, feed, chop, wait.
  */
-function decide({ self, corner, downed, role, phase, brewing = false }) {
+function decide({ self, corner, downed, role, phase, brewing = false, canBrew = true }) {
   const cold = self.warmth < EAT_WARMTH || self.hp < self.maxHp * EAT_HP_RATIO;
   if (cold && self.food > 0) return { action: "eat" };
   if (cold && self.doses > 0) return { action: "drink" };
@@ -183,9 +189,10 @@ function decide({ self, corner, downed, role, phase, brewing = false }) {
   if ((role.healer || role.heals) && downed.length > 0 && self.doses > 0) return { action: "heal", corner: downed[0] };
   if (self.action) return { action: "busy" };
   // Healers keep potions for the pyromancers; one that `brews` keeps its own to stay warm.
-  if (role.healer && self.doses < MIN_DOSES) return { action: "brew" };
+  // Brewing takes room (a concoction, a herb): with none, the fuel gets burned first.
+  if (role.healer && self.doses < MIN_DOSES && canBrew) return { action: "brew" };
   // One that brews its own makes a batch once it runs low, then stops till it runs low again.
-  if (role.brews && brewing) return { action: "brew" };
+  if (role.brews && brewing && canBrew) return { action: "brew" };
   if (corner.brazier === Shared.BRAZIER.BROKEN) return { action: "fix" };
   if (corner.brazier === Shared.BRAZIER.UNLIT && corner.pyromancerHealthy) return { action: "light" };
   const fuel = self.roots + self.kindling;
@@ -323,14 +330,16 @@ class WintertodtBot {
     if (this.pending && tick < this.pending.until) return true;
     this.pending = null;
     if (this.role.brews) {
-      if (self.doses < MIN_DOSES) this.brewing = true;
-      if (self.potions >= OWN_POTIONS) this.brewing = false;
+      // Restocked between rounds: concoctions held are mixed as soon as herbs can be picked (the
+      // round's start, the pack still empty); mid-round it only brews when it runs low.
+      if (self.doses < MIN_DOSES || unfHeld > 0) this.brewing = true;
+      if (fullPotions(self.doses) >= OWN_POTIONS && unfHeld === 0) this.brewing = false;
     }
     if (!Round.isActive()) {
       this.phase = "gather";
-      // Between rounds the crate still gives out concoctions (herbs wait for the round): take
-      // the batch's now, so the potions are mixed the moment it starts.
-      if (this.role.brews && this.brewing && unfHeld + self.potions < OWN_POTIONS) {
+      // Between rounds the crate still gives out concoctions (herbs wait for the round): it tops
+      // up to a batch now, so the potions are mixed the moment the round starts.
+      if (this.role.brews && unfHeld + fullPotions(self.doses) < OWN_POTIONS && self.free > 0) {
         return this.clickLoc(LOC.CONCOCTION_CRATE, nearest(player.getLocation(), CONCOCTION_CRATES), CLICK.FIRST, tick);
       }
       this.standBy();
@@ -350,7 +359,12 @@ class WintertodtBot {
     const downed = Shared.CORNERS.map((_, index) => index)
       .filter((index) => !Corners.corner(index).pyromancerHealthy && healerFor(index) === this);
     const role = hurried ? { ...this.role, fletcher: false } : this.role;
-    const plan = decide({ self, corner: home, downed, role, phase: this.phase, brewing: this.brewing === true });
+    // A free slot for the crate or the roots, or a herb and a concoction to mix (which needs none).
+    const canBrew = self.free > 0 || (unfHeld > 0 && countOf(player, Shared.ITEM.BRUMA_HERB) > 0);
+    const wantsBrew = (this.role.brews && this.brewing) || (this.role.healer && self.doses < MIN_DOSES);
+    // A full pack and potions to make: burn what it holds to make the room.
+    if (wantsBrew && !canBrew && self.roots + self.kindling > 0) this.phase = "burn";
+    const plan = decide({ self, corner: home, downed, role, phase: this.phase, brewing: this.brewing === true, canBrew });
     // Its brazier is about to break under heavy snow: keep clear till it has.
     if (home.brazierBreaking && ["feed", "fix", "light"].includes(plan.action)) return true;
     if (tick < this.nextTryTick && plan.action !== "eat" && plan.action !== "drink") return true;
@@ -570,8 +584,7 @@ class WintertodtBot {
    */
   brewBatch(tick, unf, herbs) {
     const { player } = this;
-    const potions = countOf(player, Shared.POTIONS);
-    if (unf + potions < OWN_POTIONS) {
+    if (unf + fullPotions(dosesOf(player)) < OWN_POTIONS) {
       return this.clickLoc(LOC.CONCOCTION_CRATE, nearest(player.getLocation(), CONCOCTION_CRATES), CLICK.FIRST, tick);
     }
     if (herbs < unf) {

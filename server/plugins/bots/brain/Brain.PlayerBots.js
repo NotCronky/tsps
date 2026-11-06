@@ -32,6 +32,9 @@ const FRAME_STALL_MS = 180000;
 const SWITCH_RETRY_MS = 30000;
 // Failed dispatches in a row before a pending walk is dropped.
 const DEAD_WALK_ATTEMPTS = 3;
+// A queued step the bot stands still on this long is blocked (a door shut across a walk after
+// it was routed): the queue is dropped, so the walk is routed again and the door opened.
+const BLOCKED_STEP_MS = 3000;
 
 /** Hands state.mode back when an overlay that set it ends. */
 function restoreMode(state, endingMode, previousMode) {
@@ -381,8 +384,18 @@ class BotBrain {
       return;
     }
     if (player.getMovementQueue?.()?.size?.() > 0) {
+      const loc = player.getLocation?.();
+      const here = loc ? `${loc.getX()},${loc.getY()},${loc.getZ()}` : null;
+      if (here !== this.queuedAt) {
+        this.queuedAt = here;
+        this.queuedSince = nowMs;
+      } else if (nowMs - this.queuedSince >= BLOCKED_STEP_MS && !player.getCombat?.()?.getTarget?.()) {
+        player.getMovementQueue().reset();
+        this.queuedAt = null;
+      }
       return;
     }
+    this.queuedAt = null;
     const request = peekMovementRequest(player);
     if (!request) {
       return;
@@ -400,7 +413,10 @@ class BotBrain {
     if (maybeClimb({ player, state: this.state ?? null, world: this.world, request })) {
       return;
     }
+    // On the way to stairs or a trapdoor (another floor, the underground), the ditch is judged
+    // by them, not by the goal past them: a dungeon 6400 tiles north isn't over the ditch.
     if (
+      !request.climbVia &&
       maybeCrossDitch({
         player,
         state: this.state ?? null,

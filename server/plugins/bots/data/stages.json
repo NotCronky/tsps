@@ -1,5 +1,5 @@
 {
-  "_comment": "How far along a new bot account starts (population/Stages.PlayerBots.js): skill levels rolled per skill in `skills`, combat stats rolled to land in `combat` (a combat level band), coins in the bank, a cosmetic outfit tier and food. Its gear and tools are the best its levels allow; after its first login, everything is earned. Weights pick the stage; profiles pick what it likes doing (agent/Brain.PlayerBots.js). `bank` and `carried` are extra items by name ([name, amount]); `amulet` replaces the outfit's amulet (a glory, for teleporting).",
+  "_comment": "How far along a new bot account starts (population/Stages.PlayerBots.js): skill levels rolled per skill in `skills`, combat stats rolled to land in `combat` (a combat level band), coins in the bank, a cosmetic outfit tier and food. Its gear and tools are the best its levels allow; after its first login, everything is earned. Weights pick the stage; profiles pick what it likes doing (agent/Brain.PlayerBots.js). `bank` and `carried` are extra items by name ([name, amount]); `amulet` replaces the outfit's amulet (a glory, for teleporting). `quests` are marked complete when its levels meet each one's `levels` and its `after` quests are done (Wiki requirements; no XP given); `teleports` go in the bank. Both are the starting kit (Stages.PlayerBots.js applyStartingKit), given once to new and existing accounts alike (its version is saved). `kitUpdates`: what later kit versions add, each given once to the stages it names.",
   "weights": {
     "early": 45,
     "mid": 35,
@@ -24,7 +24,36 @@
         "SHRIMPS",
         15
       ],
-      "bank": []
+      "bank": [],
+      "quests": [
+        {
+          "key": "rune_mysteries"
+        },
+        {
+          "key": "druidic_ritual"
+        },
+        {
+          "key": "the_restless_ghost"
+        }
+      ],
+      "teleports": [
+        [
+          "VARROCK_TELEPORT",
+          5
+        ],
+        [
+          "LUMBRIDGE_TELEPORT",
+          5
+        ],
+        [
+          "FALADOR_TELEPORT",
+          5
+        ],
+        [
+          "GAMES_NECKLACE_8_",
+          1
+        ]
+      ]
     },
     "mid": {
       "skills": [
@@ -78,6 +107,152 @@
         [
           "CAMELOT_TELEPORT",
           5
+        ]
+      ],
+      "quests": [
+        {
+          "key": "rune_mysteries"
+        },
+        {
+          "key": "druidic_ritual"
+        },
+        {
+          "key": "the_restless_ghost"
+        },
+        {
+          "key": "priest_in_peril"
+        },
+        {
+          "key": "lost_city",
+          "levels": {
+            "CRAFTING": 31,
+            "WOODCUTTING": 36
+          }
+        },
+        {
+          "key": "fremennik_trials"
+        },
+        {
+          "key": "nature_spirit",
+          "after": [
+            "priest_in_peril",
+            "the_restless_ghost"
+          ]
+        },
+        {
+          "key": "death_plateau"
+        },
+        {
+          "key": "eagles_peak",
+          "levels": {
+            "HUNTER": 27
+          }
+        },
+        {
+          "key": "tree_gnome_village"
+        },
+        {
+          "key": "waterfall_quest"
+        },
+        {
+          "key": "the_tourist_trap"
+        },
+        {
+          "key": "ernest_the_chicken"
+        },
+        {
+          "key": "animal_magnetism",
+          "levels": {
+            "SLAYER": 18,
+            "CRAFTING": 19,
+            "RANGED": 30,
+            "WOODCUTTING": 35
+          },
+          "after": [
+            "the_restless_ghost",
+            "ernest_the_chicken",
+            "priest_in_peril"
+          ]
+        },
+        {
+          "key": "enter_the_abyss",
+          "after": [
+            "rune_mysteries"
+          ]
+        },
+        {
+          "key": "the_dig_site",
+          "levels": {
+            "AGILITY": 10,
+            "HERBLORE": 10,
+            "THIEVING": 25
+          }
+        }
+      ],
+      "teleports": [
+        [
+          "VARROCK_TELEPORT",
+          15
+        ],
+        [
+          "LUMBRIDGE_TELEPORT",
+          15
+        ],
+        [
+          "FALADOR_TELEPORT",
+          15
+        ],
+        [
+          "CAMELOT_TELEPORT",
+          15
+        ],
+        [
+          "ARDOUGNE_TELEPORT",
+          15
+        ],
+        [
+          "TELEPORT_TO_HOUSE",
+          10
+        ],
+        [
+          "AMULET_OF_GLORY_4_",
+          2
+        ],
+        [
+          "RING_OF_DUELING_8_",
+          2
+        ],
+        [
+          "GAMES_NECKLACE_8_",
+          1
+        ],
+        [
+          "SKILLS_NECKLACE_4_",
+          1
+        ],
+        [
+          "LAW_RUNE",
+          200
+        ],
+        [
+          "AIR_RUNE",
+          1000
+        ],
+        [
+          "WATER_RUNE",
+          300
+        ],
+        [
+          "EARTH_RUNE",
+          300
+        ],
+        [
+          "FIRE_RUNE",
+          300
+        ],
+        [
+          "ENCHANTED_GEM",
+          1
         ]
       ]
     },
@@ -151,7 +326,317 @@
           10
         ]
       ],
-      "amulet": "AMULET_OF_GLORY_4_"
+      "amulet": "AMULET_OF_GLORY_4_",
+      "quests": [
+        {
+          "key": "rune_mysteries"
+        },
+        {
+          "key": "druidic_ritual"
+        },
+        {
+          "key": "the_restless_ghost"
+        },
+        {
+          "key": "priest_in_peril"
+        },
+        {
+          "key": "lost_city",
+          "levels": {
+            "CRAFTING": 31,
+            "WOODCUTTING": 36
+          }
+        },
+        {
+          "key": "fremennik_trials"
+        },
+        {
+          "key": "nature_spirit",
+          "after": [
+            "priest_in_peril",
+            "the_restless_ghost"
+          ]
+        },
+        {
+          "key": "death_plateau"
+        },
+        {
+          "key": "eagles_peak",
+          "levels": {
+            "HUNTER": 27
+          }
+        },
+        {
+          "key": "tree_gnome_village"
+        },
+        {
+          "key": "waterfall_quest"
+        },
+        {
+          "key": "the_tourist_trap"
+        },
+        {
+          "key": "ernest_the_chicken"
+        },
+        {
+          "key": "animal_magnetism",
+          "levels": {
+            "SLAYER": 18,
+            "CRAFTING": 19,
+            "RANGED": 30,
+            "WOODCUTTING": 35
+          },
+          "after": [
+            "the_restless_ghost",
+            "ernest_the_chicken",
+            "priest_in_peril"
+          ]
+        },
+        {
+          "key": "enter_the_abyss",
+          "after": [
+            "rune_mysteries"
+          ]
+        },
+        {
+          "key": "the_dig_site",
+          "levels": {
+            "AGILITY": 10,
+            "HERBLORE": 10,
+            "THIEVING": 25
+          }
+        },
+        {
+          "key": "troll_stronghold",
+          "levels": {
+            "AGILITY": 15
+          },
+          "after": [
+            "death_plateau"
+          ]
+        },
+        {
+          "key": "dragon_slayer_i"
+        },
+        {
+          "key": "monkey_madness_i",
+          "after": [
+            "tree_gnome_village"
+          ]
+        },
+        {
+          "key": "shilo_village",
+          "levels": {
+            "CRAFTING": 20,
+            "AGILITY": 32
+          }
+        },
+        {
+          "key": "horror_from_the_deep",
+          "levels": {
+            "AGILITY": 35
+          }
+        },
+        {
+          "key": "ghosts_ahoy",
+          "levels": {
+            "AGILITY": 25,
+            "COOKING": 20
+          },
+          "after": [
+            "priest_in_peril",
+            "the_restless_ghost"
+          ]
+        },
+        {
+          "key": "plague_city"
+        },
+        {
+          "key": "underground_pass",
+          "levels": {
+            "RANGED": 25
+          },
+          "after": [
+            "plague_city"
+          ]
+        },
+        {
+          "key": "regicide",
+          "levels": {
+            "AGILITY": 56,
+            "CRAFTING": 10
+          },
+          "after": [
+            "underground_pass"
+          ]
+        },
+        {
+          "key": "mournings_end_part_i",
+          "levels": {
+            "RANGED": 60,
+            "THIEVING": 50
+          },
+          "after": [
+            "regicide"
+          ]
+        },
+        {
+          "key": "mournings_end_part_ii",
+          "levels": {
+            "AGILITY": 60
+          },
+          "after": [
+            "mournings_end_part_i"
+          ]
+        },
+        {
+          "key": "desert_treasure_i",
+          "levels": {
+            "FIREMAKING": 50,
+            "MAGIC": 50,
+            "SLAYER": 10,
+            "THIEVING": 53
+          },
+          "after": [
+            "the_dig_site",
+            "the_tourist_trap",
+            "priest_in_peril",
+            "waterfall_quest"
+          ]
+        },
+        {
+          "key": "lunar_diplomacy",
+          "levels": {
+            "HERBLORE": 5,
+            "CRAFTING": 61,
+            "DEFENCE": 40,
+            "FIREMAKING": 49,
+            "MAGIC": 65,
+            "MINING": 60,
+            "WOODCUTTING": 55
+          },
+          "after": [
+            "fremennik_trials",
+            "lost_city",
+            "rune_mysteries",
+            "shilo_village"
+          ]
+        },
+        {
+          "key": "song_of_the_elves",
+          "levels": {
+            "AGILITY": 70,
+            "CONSTRUCTION": 70,
+            "FARMING": 70,
+            "HERBLORE": 70,
+            "HUNTER": 70,
+            "MINING": 70,
+            "SMITHING": 70,
+            "WOODCUTTING": 70
+          },
+          "after": [
+            "mournings_end_part_ii"
+          ]
+        }
+      ],
+      "teleports": [
+        [
+          "VARROCK_TELEPORT",
+          30
+        ],
+        [
+          "LUMBRIDGE_TELEPORT",
+          30
+        ],
+        [
+          "FALADOR_TELEPORT",
+          30
+        ],
+        [
+          "CAMELOT_TELEPORT",
+          30
+        ],
+        [
+          "ARDOUGNE_TELEPORT",
+          30
+        ],
+        [
+          "WATCHTOWER_TELEPORT",
+          20
+        ],
+        [
+          "TELEPORT_TO_HOUSE",
+          30
+        ],
+        [
+          "AMULET_OF_GLORY_6_",
+          3
+        ],
+        [
+          "RING_OF_DUELING_8_",
+          3
+        ],
+        [
+          "GAMES_NECKLACE_8_",
+          2
+        ],
+        [
+          "SKILLS_NECKLACE_4_",
+          2
+        ],
+        [
+          "COMBAT_BRACELET_4_",
+          2
+        ],
+        [
+          "SLAYER_RING_8_",
+          2
+        ],
+        [
+          "NECKLACE_OF_PASSAGE_5_",
+          1
+        ],
+        [
+          "DIGSITE_PENDANT_5_",
+          1
+        ],
+        [
+          "LAW_RUNE",
+          1000
+        ],
+        [
+          "AIR_RUNE",
+          3000
+        ],
+        [
+          "WATER_RUNE",
+          1000
+        ],
+        [
+          "EARTH_RUNE",
+          1000
+        ],
+        [
+          "FIRE_RUNE",
+          1000
+        ],
+        [
+          "NATURE_RUNE",
+          500
+        ],
+        [
+          "COSMIC_RUNE",
+          200
+        ],
+        [
+          "ASTRAL_RUNE",
+          300
+        ],
+        [
+          "ENCHANTED_GEM",
+          1
+        ]
+      ]
     }
   },
   "focusBonus": 12,
@@ -168,5 +653,40 @@
     "firemaking",
     "smithing",
     "combat"
+  ],
+  "kitUpdates": [
+    {
+      "version": 2,
+      "_comment": "Fairy rings: Fairytale I done and Fairytale II to the Fairy Godfather's permission (stage 40, where the rings open; Wiki: no skills needed for that), and the dramen staff Lost City gives.",
+      "stages": [
+        "mid",
+        "late"
+      ],
+      "quests": [
+        {
+          "key": "fairytale_i_growing_pains",
+          "after": [
+            "lost_city",
+            "nature_spirit"
+          ]
+        },
+        {
+          "key": "fairytale_ii_cure_a_queen",
+          "stage": 40,
+          "after": [
+            "fairytale_i_growing_pains"
+          ]
+        }
+      ],
+      "bank": [
+        {
+          "item": "DRAMEN_STAFF",
+          "amount": 1,
+          "after": [
+            "lost_city"
+          ]
+        }
+      ]
+    }
   ]
 }

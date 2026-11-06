@@ -23,6 +23,16 @@ const { createWanderAction } = require("./actions/Wander.PlayerBots");
 const { createFollowOwnerAction } = require("./actions/FollowOwner.PlayerBots");
 const { createFishAction } = require("./actions/Fish.PlayerBots");
 const { createCookAction } = require("./actions/Cook.PlayerBots");
+const { createMakeAction } = require("./actions/Make.PlayerBots");
+const { createClickItemAction } = require("./actions/ClickItem.PlayerBots");
+const { createSmithAnvilAction } = require("./actions/SmithAnvil.PlayerBots");
+const { createRunCourseAction } = require("./actions/RunCourse.PlayerBots");
+const { createHuntTrapsAction } = require("./actions/HuntTraps.PlayerBots");
+const { createPickpocketAction } = require("./actions/Pickpocket.PlayerBots");
+const { createHostHouseAction } = require("./actions/HostHouse.PlayerBots");
+const { createAltarRunAction } = require("./actions/AltarRun.PlayerBots");
+const { createStationAction } = require("./actions/Station.PlayerBots");
+const { createCastOnItemAction } = require("./actions/CastOnItem.PlayerBots");
 
 const DEFAULT_DEFINITIONS_PATH = path.join(
   process.cwd(),
@@ -163,6 +173,7 @@ function createAction(spec, world) {
           .map((entry) => ({
             item: resolveItemId(entry.item),
             amount: Math.max(1, Math.floor(Number(entry.amount ?? 1))),
+            noted: entry.noted === true,
           }))
           .filter((entry) => Number.isInteger(entry.item)),
       },
@@ -201,6 +212,46 @@ function createAction(spec, world) {
   }
   if (spec.type === "cook") {
     return createCookAction(spec, world);
+  }
+  if (spec.type === "make") {
+    return createMakeAction({ use: resolveItemId(spec.use), on: resolveItemId(spec.on), output: resolveItemId(spec.output) }, world);
+  }
+  if (spec.type === "smithAnvil") {
+    return createSmithAnvilAction({ itemId: resolveItemId(spec.itemId), barId: resolveItemId(spec.barId), bars: spec.bars }, world);
+  }
+  if (spec.type === "hostHouse") {
+    return createHostHouseAction(spec, world);
+  }
+  if (spec.type === "altarRun") {
+    return createAltarRunAction({ bone: resolveItemId(spec.bone) }, world);
+  }
+  if (spec.type === "castOnItem") {
+    return createCastOnItemAction({ spell: spec.spell, items: (spec.items ?? []).map(resolveItemId).filter(Number.isInteger) }, world);
+  }
+  if (spec.type === "station") {
+    return createStationAction({
+      catalog: spec.catalog, option: spec.option ?? null, event: spec.event ?? null,
+      use: spec.use == null ? null : resolveItemId(spec.use),
+      material: resolveItemId(spec.material), output: resolveItemId(spec.output),
+    }, world);
+  }
+  if (spec.type === "huntTraps") {
+    return createHuntTrapsAction({
+      item: resolveItemId(spec.item), kind: String(spec.kind), junk: (spec.junk ?? []).map(resolveItemId).filter(Number.isInteger),
+    }, world);
+  }
+  if (spec.type === "runCourse") {
+    return createRunCourseAction({ course: String(spec.course), entry: spec.entry ?? null, down: spec.down ?? null }, world);
+  }
+  if (spec.type === "pickpocket") {
+    return createPickpocketAction({
+      npcs: spec.npcs ?? [],
+      food: (spec.food ?? []).map(resolveItemId).filter(Number.isInteger),
+      pouch: spec.pouch == null ? null : resolveItemId(spec.pouch),
+    }, world);
+  }
+  if (spec.type === "clickItem") {
+    return createClickItemAction({ items: (spec.items ?? []).map(resolveItemId) }, world);
   }
   throw new Error(`[bot activities] unknown action type '${spec.type}'`);
 }

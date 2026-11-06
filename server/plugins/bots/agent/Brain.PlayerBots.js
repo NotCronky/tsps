@@ -13,11 +13,15 @@
  */
 const FOCUS_WEIGHT = 3;
 const STYLE_WEIGHTS = {
-  balanced: { Gathering: 1, Processing: 1, Combat: 1 },
-  skiller: { Gathering: 1.2, Processing: 1.2, Combat: 0.25 },
-  fighter: { Gathering: 0.6, Processing: 0.6, Combat: 3 },
+  balanced: { Gathering: 1, Processing: 1, Activities: 1, Combat: 1 },
+  skiller: { Gathering: 1.2, Processing: 1.2, Activities: 1.2, Combat: 0.25 },
+  fighter: { Gathering: 0.6, Processing: 0.6, Activities: 0.6, Combat: 3 },
 };
 const PROCESSING_BONUS = 1.4;
+// Crowding (characters on a task, per place it's done at): each TASK_CROWD of them halves a
+// task's weight, and at its cap (`task.crowd`, else TASK_FULL) the brain leaves it to them.
+const TASK_CROWD = 4;
+const TASK_FULL = 12;
 const RECENT_WEIGHTS = [0.15, 0.5];
 const LEVEL_SPREAD = 25;
 const COMBAT_SKILLS = ["attack", "strength", "defence"];
@@ -36,7 +40,7 @@ function taskLevel(task, levelOf) {
  * Scores for the tasks open to the character: [{ task, score, reason }] for all of them, with
  * score 0 and the reason for those it can't do. `recent` lists task ids, latest first.
  */
-function scoreTasks({ player, tasks, ctx, profile = {}, recent = [], levelOf }) {
+function scoreTasks({ player, tasks, ctx, profile = {}, recent = [], levelOf, crowdOf = () => 0 }) {
   const open = [];
   const scored = tasks.map((task) => {
     const check = task.check(player, ctx);
@@ -58,6 +62,13 @@ function scoreTasks({ player, tasks, ctx, profile = {}, recent = [], levelOf }) 
     if (task.group === "Processing") score *= PROCESSING_BONUS;
     const index = recent.indexOf(task.id);
     if (index >= 0 && index < RECENT_WEIGHTS.length) score *= RECENT_WEIGHTS[index];
+    const crowd = crowdOf(task);
+    if (crowd >= (task.crowd ?? TASK_FULL)) {
+      entry.score = 0;
+      entry.reason = "too crowded";
+      continue;
+    }
+    score /= 1 + crowd / TASK_CROWD;
     entry.score = score;
   }
   shareTiers(scored);

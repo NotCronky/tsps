@@ -13,6 +13,10 @@ const ClimbLinks = require("../../objects/ClimbLinks");
  * handlers find the other end (ClimbLinks, cache backed, no coordinate lists).
  * The walk is pointed at the stairs (`request.climbVia`); once they are in reach
  * the bot clicks the climb option and the walk carries on from the new floor.
+ *
+ * Underground (6400 tiles north, plane 0: dungeons, cellars, sewers) counts as the layer below
+ * the ground floor: a walk there goes by the ladder or trapdoor down nearest the goal's spot on
+ * the surface (a closed trapdoor opened first), and back up the same way.
  */
 
 // Stairs are looked for this far around the destination and around the bot.
@@ -25,6 +29,22 @@ const MAX_CACHED = 2000;
 const MAX_HOPS = 3;
 // Within this, a path (doors allowed) must exist; further is the long-route planner's job.
 const LOCAL_TILES = 60;
+// Underground lies this far north of the surface above it (ClimbLinks' UNDERGROUND_OFFSET).
+const UNDERGROUND_OFFSET = 6400;
+// A dungeon's entrance can be well off the spot above where the walk is going.
+const UNDERGROUND_SEARCH_RADIUS = 64;
+const OPEN_OPTIONS = ["open"];
+// A way into (or out of) the underground leads where it's going only if it lands this near: the
+// rest of the walk can't be checked from the map that far, and dungeons are local.
+const CROSSING_LANDING_TILES = 160;
+/** The layer a tile is on: underground -1, else its plane. */
+const layerOf = (tile) => (tile.y >= UNDERGROUND_OFFSET && tile.z === 0 ? -1 : tile.z);
+/** `goal` moved onto `here`'s side of the surface: its spot above (or below) it. */
+function projected(goal, here) {
+  const dy = layerOf(goal) === -1 && layerOf(here) !== -1 ? -UNDERGROUND_OFFSET
+    : layerOf(here) === -1 && layerOf(goal) !== -1 ? UNDERGROUND_OFFSET : 0;
+  return { x: goal.x, y: goal.y + dy, z: here.z };
+}
 const UP_OPTIONS = ["climb-up", "climb up", "walk-up", "ascend", "top-floor"];
 const DOWN_OPTIONS = ["climb-down", "climb down", "walk-down", "descend", "bottom-floor"];
 
@@ -59,14 +79,30 @@ function pathExists(from, to) {
   }) !== null;
 }
 
-/** Stairs on plane `z` within SEARCH_RADIUS of `centre` that climb `direction`. */
-function stairsAround(centre, z, direction, into) {
-  for (let dx = -SEARCH_RADIUS; dx <= SEARCH_RADIUS; dx++) {
-    for (let dy = -SEARCH_RADIUS; dy <= SEARCH_RADIUS; dy++) {
+/** A closed trapdoor (its Open option), which climbs down once opened. */
+function opens(objectId) {
+  const options = (ObjectDefinition.forId(objectId)?.getInteractions?.() ?? []).map((option) => String(option ?? "").toLowerCase());
+  return /trapdoor/i.test(ObjectDefinition.forId(objectId)?.getName?.() ?? "") && options.some((option) => OPEN_OPTIONS.includes(option));
+}
+
+/** Where climbing it lands (a closed trapdoor: where it will, once opened, from the ladder below). */
+function landingOf(object, direction, from) {
+  if (!opens(object.getId())) return ClimbLinks.destination(object, direction, from, null);
+  const end = ClimbLinks.otherEnd(object, direction);
+  if (!end) return null;
+  const shift = end.getLocation().getY() - object.getLocation().getY();
+  return ClimbLinks.landingTile(end, { x: from.getX(), y: from.getY() + (Math.abs(shift) >= UNDERGROUND_OFFSET / 2 ? shift : 0) }, null);
+}
+
+/** Stairs on plane `z` within `radius` of `centre` that climb `direction` (or a trapdoor to open, going down). */
+function stairsAround(centre, z, direction, into, radius = SEARCH_RADIUS) {
+  for (let dx = -radius; dx <= radius; dx++) {
+    for (let dy = -radius; dy <= radius; dy++) {
       for (const object of MapObjects.mapObjects.get(MapObjects.getHash(centre.x + dx, centre.y + dy, z)) ?? []) {
         const loc = object.getLocation();
         if (loc.getX() !== centre.x + dx || loc.getY() !== centre.y + dy) continue;
-        if (ClimbLinks.climbs(object.getId(), direction) && climbOption(object.getId(), direction) > 0) into.add(object);
+        if ((ClimbLinks.climbs(object.getId(), direction) && climbOption(object.getId(), direction) > 0)
+          || (direction === ClimbLinks.DOWN && opens(object.getId()))) into.add(object);
       }
     }
   }
@@ -84,24 +120,31 @@ function findStairs(here, goal, direction, nowMs, hops = MAX_HOPS) {
   }
   const cached = stairsByGoal.get(key);
   if (cached && nowMs - cached.at < CACHE_TTL_MS) return cached.object;
+  const crossing = (layerOf(goal) === -1) !== (layerOf(here) === -1);
+  const above = projected(goal, here);
   RegionManager.loadMapFiles(goal.x, goal.y);
+  RegionManager.loadMapFiles(above.x, above.y);
   RegionManager.loadMapFiles(here.x, here.y);
-  // Near the destination (going up to a bank) and near the bot (going down to a far mine).
+  // Near the destination (going up to a bank) and near the bot (going down to a far mine);
+  // into or out of the underground, around the goal's spot on this side, further out.
   const found = new Set();
-  stairsAround(goal, here.z, direction, found);
-  stairsAround(here, here.z, direction, found);
+  const radius = crossing ? UNDERGROUND_SEARCH_RADIUS : SEARCH_RADIUS;
+  stairsAround(above, here.z, direction, found, radius);
+  stairsAround(here, here.z, direction, found, radius);
   const score = (object) => {
     const loc = object.getLocation();
-    return chebyshev(here.x, here.y, loc.getX(), loc.getY()) + chebyshev(loc.getX(), loc.getY(), goal.x, goal.y);
+    return chebyshev(here.x, here.y, loc.getX(), loc.getY()) + chebyshev(loc.getX(), loc.getY(), above.x, above.y);
   };
   let best = null;
   for (const object of [...found].sort((a, b) => score(a) - score(b))) {
     const loc = object.getLocation();
     if (!pathExists(here, { x: loc.getX(), y: loc.getY() })) continue;
-    const landing = ClimbLinks.destination(object, direction, loc, null);
-    if (!landing || landing.getZ() !== here.z + direction) continue;
+    const landing = landingOf(object, direction, loc);
+    if (!landing) continue;
     const at = { x: landing.getX(), y: landing.getY(), z: landing.getZ() };
-    const leadsOn = at.z === goal.z
+    if (layerOf(at) !== layerOf(here) + direction) continue;
+    if (crossing && layerOf(goal) === -1 && layerOf(at) === -1 && chebyshev(at.x, at.y, goal.x, goal.y) > CROSSING_LANDING_TILES) continue;
+    const leadsOn = layerOf(at) === layerOf(goal)
       ? pathExists(at, goal)
       : hops > 1 && findStairs(at, goal, direction, nowMs, hops - 1) !== null;
     if (leadsOn) {
@@ -126,14 +169,15 @@ function inReach(player, object) {
  */
 function maybeClimb({ player, state, world, request }) {
   const loc = player?.getLocation?.();
-  if (!loc || !request || !Number.isFinite(request.z) || request.z === loc.getZ() || player.getPrivateArea?.()) {
+  const here = loc ? { x: loc.getX(), y: loc.getY(), z: loc.getZ() } : null;
+  const goal = request ? { x: request.x, y: request.y, z: Number.isFinite(request.z) ? request.z : here?.z } : null;
+  if (!loc || !request || !Number.isFinite(goal.z) || layerOf(goal) === layerOf(here) || player.getPrivateArea?.()) {
     if (request) request.climbVia = undefined;
     return false;
   }
   const nowMs = Date.now();
-  const here = { x: loc.getX(), y: loc.getY(), z: loc.getZ() };
-  const direction = request.z > here.z ? ClimbLinks.UP : ClimbLinks.DOWN;
-  const stairs = findStairs(here, { x: request.x, y: request.y, z: request.z }, direction, nowMs);
+  const direction = layerOf(goal) > layerOf(here) ? ClimbLinks.UP : ClimbLinks.DOWN;
+  const stairs = findStairs(here, goal, direction, nowMs);
   if (!stairs) {
     request.climbVia = undefined;
     return false;
@@ -146,11 +190,15 @@ function maybeClimb({ player, state, world, request }) {
   }
   if (!inReach(player, stairs) || nowMs < (state?.climbAt ?? 0)) return false;
   if (state) state.climbAt = nowMs + CLIMB_COOLDOWN_MS;
+  // A closed trapdoor: opened (it turns into one that climbs down), then found again.
+  const opening = climbOption(stairs.getId(), direction) <= 0 && opens(stairs.getId());
+  if (opening) stairsByGoal.clear();
+  const options = (ObjectDefinition.forId(stairs.getId())?.getInteractions?.() ?? []).map((option) => String(option ?? "").toLowerCase());
   world.emitObjectInteraction?.({
     player,
     object: stairs,
     objectId: stairs.getId(),
-    clickType: climbOption(stairs.getId(), direction),
+    clickType: opening ? options.findIndex((option) => OPEN_OPTIONS.includes(option)) + 1 : climbOption(stairs.getId(), direction),
     location: { x: at.getX(), y: at.getY(), z: at.getZ() },
     sourceLocation: { ...here },
     handled: false,

@@ -66,6 +66,8 @@ function wintertodtTask() {
     subgroup: "Firemaking",
     skill: "firemaking",
     level: FIREMAKING_REQUIRED,
+    // A mass minigame: the more the merrier, up to a full prison.
+    crowd: 40,
     // It travels as part of the task, games necklace first.
     places: [],
     minutes: [30, 60],

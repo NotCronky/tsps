@@ -118,7 +118,8 @@ function bootPlayerBotsRuntime(options = {}) {
       Woodcutting.isWoodcuttingActive?.(player) === true ||
       Mining.isMiningActive?.(player) === true ||
       Firemaking.isFiremakingActive?.(player) === true ||
-      Smithing.isSmeltingActive?.(player) === true,
+      Smithing.isSmeltingActive?.(player) === true ||
+      Smithing.isSmithingActive?.(player) === true,
     log: (message, extra) => botApi.log(message, extra),
     emitCustomEvent: (name, payload) => botApi.emitCustomEvent(name, payload),
   };

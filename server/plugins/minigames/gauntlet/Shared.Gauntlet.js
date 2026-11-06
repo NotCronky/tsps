@@ -47,7 +47,7 @@ const OBJECT = {
 };
 
 const VARP = {
-  // Shows "Enter-corrupted" on the entrance once a Gauntlet has been completed.
+  // The Gauntlet completion count; above 0 shows "Enter-corrupted" on the entrance.
   COMPLETED: 2353,
 };
 

@@ -295,7 +295,35 @@ function stringAmulet(event) {
   });
 }
 
+/**
+ * "crafting:furnace-make" { player, itemId, handled }: for a bot at a furnace whose gold or silver
+ * menu is open (the bar used on it, as a player does), makes `itemId` all the way, as clicking
+ * "All" then that item does - the same level, material and members checks.
+ */
+function botFurnaceMake(request) {
+  const { player, itemId } = request;
+  const menu = player?.getAttribute(JEWELLERY_MENU_ATTRIBUTE);
+  const group = player?.getInterfaceId?.();
+  if (!menu || (group !== GOLD_CRAFTING_INTERFACE && group !== SILVER_CRAFTING_INTERFACE)) return;
+  let component = null;
+  if (group === GOLD_CRAFTING_INTERFACE) {
+    for (const type of data().goldTypes) {
+      const index = type.products.findIndex(([id]) => id === itemId);
+      if (index >= 0) component = type.firstComponent + index;
+    }
+  } else {
+    for (const [key, product] of data().silver) if (product.itemId === itemId) component = key;
+  }
+  const product = component === null ? null
+    : group === GOLD_CRAFTING_INTERFACE ? goldProduct(component) : silverProduct(component);
+  if (!product) return;
+  menu.amount = 28;
+  startFurnaceProduct(player, menu, product, (group << 16) | component);
+  request.handled = true;
+}
+
 module.exports = function attach(api) {
+  api.onCustomEvent("crafting:furnace-make", botFurnaceMake);
   api.onObjectInteraction("Furnace", { Smelt: smeltAtFurnace });
   api.onObjectInteraction("Small furnace", { Smelt: smeltAtFurnace });
   api.onItemOnObject(handlePerfectJewellery, { noted: false });

@@ -279,5 +279,15 @@ module.exports = function attach(api) {
   }
   for (const data of ENCHANT_SPELLS) spells.set(data.name.toLowerCase(), new JewellerySpell(data));
   api.onSpellOnItem(handleSpellOnItem);
+  // "magic:enchant-recipes" { recipes }: every piece the enchant spells take, for the player bots'
+  // Magic tasks: { spellName, level, xp, runes: [[id, amount]], itemId, resultId }.
+  api.onCustomEvent("magic:enchant-recipes", (request) => {
+    if (!Array.isArray(request?.recipes)) return;
+    for (const data of ENCHANT_SPELLS) {
+      for (const [itemId, resultId] of [...data.amulets, ...(data.silverAmulets ?? []), ...(data.silverJewellery ?? []), ...data.jewellery]) {
+        request.recipes.push({ spellName: data.name, level: data.level, xp: data.xp, runes: data.runes, itemId, resultId });
+      }
+    }
+  });
   api.onCustomEvent("level-up:popup-opened", pauseEnchanting);
 };

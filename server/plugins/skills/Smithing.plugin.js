@@ -36,6 +36,21 @@ function startBotSmelting(player, recipe, amount) {
   return Smelting.startSmelting(player, recipe, amount);
 }
 
+/** The anvil's products for a bar: [{ itemId, level, bars, amount, members, quest }]. */
+function anvilProducts(barId) {
+  return Data.productsFor(barId) ?? [];
+}
+
+/**
+ * A bot at an anvil smiths `itemId` from its carried bars, as picking it in the smithing
+ * interface does (the same level, hammer, bar, members and quest checks). False when it can't.
+ */
+function startBotSmithing(player, itemId, amount) {
+  const product = anvilProducts(Data.anvilBars().find((bar) => anvilProducts(bar).some((entry) => entry.itemId === itemId)))
+    .find((entry) => entry.itemId === itemId);
+  return product ? Anvil.startSmithing(player, product, amount) : false;
+}
+
 module.exports = {
   name: "Smithing",
   SMELTING_RECIPES: Data.SMELTING_RECIPES,
@@ -51,6 +66,10 @@ module.exports = {
   loadData: Data.load,
   startBotSmelting,
   isSmeltingActive: Smelting.isSmeltingActive,
+  anvilBars: () => Data.anvilBars(),
+  anvilProducts,
+  startBotSmithing,
+  isSmithingActive: (player) => Sessions.typeOf(player) === "smith",
   register(api) {
     Core.init(api);
     api.onPlayerDisconnect(disconnect);

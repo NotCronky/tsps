@@ -1,6 +1,8 @@
 "use strict";
 
 const { no, ok, skillOf } = require("./Common.PlayerBots");
+const { gauntletTask } = require("./Gauntlet.PlayerBots");
+const { slayerTask } = require("./Slayer.PlayerBots");
 
 /**
  * Combat training: monsters that suit the character's combat level (combat_training in
@@ -8,7 +10,7 @@ const { no, ok, skillOf } = require("./Common.PlayerBots");
  * It trains the lowest of Attack, Strength and Defence, as a player balancing their stats would.
  */
 function combatTasks(places) {
-  return [{
+  return [slayerTask(), gauntletTask(), gauntletTask({ corrupted: true }), {
     id: "combat",
     name: "Combat training",
     group: "Combat",
@@ -25,7 +27,7 @@ function combatTasks(places) {
     build(player, { registry }) {
       return registry.byId.get("combat_training") ?? null;
     },
-  }];
+  }].reverse();
 }
 
 module.exports = { combatTasks };

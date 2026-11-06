@@ -661,6 +661,35 @@ function attemptObstacle(player, context, entry) {
   });
 }
 
+/**
+ * "agility:course-next" { player, course, restart }: the next obstacle of the player's lap on a
+ * course (its key), for a bot running laps: the obstacle after the lap's last one, or the first
+ * when no lap of that course is under way or `restart` is set (a fall). Answers `busy` (an
+ * obstacle is still being crossed) and `next`: { index, objectIds, tiles, clickType(object) }, the
+ * click the obstacle takes (walkToObject with it walks the obstacle's own route); `tiles` are where
+ * the obstacle stands when its id is shared ([x, y, z]; empty when any of the ids will do).
+ */
+function courseNext(request) {
+  const { player } = request;
+  const course = COURSES.find((entry) => entry.key === request.course);
+  if (!course || !player) return;
+  request.busy = ObstacleRunner.isBusy(player);
+  const progress = player.getAttribute(PROGRESS_ATTRIBUTE);
+  const index = !request.restart && progress?.course === course.key ? progress.index + 1 : 1;
+  const obstacles = course.obstacles.filter((obstacle) => obstacle.index === index && obstacle.object != null);
+  if (obstacles.length === 0) return;
+  const entryFor = (object) => {
+    const location = object.getLocation();
+    return findObstacle(object.getId(), { x: location.getX(), y: location.getY(), z: location.getZ() }, player) ?? obstacles[0];
+  };
+  request.next = {
+    index,
+    objectIds: obstacles.flatMap((obstacle) => (Array.isArray(obstacle.object) ? obstacle.object : [obstacle.object])),
+    tiles: obstacles.every((obstacle) => Array.isArray(obstacle.at)) ? obstacles.map((obstacle) => obstacle.at) : [],
+    clickType: (object) => interactionClickType(entryFor(object), object.getDefinition?.()) ?? 1,
+  };
+}
+
 function routeToObstacle(event) {
   const location = event.object.getLocation();
   const obstacle = findObstacle(event.objectId, { x: location.getX(), y: location.getY(), z: location.getZ() }, event.player);
@@ -780,6 +809,7 @@ module.exports = {
     api.onObjectFirstClick([...OBSTACLES_BY_OBJECT.keys()], operateObstacle);
     registerOptionInteractions(api);
     api.onCustomEvent("ladders:climb", claimLadderObstacle);
+    api.onCustomEvent("agility:course-next", courseNext);
     api.onNpcInteraction("Agility Trainer", { "Give-Stick": operateNpcObstacle });
     api.registerArea(createTileObstacleArea());
     api.onCanTeleport(blockTeleportMidObstacle);

@@ -523,6 +523,87 @@ function useExitRing({ player, objectId, location }) {
   fairyTeleport(player, ring, ringTile(location), false);
 }
 
+/** The fairy staves, for content using the rings for a player (a bot travelling). */
+function fairyStaves() {
+  return [core.ItemIdentifiers.DRAMEN_STAFF, core.ItemIdentifiers.LUNAR_STAFF].filter(Number.isInteger);
+}
+
+/**
+ * The ring nearest `location` that the network lands at (each code's destination is its own
+ * ring): { code, tile }, or null.
+ */
+function nearestRing(location, canWalkTo = () => true) {
+  const candidates = [];
+  for (const ring of rings.values()) {
+    const at = ring.destination;
+    if (!at || at.getZ() !== location.getZ() || ring.code === DARK_WARNING_CODE) continue;
+    const distance = Math.max(Math.abs(at.getX() - location.getX()), Math.abs(at.getY() - location.getY()));
+    candidates.push({ code: ring.code, tile: at, distance });
+  }
+  candidates.sort((a, b) => a.distance - b.distance);
+  // The nearest few that a walk gets to (one on a swamp island is a ring-only stop).
+  for (const candidate of candidates.slice(0, 6)) {
+    if (candidate.distance > 400) break;
+    if (canWalkTo(candidate.tile) !== false) return candidate;
+  }
+  return null;
+}
+
+/**
+ * A ring's trip for content acting for the player: standing on the ring at `from`, Configure,
+ * the dials set to `code`, Confirm, through the same code as the clicks (the staff and quest
+ * checks, the teleport). A carried fairy staff is wielded first. True once it's under way.
+ */
+function travel(player, code, from) {
+  // Whatever it had open (the bank it took the staff out of) closes, as a player's would.
+  player.getPacketSender().sendInterfaceRemoval();
+  const weapon = player.getEquipment().get(core.Equipment.WEAPON_SLOT)?.getId?.() ?? -1;
+  if (!fairyStaves().includes(weapon)) {
+    const staff = fairyStaves().find((id) => player.getInventory().contains(id));
+    if (staff === undefined) return false;
+    const slot = player.getInventory().getItems().findIndex((item) => item?.getId?.() === staff);
+    core.EquipPacketListener.equip(player, staff, slot, core.Inventory.INTERFACE_ID);
+  }
+  if (!canUse(player)) return false;
+  openDial({ player, location: { x: from.getX(), y: from.getY(), z: from.getZ() } });
+  if (player.getInterfaceId?.() !== DIALS_INTERFACE && !configuredRing.get(player)) return false;
+  setDials(player, code);
+  confirmDial(player);
+  return true;
+}
+
+/**
+ * "teleport:options" { player, options, bank? }: the fairy ring network, for a player who can
+ * use it (a fairy staff carried or worn, Fairytale II started): every ring's destination, from
+ * the ring nearest them that they can walk to (`canWalkTo(tile)` when the asker gives one), which
+ * they walk to first (`via`, its walk counted in `cost`). With
+ * `bank` and the staff only banked, the same with `withdraw` (the staff) and no `use`.
+ */
+function offerRings(request) {
+  const { player } = request ?? {};
+  if (!player || !Array.isArray(request.options) || !questAllows(player)) return;
+  const owned = fairyStaves().some((id) => player.getInventory().contains(id) || player.getEquipment().contains(id));
+  const bankedStaff = !owned && request.bank
+    ? fairyStaves().find((id) => request.bank.some((item) => item?.getId?.() === id)) : undefined;
+  if (!owned && bankedStaff === undefined) return;
+  const from = nearestRing(player.getLocation(), request.canWalkTo);
+  if (!from) return;
+  for (const ring of rings.values()) {
+    if (!ring.destination || ring.code === from.code || ring.code === DARK_WARNING_CODE) continue;
+    const option = {
+      id: `fairy-ring:${ring.code}`,
+      to: ring.destination,
+      via: from.tile,
+      // The walk to the ring, and the dials and flowers.
+      cost: from.distance + 8,
+      waitMs: 6000,
+    };
+    if (owned) option.use = () => travel(player, ring.code, from.tile);
+    else option.withdraw = [{ item: bankedStaff, amount: 1 }];
+    request.options.push(option);
+  }
+}
+
 function sendLastOnLogin({ player }) {
   const ring = rings.get(String(player.getAttribute(LAST_CODE_ATTRIBUTE) ?? ""));
   if (ring) sendLastDestination(player, ring);
@@ -562,6 +643,9 @@ module.exports = {
     hasLightSource,
     playerDied,
     ringOptions,
+    offerRings,
+    travel,
+    nearestRing,
     rings: () => rings,
     DIAL_VARBITS,
     DIAL_LETTERS,
@@ -582,6 +666,7 @@ module.exports = {
     api.onCustomEvent("fairy-rings:zanaris", zanaris);
     api.onCustomEvent("fairy-rings:last-destination", lastDestination);
     api.onCustomEvent("fairy-rings:destinations", destinationsEvent);
+    api.onCustomEvent("teleport:options", offerRings);
     api.onPlayerLogin(sendLastOnLogin);
     api.log("registered", { rings: rings.size });
   },

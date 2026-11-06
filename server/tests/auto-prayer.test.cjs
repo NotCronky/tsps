@@ -223,3 +223,39 @@ test('::autopray toggles and is saved, off by default; offensive prayers saved, 
   commands.get('autopray')({ player, parts: ['autopray', 'on'] });
   assert.equal(player.getAttribute(AutoPrayer.AUTOPRAY_ATTRIBUTE), true);
 });
+
+test('offensive turned off mid-fight (a bot leaving the boss): the offensive prayer it put up comes down', () => {
+  const { PrayerHandler: P, CombatFactory } = core;
+  const getMethod = CombatFactory.getMethod;
+  try {
+    CombatFactory.getMethod = () => ({ type: () => core.CombatType.RANGED });
+    const player = fakePlayer();
+    player.prayers[P.PROTECT_ITEM] = true;
+    announce(player, { type: 'magic', cycle: 101 });
+    assert.equal(player.prayers[P.RIGOUR], true);
+    PluginManager.emitCustomEvent('combat:autopray-set', { player, on: true, offensive: false });
+    announce(player, { type: 'ranged', cycle: 102 });
+    assert.ok(!player.prayers[P.RIGOUR], 'the offensive prayer is off');
+    assert.deepEqual(protecting(player), ['magic'], 'protection still up for the attack judged next');
+    assert.equal(player.prayers[P.PROTECT_ITEM], true, "the player's own prayer is left alone");
+  } finally {
+    CombatFactory.getMethod = getMethod;
+  }
+});
+
+test('auto-prayer turned off mid-fight: the prayers it put up come down, not left draining', () => {
+  const { PrayerHandler: P, CombatFactory } = core;
+  const getMethod = CombatFactory.getMethod;
+  try {
+    CombatFactory.getMethod = () => ({ type: () => core.CombatType.RANGED });
+    const player = fakePlayer();
+    announce(player, { type: 'magic', cycle: 105 });
+    assert.equal(player.prayers[P.RIGOUR], true);
+    PluginManager.emitCustomEvent('combat:autopray-set', { player, on: false });
+    tick();
+    assert.deepEqual(protecting(player), []);
+    assert.ok(!player.prayers[P.RIGOUR]);
+  } finally {
+    CombatFactory.getMethod = getMethod;
+  }
+});

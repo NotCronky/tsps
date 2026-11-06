@@ -156,6 +156,55 @@ function stockBank(player, stage, random) {
   }
 }
 
+// The starting kit's version: an account given an older one gets what's new once, on its next login.
+const KIT_VERSION = 2;
+const KIT_ATTRIBUTE = "player-bots:kit-version";
+
+/** Whether every level `levels` asks for ({ SKILL: level }) is met (real, unboosted levels). */
+function meets(player, levels = {}) {
+  return Object.entries(levels).every(([name, needed]) => player.getSkillManager().getMaxLevel(Skill[name]) >= needed);
+}
+
+/**
+ * The stage's starting kit, once (KIT_VERSION): its quests marked complete, those its levels meet
+ * and whose `after` quests it has (through each quest's own complete(), as a quest pack does: no
+ * XP, no scroll, no announcement; item rewards as usual), and its teleports (tablets, jewellery,
+ * runes) in the bank. Both a new account and one made before the kit get it.
+ */
+function applyStartingKit(player, profile, data = readJson(STAGES_FILE)) {
+  const given = Number(player.getAttribute(KIT_ATTRIBUTE)) || 0;
+  if (given >= KIT_VERSION) return false;
+  const stageName = data.stages[profile?.stage] ? profile.stage : "early";
+  const stage = data.stages[stageName];
+  const quests = new Map((require("../../quests/QuestRuntime").getRegisteredQuests?.() ?? []).map((quest) => [quest.key, quest]));
+  const done = (key) => quests.get(key)?.isComplete?.(player) === true;
+  // A quest entry: complete, or (with `stage`) brought up to that stage, as a player part-way through.
+  const grant = (entry) => {
+    const quest = quests.get(entry.key);
+    if (!quest || done(entry.key) || !meets(player, entry.levels) || !(entry.after ?? []).every(done)) return;
+    if (Number.isInteger(entry.stage)) {
+      if (quest.getStage(player) < entry.stage) quest.setStage(player, entry.stage);
+    } else {
+      quest.complete(player, { experience: false, scroll: false, announce: false });
+    }
+  };
+  const bank = player.getBank(0);
+  const deposit = (name, amount) => {
+    if (Number.isInteger(ItemIdentifiers[name]) && amount > 0) bank.adds(ItemIdentifiers[name], amount);
+  };
+  if (given < 1) {
+    for (const entry of stage.quests ?? []) grant(entry);
+    for (const [name, amount] of stage.teleports ?? []) deposit(name, amount);
+  }
+  for (const update of data.kitUpdates ?? []) {
+    if (update.version <= given || update.version > KIT_VERSION || !(update.stages ?? []).includes(stageName)) continue;
+    for (const entry of update.quests ?? []) grant(entry);
+    for (const entry of update.bank ?? []) if ((entry.after ?? []).every(done)) deposit(entry.item, entry.amount);
+  }
+  player.setAttribute(KIT_ATTRIBUTE, KIT_VERSION);
+  return true;
+}
+
 /** Sets a brand-new account up for its stage (data/stages.json). */
 function setUpNewAccount(player, profile, random = Math.random, data = readJson(STAGES_FILE)) {
   const stage = data.stages[profile.stage] ?? data.stages.early;
@@ -169,4 +218,4 @@ function setUpNewAccount(player, profile, random = Math.random, data = readJson(
   player.getUpdateFlag?.()?.flag?.(Flag.APPEARANCE);
 }
 
-module.exports = { rollCombatStats, rollProfile, setUpNewAccount, combatLevelOf };
+module.exports = { rollCombatStats, rollProfile, setUpNewAccount, applyStartingKit, combatLevelOf, KIT_ATTRIBUTE };
