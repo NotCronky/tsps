@@ -49,7 +49,6 @@ import net.rsprot.protocol.game.incoming.social.IgnoreListAdd
 import net.rsprot.protocol.game.incoming.social.IgnoreListDel
 import net.rsprot.protocol.game.incoming.resumed.ResumePLongDialog
 import net.rsprot.protocol.game.incoming.resumed.ResumePNameDialog
-import net.rsprot.protocol.game.incoming.resumed.ResumePObjDialog
 import net.rsprot.protocol.game.incoming.resumed.ResumePStringDialog
 import net.rsprot.protocol.game.incoming.resumed.ResumePauseButton
 import net.rsprot.protocol.message.IncomingGameMessage
@@ -130,8 +129,6 @@ class Upstream(
             is ResumePObjDialog -> send(TspsWriter().string(message.obj.toString()).varByte(RESUME_NAMEDIALOG))
             is ResumePNameDialog -> send(TspsWriter().string(message.name).varByte(RESUME_NAMEDIALOG))
             is ResumePStringDialog -> send(TspsWriter().string(message.string).varByte(RESUME_STRINGDIALOG))
-            // tsps takes an item search's pick as text, as the browser client sends it.
-            is ResumePObjDialog -> send(TspsWriter().string(message.obj.toString()).varByte(RESUME_NAMEDIALOG))
             // The client closes modals itself (Escape, a close button) and then tells the server. On
             // the welcome screen tsps would leave the player on the login root without a gameframe,
             // so closing it means Play, the only way tsps leaves it.
