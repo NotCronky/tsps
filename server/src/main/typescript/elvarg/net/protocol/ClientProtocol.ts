@@ -4,6 +4,7 @@ import { CLIENT_PACKET_LENGTHS as NATIVE_CLIENT_PACKET_LENGTHS, ClientPacketId a
 import { SERVER_PACKET_LENGTHS, ServerPacketId } from "./ServerPackets";
 import { EntityInteractionMode, INTERACTION_WORLD_DEFAULT, TileInteractionMode } from "./InteractionMode";
 import { deflateSync } from "zlib";
+import { type LocMergePayload, validateLocMerge } from "./LocMerge";
 
 export const enum ClientPacket {
   NPC_OPTION_2 = 12,
@@ -1446,6 +1447,24 @@ export function encodeLocDel(x: number, y: number, level: number, shape: number,
   return encodeServerPacket(ServerPacketId.LOC_DEL, payload);
 }
 
+export function encodeLocMerge(merge: LocMergePayload): Buffer {
+  validateLocMerge(merge);
+  const payload = Buffer.alloc(18);
+  payload.writeUInt16BE(merge.locId, 0);
+  payload.writeUInt16BE(merge.tile.x, 2);
+  payload.writeUInt16BE(merge.tile.y, 4);
+  payload[6] = merge.level;
+  payload[7] = (merge.shape << 2) | merge.rotation;
+  payload.writeUInt16BE(merge.playerIndex, 8);
+  payload.writeUInt16BE(merge.start, 10);
+  payload.writeUInt16BE(merge.end, 12);
+  payload.writeInt8(merge.minX, 14);
+  payload.writeInt8(merge.minZ, 15);
+  payload.writeInt8(merge.maxX, 16);
+  payload.writeInt8(merge.maxZ, 17);
+  return encodeServerPacket(ServerPacketId.LOC_MERGE, payload);
+}
+
 export function encodeLocAnim(id: number, x: number, y: number, level: number, shape: number, rotation: number, animationId: number): Buffer {
   const payload = Buffer.alloc(10);
   payload.writeUInt16BE(id & 0xffff);
@@ -1620,6 +1639,23 @@ export function encodeResetInteractionMode(worldId: number): Buffer {
   const payload = Buffer.alloc(2);
   payload.writeInt16BE(worldId, 0);
   return encodeServerPacket(ServerPacketId.RESET_INTERACTION_MODE, payload);
+}
+
+/**
+ * set_hide_npc_actions (hidenpcops): one boolean for the whole client. While hidden, NPC
+ * menus keep Examine but drop Use, Cast, every action and Attack.
+ */
+export function encodeHideNpcOps(hidden: boolean): Buffer {
+  return encodeServerPacket(ServerPacketId.HIDE_NPC_OPS, Buffer.from([hidden ? 1 : 0]));
+}
+
+/**
+ * set_item_ops_disabled (hideobjops): one boolean for the whole client. While hidden, ground-item
+ * menus drop Use, Cast and every ground action (including the Take fallback); Examine stays only
+ * when no spell is selected.
+ */
+export function encodeHideObjOps(hidden: boolean): Buffer {
+  return encodeServerPacket(ServerPacketId.HIDE_OBJ_OPS, Buffer.from([hidden ? 1 : 0]));
 }
 
 /** Puts the camera back on the player and stops any shake (cam_reset). */
@@ -2222,6 +2258,18 @@ export function encodeWidgetSetAngle(uid: number, angleX: number, angleY: number
   return encodeServerPacket(ServerPacketId.WIDGET_SET_ANGLE, payload);
 }
 
+/**
+ * IF_SETROTATESPEED: the model's rotation speeds in graphics-cycle units. Recording 1723
+ * (rev 227) sends the component uid, then one packed int with the y (yaw) speed in the high
+ * short and the x speed in the low short, both signed.
+ */
+export function encodeWidgetSetRotateSpeed(uid: number, speedX: number, speedY: number): Buffer {
+  const payload = Buffer.alloc(8);
+  payload.writeInt32BE(uid | 0, 0);
+  payload.writeInt32BE((((speedY | 0) & 0xffff) << 16) | ((speedX | 0) & 0xffff), 4);
+  return encodeServerPacket(ServerPacketId.WIDGET_SET_ROTATE_SPEED, payload);
+}
+
 export function encodeWidgetSetItem(uid: number, itemId: number, quantity = 1): Buffer {
   const payload = Buffer.alloc(10);
   payload.writeInt32BE(uid | 0);
@@ -2272,41 +2320,6 @@ export function encodeWidgetSetAnimation(uid: number, animationId: number): Buff
   payload.writeInt32BE(uid | 0);
   payload.writeInt16BE(animationId, 4);
   return encodeServerPacket(ServerPacketId.WIDGET_SET_ANIMATION, payload);
-}
-
-export type QuestListEntry = {
-  slot: number;
-  status: number;
-  key: string;
-  displayName: string;
-};
-
-export type QuestListGroup = {
-  title: string;
-  quests: QuestListEntry[];
-};
-
-/** Mirrors the client's WIDGET_SET_QUEST_LIST decoder (ServerBinaryDecoder.ts). */
-export function encodeWidgetSetQuestList(groups: readonly QuestListGroup[]): Buffer {
-  const parts: Buffer[] = [];
-  const groupCount = Buffer.alloc(2);
-  groupCount.writeUInt16BE(groups.length & 0xffff);
-  parts.push(groupCount);
-  for (const group of groups) {
-    parts.push(string(group.title));
-    const questCount = Buffer.alloc(2);
-    questCount.writeUInt16BE(group.quests.length & 0xffff);
-    parts.push(questCount);
-    for (const quest of group.quests) {
-      const slot = Buffer.alloc(2);
-      slot.writeUInt16BE(quest.slot & 0xffff);
-      parts.push(slot);
-      parts.push(Buffer.from([quest.status & 0xff]));
-      parts.push(string(quest.key));
-      parts.push(string(quest.displayName));
-    }
-  }
-  return encodeServerPacket(ServerPacketId.WIDGET_SET_QUEST_LIST, Buffer.concat(parts));
 }
 
 export type ScriptInventorySnapshot = {
@@ -2521,7 +2534,7 @@ export function encodeGameframeTabSetup(group: number, root: number = 161): Buff
 
 // Transient player attribute set from the handshake's clientType byte.
 export const MOBILE_CLIENT_ATTRIBUTE = "mobile-client";
-// The session is an official OSRS client behind the gateway (gateway/): it gets the fields the
+// The session is an official OSRS client behind the gateway (runelite-gateway/): it gets the fields the
 // browser wire leaves out. Transient, set from HANDSHAKE_CAPABILITY_NATIVE_CLIENT.
 export const NATIVE_CLIENT_ATTRIBUTE = "native-client";
 export const HANDSHAKE_CAPABILITY_NATIVE_CLIENT = 0x1;
@@ -2826,7 +2839,7 @@ export function encodePlayerAppearance(
   const equipmentSlot = (wireSlot: number): number => {
     const itemSlot = itemSlots[wireSlot];
     const itemId = itemSlot === undefined ? -1 : appearance.equip[itemSlot] ?? -1;
-    if (itemId >= 0) return itemId + 512;
+    if (itemId >= 0) return itemId + 2048;
     const kitSlot = kitSlots[wireSlot];
     const kitId = kitSlot === undefined ? -1 : appearance.kits[kitSlot] ?? -1;
     return kitId >= 0 ? kitId + 256 : 0;
@@ -3430,6 +3443,7 @@ export function encodeNpcSync(
   state: NpcSyncState,
   deckLocal?: Tile,
   deckBase?: (worldView: number) => Tile | undefined,
+  crossFloor = false,
 ): Buffer {
   const writer = new BitWriter();
   const desired = new Map<number, NpcView>();
@@ -3444,7 +3458,7 @@ export function encodeNpcSync(
   for (const index of state.indices.slice(0, 255)) {
     const view = desired.get(index);
     const last = state.lastTiles.get(index);
-    if (!view || !last || view.level !== local.level || state.typeIds.get(index) !== view.typeId
+    if (!view || !last || (crossFloor ? view.level !== last.level : view.level !== local.level) || state.typeIds.get(index) !== view.typeId
       || (state.worldViews.get(index) ?? -1) !== (view.worldView ?? -1)) {
       writer.writeBits(1, 1);
       writer.writeBits(2, 3);
@@ -3510,7 +3524,8 @@ export function encodeNpcSync(
   const signed = (value: number, bits: number) => (value < 0 ? value + (1 << bits) : value) & ((1 << bits) - 1);
   for (const view of additions) {
     const base = baseFor(view);
-    if (nextIndices.length >= 255 || view.level !== local.level) break;
+    if (nextIndices.length >= 255) break;
+    if (!crossFloor && view.level !== local.level) continue;
     writer.writeBits(16, view.index);
     const writeInteraction = (view.interactionIndex ?? -1) >= 0;
     const writeHeadIcon = (view.headIcon ?? -1) >= 0;
@@ -3524,6 +3539,7 @@ export function encodeNpcSync(
     writer.writeBits(large ? 8 : 5, signed(view.x - base.x, large ? 8 : 5));
     writer.writeBits(3, view.rotation & 7);
     writer.writeBits(16, view.typeId & 0xffff);
+    if (crossFloor) writer.writeBits(2, view.level & 3);
     nextIndices.push(view.index);
     nextSet.add(view.index);
     if (block) updateBlocks.push(writeNpcUpdateBlock(view, writeInteraction, writeHeadIcon));
@@ -3551,7 +3567,7 @@ export function encodeNpcSync(
   // a boat deck, otherwise their own).
   const header = Buffer.alloc(11);
   header.writeInt32BE(loopCycle | 0, 0);
-  header[4] = large ? 1 : 0;
+  header[4] = (large ? 1 : 0) | (crossFloor ? 2 : 0);
   header.writeUInt16BE(local.x & 0xffff, 5);
   header.writeUInt16BE(local.y & 0xffff, 7);
   header.writeUInt16BE(sync.length, 9);

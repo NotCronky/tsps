@@ -20,7 +20,8 @@ gameval. The Gauntlet's range is `server/plugins/minigames/gauntlet/Prep.Gauntle
   [Burnt fish](https://oldschool.runescape.wiki/w/Burnt_fish) pages (herring and mackerel burn
   to 357, trout, cod, pike and salmon to 343, tuna and bass to 367, sardine to 369, anchovies to
   323), [Cooked rabbit](https://oldschool.runescape.wiki/w/Cooked_rabbit) (burnt meat), and
-  [Cooked meat](https://oldschool.runescape.wiki/w/Cooked_meat) for burning it on purpose.
+  [Cooked meat](https://oldschool.runescape.wiki/w/Cooked_meat) and
+  [Burnt chicken](https://oldschool.runescape.wiki/w/Burnt_chicken) for burning them on purpose.
   The pie, pizza and dough recipes come from each item's page, the wine timer and
   success chances from [Jug of wine](https://oldschool.runescape.wiki/w/Jug_of_wine),
   [Unfermented wine](https://oldschool.runescape.wiki/w/Unfermented_wine) and
@@ -53,7 +54,8 @@ gameval. The Gauntlet's range is `server/plugins/minigames/gauntlet/Prep.Gauntle
   bluefin, marlin), "You successfully cook a swordtip squid." / "a jumbo squid". Baking: "You
   successfully bake a traditional apple pie.", "You successfully bake a delicious redberry pie.",
   "You successfully bake a pizza." A burn is "You accidentally burn the herring." Cooked meat on
-  a cooker: "You deliberately burn the nicely cooked meat."
+  a cooker: "You deliberately burn the nicely cooked meat." Cooked chicken (Wiki): "You deliberately burn
+  the nicely cooked chicken."
 - **`cooking_success_count`** goes up one for each food cooked and back to 0 on a burn, the
   Gauntlet's paddlefish included. It is saved with the player.
 - **Refusals** are message boxes: "You need a Cooking level of 80 to cook a shark.", "You haven't
@@ -92,6 +94,16 @@ gameval. The Gauntlet's range is `server/plugins/minigames/gauntlet/Prep.Gauntle
   wine about 50% at 65 and sure at 98 (low -125, high 260). A stack rolls as 15 equal batches,
   plus one roll for each jug left over. A failed jug is a jug of bad wine, with no XP.
 - The pizza toppings' XP (meat 26, anchovies 39, pineapple 45) and every recipe's level.
+- Leaping fish (`server/plugins/skills/cooking/LeapingFish.Cooking.js`), the only source of roe
+  and caviar for Barbarian Herblore, cut with a knife at any Cooking level, Mod Ash's rates:
+  - every cut uses one fish. A successful cut gives roe (caviar from sturgeon), the static
+    Cooking XP and, on a second roll, one fish offcuts; a failed cut gives nothing;
+  - trout: roe at level/150 (1/150 at 1, 99/150 at 99), offcuts 1/2, 10 XP; salmon: roe at
+    level/80 (certain from 80), offcuts 3/4, 10 XP; sturgeon: caviar at the salmon's rates,
+    offcuts 5/6, 15 XP;
+  - the knife use cuts at once and the same kind of fish is then cut every 3 ticks until none are
+    left (changelog 16 November 2022). Using the knife again cuts at once, one fish a tick at most,
+    which is why manual cutting is faster.
 
 ## Not captured
 
@@ -107,6 +119,9 @@ gameval. The Gauntlet's range is `server/plugins/minigames/gauntlet/Prep.Gauntle
   unfermented (the carried ones still ferment) until the next jug made or the next login.
 - The lean and fat snail lines follow the captured thin snail; beef and rat meat follow the
   captured impaler and mystery meat.
+- Cutting leaping fish: the recordings show leaping fish caught and dropped, never cut, and the
+  Wiki gives no message, animation or sound, so a cut sends and plays none. With a full inventory
+  and no offcuts stack, the offcuts fall to the floor (unconfirmed).
 
 ## Not covered
 

@@ -21,7 +21,11 @@ before(async () => {
   core = PM.getCoreApi();
   core.RegionManager.init();
   PM.emitServerStartup({});
-  Run = require(root + "/plugins/minigames/gauntlet/RunState.Gauntlet");
+  // The entrance needs Song of the Elves (Wiki); these bots' accounts have done it.
+  PM.createApi("GauntletBotsTest").onCustomEvent("quest:is-complete", (request) => {
+    if (request.key === "song_of_the_elves") request.complete = true;
+  });
+  Run =require(root + "/plugins/minigames/gauntlet/RunState.Gauntlet");
   Items = require(root + "/plugins/minigames/gauntlet/Items.Gauntlet");
 });
 after(() => PM.emitServerShutdown({}));

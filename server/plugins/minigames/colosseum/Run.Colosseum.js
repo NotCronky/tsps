@@ -90,7 +90,7 @@ function savePlayer(player) {
 
 function freeTile(area, x, y) {
   const { RegionManager } = Shared.core();
-  return (RegionManager.getClipping(x, y, 0, area) & 0x1280100) === 0;
+  return (RegionManager.getClipping(x, y, 0, area) & RegionManager.BLOCKED_MASK) === 0;
 }
 
 class ColosseumRun {
@@ -314,6 +314,7 @@ class ColosseumRun {
     Effects.tick(this);
     Hazards.tick(this);
     Sol.tick(this);
+    CombatAchievements.solTick(this);
     // Wiki: a wave cleared inside 40 seconds ends there; otherwise reinforcements arrive.
     if (this.npcs.size === 0) {
       this.completeWave();

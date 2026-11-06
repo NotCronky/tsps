@@ -4,6 +4,11 @@
 (`plugins/skills/data/agility-shortcuts.json`, data) through `ObstacleRunner.Agility.js`, a step list run one
 game tick at a time.
 
+An explicit `{ merge: { start, end, minX, minZ, maxX, maxZ } }` step schedules
+the legacy merge packet for the player and its current observers. Delays are
+20ms client cycles; signed bounds are relative to the loc anchor and may be reversed.
+The active revision241 client consumes it without a rendering change. Collision, the map object and saved state remain intact.
+
 ## Shortcuts
 
 Each entry in `agility-shortcuts.json`'s `shortcuts`:
@@ -18,7 +23,7 @@ Each entry in `agility-shortcuts.json`'s `shortcuts`:
 | `render` | Optional walk animation for the whole crossing (`"BALANCE_WALK"`) |
 | `route` | Optional tile the player walks to before starting |
 | `requires` | Optional: alternatives, any one of which lets the player use it (below). Without it, `level` is the Agility needed |
-| `fail` | Optional: the chance (`low`/`high`, the Wiki's success chart), `xp` and `steps` of a failure, or `cross: true` and `hit` when a failed attempt still gets across |
+| `fail` | Optional: the chance (`low`/`high`, the Wiki's success chart), `xp` and `steps` of a failure, or `cross: true` and `hit` (a range, or `{ "percent": 5, "plus": 1 }` of the player's Hitpoints) and `hits` (how many) when a failed attempt still gets across |
 | `unverified`, `note` | What has no capture behind it, or where a value comes from (`rsprox captures <ids>`: see `docs/agility-shortcuts.md`) |
 
 and one way to play it:

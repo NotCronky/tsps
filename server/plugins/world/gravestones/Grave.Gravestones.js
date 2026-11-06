@@ -29,7 +29,6 @@ const HINT_RANGE = 20;
 const HINT_ARROW_NPC = 9;
 /** Unstackables "cannot be stockpiled up to 56" (Wiki: Grave). */
 const MAX_UNSTACKABLE = 28;
-const BLOCKED_FLOOR = 0x1280100;
 
 const MESSAGE = {
   created: "Some of your dropped items are being held in a gravestone, near where you died.",
@@ -116,7 +115,7 @@ function clearHint(player) {
 /** The death tile, or a random free tile in the nearest ring that has one. */
 function graveTile(location) {
   const { RegionManager, Location } = Common.core();
-  const free = (x, y) => (RegionManager.getClipping(x, y, location.getZ(), null) & BLOCKED_FLOOR) === 0;
+  const free = (x, y) => (RegionManager.getClipping(x, y, location.getZ(), null) & RegionManager.BLOCKED_MASK) === 0;
   const x = location.getX();
   const y = location.getY();
   if (free(x, y)) return { x, y, z: location.getZ() };
@@ -169,9 +168,19 @@ function sendFee(player, held) {
   player.getPacketSender().sendInterfaceScript(Common.TRANSMIT_DATA_SCRIPT, [fee(player, held), Storage.coffer(player)]);
 }
 
+/** The client divides the inventory into fee bands by slot; keep sent slots in fee order. */
+function orderForFees(player, held) {
+  const ordered = [...held.items].sort((a, b) => Fees.feeValue(b.id) - Fees.feeValue(a.id));
+  if (ordered.some((entry, slot) => entry !== held.items[slot])) {
+    held.items = ordered;
+    Storage.setGrave(player, held);
+  }
+}
+
 function open(player) {
   const held = Storage.grave(player);
   if (!held) return;
+  orderForFees(player, held);
   const sender = player.getPacketSender();
   Fees.sendThresholds(player, held.items);
   Common.sendInventory(player, Common.GRAVE_INV, Common.GRAVE_SLOTS, held.items);
@@ -189,6 +198,7 @@ function close(player) {
 
 function refresh(player, held) {
   if (!isOpen(player)) return;
+  orderForFees(player, held);
   Fees.sendThresholds(player, held.items);
   Common.sendInventory(player, Common.GRAVE_INV, Common.GRAVE_SLOTS, held.items);
   sendFee(player, held);
@@ -407,7 +417,7 @@ function store(player, location, records, layout, relocate) {
   }
   const { tile: spot, feeMultiplier: multiplier } = graveSpot(player, location);
   const deathCoord = spot ?? { x: location.getX(), y: location.getY(), z: location.getZ() };
-  const { held: items, overflow } = Common.stack(existing ? held.items : [], records, Common.GRAVE_SLOTS);
+  const { held: items, overflow } = Common.stack(existing ? held.items : [], records, Common.GRAVE_SLOTS, Fees.feeValue);
   // UNVERIFIED: what doesn't fit goes to Death's Office.
   Storage.sendToOffice(player, overflow);
   held = existing ? held : { items: [], merged: false };

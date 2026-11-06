@@ -127,7 +127,7 @@ function useCharge(player, item, castId = item.getId()) {
 }
 
 function destinationTile(player, destination) {
-  const tile = typeof destination.tile === "function" ? destination.tile(player) : destination.tile;
+  const tile = typeof destination.tile === "function" ? destination.tile(player, pluginApi) : destination.tile;
   return new Location(tile[0], tile[1], tile[2] ?? 0);
 }
 
@@ -156,7 +156,10 @@ function teleport(player, item, destination) {
   }
   const castId = item.getId();
   const teleportType = piece.teleportType?.() ?? TeleportType.NORMAL;
-  TeleportHandler.teleport(player, target, teleportType, false, () => useCharge(player, item, castId));
+  TeleportHandler.teleport(player, target, teleportType, false, () => {
+    useCharge(player, item, castId);
+    pluginApi.emitCustomEvent("jewellery:teleport-arrival", { player, key: piece.key, label: destination.label });
+  });
   return true;
 }
 

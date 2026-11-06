@@ -31,6 +31,7 @@ import {
   GROUND_ITEM_BYTES,
   encodeLocAddChange,
   encodeLocAnim,
+  encodeLocMerge,
   encodeTileSpotAnim,
   encodeLocDel,
   encodeInventorySlot,
@@ -53,6 +54,8 @@ import {
   encodeCameraTarget,
   encodeSetInteractionMode,
   encodeResetInteractionMode,
+  encodeHideNpcOps,
+  encodeHideObjOps,
   encodeChatFilterSettings,
   encodeRunEnergy,
   encodeSkillsDelta,
@@ -78,12 +81,11 @@ import {
   encodeWidgetSetModel,
   encodeWidgetSetPosition,
   encodeWidgetSetAngle,
+  encodeWidgetSetRotateSpeed,
   encodeWidgetSetNpcHead,
   encodeWidgetSetPlayerHead,
-  encodeWidgetSetQuestList,
   encodeWidgetSetRoot,
   encodeWidgetSetText,
-  type QuestListGroup,
   type ScriptInventorySnapshot,
   MAIN_INVENTORY_GROUP_ID,
   MAIN_INVENTORY_SLOT_FLAGS,
@@ -308,12 +310,6 @@ export class PacketSender {
     return this.sendConfig(id, state);
   }
 
-  /** Populates the quest list (side journal); the client renders opcode 116. */
-  sendQuestList(groups: QuestListGroup[]): this {
-    this.player.getSession().sendClientPacket(encodeWidgetSetQuestList(groups));
-    return this;
-  }
-
   sendChatOptions(
     publicChat: number,
     privateChat: number,
@@ -460,6 +456,15 @@ export class PacketSender {
   /** IF_SETANGLE: a model component's x and y angles and zoom. */
   public sendInterfaceAngle(uid: number, angleX: number, angleY: number, zoom: number): this {
     this.player.getSession().sendClientPacket(encodeWidgetSetAngle(uid, angleX, angleY, zoom));
+    return this;
+  }
+
+  /**
+   * IF_SETROTATESPEED: a model component's x and y rotation speeds per graphics cycle.
+   * y is the turntable (yaw) speed; the museum quiz's models use (0, 5) in recording 1723.
+   */
+  public sendInterfaceRotateSpeed(uid: number, speedX: number, speedY: number): this {
+    this.player.getSession().sendClientPacket(encodeWidgetSetRotateSpeed(uid, speedX, speedY));
     return this;
   }
 
@@ -866,6 +871,11 @@ export class PacketSender {
     return this.chatboxGroupId;
   }
 
+  /** Owner of the currently mounted chatbox, if its presentation was scoped. */
+  public getChatboxOwner(): object | undefined {
+    return this.chatboxOwner;
+  }
+
   /** Associate only chatboxes mounted synchronously by this presentation. */
   public withChatboxOwner<T>(owner: object | undefined, present: () => T): T {
     const previous = this.presentingChatboxOwner;
@@ -1085,6 +1095,18 @@ export class PacketSender {
     return this;
   }
 
+  /** Hides every NPC's menu actions (not Examine) across the client until set false again. */
+  sendHideNpcOps(hidden: boolean): this {
+    this.player.getSession().sendClientPacket(encodeHideNpcOps(hidden));
+    return this;
+  }
+
+  /** Hides every ground item's menu actions across the client until set false again. */
+  sendHideObjOps(hidden: boolean): this {
+    this.player.getSession().sendClientPacket(encodeHideObjOps(hidden));
+    return this;
+  }
+
   /**
    * cam_target: the camera follows a tile, or a player, an NPC or a world entity (a boat) by its
    * index, until sendCameraReset.
@@ -1235,6 +1257,12 @@ export class PacketSender {
     return this;
   }
 
+  /** A recipient-specific native loc_merge; the target index belongs to player sync. */
+  sendObjectMerge(merge: import("../protocol/LocMerge").LocMergePayload): this {
+    this.player.getSession().sendClientPacket(encodeLocMerge(merge));
+    return this;
+  }
+
   sendObjectAnimation(object: any, animation: any): this {
     if (object?.getLocation) {
       const location = object.getLocation();
@@ -1288,7 +1316,7 @@ export class PacketSender {
     const lastItem = this.player.getAttribute?.(CREATION_MENU_LAST_ITEM_ATTRIBUTE);
     if (Number.isInteger(lastItem)) this.sendConfig(CREATION_MENU_LAST_ITEM_VARP, lastItem);
     this.sendInterfaceScript(2046, [
-      Number.isInteger(options.mode) ? options.mode : 13,
+      Number.isInteger(options.mode) ? options.mode : 0,
       [String(menu.getTitle() ?? "What would you like to make?"), ...names].join("|"),
       maxAmount,
       ...paddedIds,

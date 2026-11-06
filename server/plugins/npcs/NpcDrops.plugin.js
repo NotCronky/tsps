@@ -34,6 +34,10 @@ const OVERRIDES_FILE = "npc-drop-overrides.json";
 const CUSTOM_FILE = "npc-drops-custom.json";
 const MAX_STACK = 2147483647;
 const CURRENCY_IDS = new Set([995, 6529, 21555]);
+/** loottracker_add_loot (npc, key, obj, count); cache script 7192. */
+const LOOT_TRACKER_SCRIPT = 7192;
+/** Each kill's loot key (script 7192), counting up as live's do. */
+let lootKey = 1;
 const RING_OF_WEALTH_TABLES = new Set(["rareDrop", "gem", "megaRare"]);
 /** Brimstone key, Larran's key. */
 const SLAYER_KEYS = new Set([23083, 23490]);
@@ -187,11 +191,23 @@ function isDropQuantity(quantity) {
 
 /**
  * A world's own edits, saved by the browser host's NPC Drops tab to npc-drops-custom.json and
- * absent everywhere else. Rows are addressed by their position in the dump, so this runs before
- * applyOverrides changes the arrays.
+ * absent everywhere else. New saves replace complete tables by name; old index-based saves
+ * remain supported. Both run before applyOverrides changes the arrays.
  */
 function applyCustomDrops(dump, custom) {
   for (const [tableId, edits] of Object.entries(custom.tables ?? {})) {
+    if (edits?.replacement !== undefined) {
+      const table = edits.replacement;
+      if (!table || typeof table !== "object" || Array.isArray(table) ||
+          ["entries", "tertiary"].some(field => table[field] !== undefined &&
+            (!Array.isArray(table[field]) || table[field].some(row => !row || typeof row !== "object" || Array.isArray(row))))) {
+        console.error(`[NpcDrops] invalid saved table '${tableId}'; using the default`);
+        continue;
+      }
+      // Clone: runtime corrections must never mutate the world's saved definition.
+      dump.tables[tableId] = structuredClone(table);
+      continue;
+    }
     const table = dump.tables[tableId];
     if (!table) {
       console.error(`[NpcDrops] npc-drops-custom.json changes unknown table '${tableId}'`);
@@ -751,13 +767,18 @@ function rollOnce(table, entries, player, first = true, context = null, rules = 
   const main = [];
   const boostedMain = [];
   const separateGroups = new Map();
+  const preRollGroups = new Map();
   let preRollHit = false;
 
   for (const entry of entries) {
     if (entry.always) {
       continue;
     } else if (entry.pre_roll) {
-      if (!preRollHit && hits(entry, entryMultiplier(table, entry, rules))) {
+      if (entry.roll_group) {
+        const group = preRollGroups.get(entry.roll_group) || [];
+        group.push(entry);
+        preRollGroups.set(entry.roll_group, group);
+      } else if (!preRollHit && hits(entry, entryMultiplier(table, entry, rules))) {
         drops.push(...resolveEntry(entry, player, context));
         preRollHit = true;
       }
@@ -774,6 +795,31 @@ function rollOnce(table, entries, player, first = true, context = null, rules = 
       if (rareMultiplier(table, entry) > 1) boostedMain.push(entry);
       else main.push(entry);
     }
+  }
+
+  // A weighted pre-roll group: one access roll, then exactly one weighted item.
+  // A hit replaces the main roll, like the source's "1/585 chance of hitting the
+  // sigil drop table" (Corporeal Beast).
+  for (const group of preRollGroups.values()) {
+    if (preRollHit) break;
+    const first = group[0];
+    const accessOutOf = Number(first.group_access_out_of);
+    const accessWeight = Number(first.group_access_weight);
+    if (!(accessOutOf > 0) || !(accessWeight > 0)) continue;
+    // Boost the marginal rarity, not merely the choice after gaining access.
+    // A uniform boost must increase access while preserving the group's ratios.
+    const weighted = group.map((entry) => ({
+      ...entry,
+      weight: entry.weight * entryMultiplier(table, {
+        ...entry, out_of: Number(entry.out_of) * accessOutOf / accessWeight,
+      }, rules),
+    }));
+    const totalWeight = weighted.reduce((sum, entry) => sum + entry.weight, 0);
+    const boostedAccess = accessWeight * totalWeight / Number(first.out_of);
+    if (Math.random() * accessOutOf >= Math.min(accessOutOf, boostedAccess)) continue;
+    preRollHit = true;
+    const entry = rollWeighted(weighted, totalWeight, []);
+    if (entry) drops.push(...resolveEntry(entry, player, context));
   }
 
   for (const group of separateGroups.values()) {
@@ -962,7 +1008,29 @@ function dropFor(player, npc, npcId, location, damagers = []) {
   const where = { player, npc, npcId, location, public: false };
   pluginApi.emitCustomEvent("npc-drops:location", where);
   placeDrops(player, drops, where.location, where.public === true ? { public: true } : {});
+  reportLoot(player, npcId, drops);
   return drops.length;
+}
+
+/**
+ * Tells the killer's client what the kill dropped: live runs loottracker_add_loot (script 7192)
+ * once per item with the NPC, the kill's key, the item and its amount, and RuneLite's loot
+ * tracker counts NPC loot only from that script.
+ */
+function reportLoot(player, npcId, drops) {
+  const sender = player.getPacketSender?.();
+  if (!sender) return;
+  const key = lootKey++;
+  for (const drop of drops) {
+    if (!Number.isInteger(drop.itemId) || drop.amount <= 0) continue;
+    sender.sendClientScript(LOOT_TRACKER_SCRIPT, npcId, key, droppedItemId(drop), drop.amount);
+  }
+}
+
+/** The item a drop lands as: its note when the table drops it noted and a note exists. */
+function droppedItemId(drop) {
+  const noteId = ItemDefinition.forId(drop.itemId).getNoteId();
+  return drop.noted && noteId >= 0 && ItemDefinition.forId(noteId).isNoted() ? noteId : drop.itemId;
 }
 
 /**
@@ -981,11 +1049,7 @@ function placeDrops(player, drops, location, options = {}) {
         continue;
       }
     }
-    const definition = ItemDefinition.forId(drop.itemId);
-    const noteId = definition.getNoteId();
-    const itemId = drop.noted && noteId >= 0 && ItemDefinition.forId(noteId).isNoted()
-      ? noteId
-      : drop.itemId;
+    const itemId = droppedItemId(drop);
     const item = new Item(itemId, drop.amount);
     const stackable = item.getDefinition && item.getDefinition()
       ? item.getDefinition().isStackable()
@@ -1086,5 +1150,5 @@ module.exports = {
   _test: { loadDrops, tablesByNpc, sharedTables },
 
   // Exposed for the smoke test.
-  __internals: { withoutOtherLocations, locationRequirement, DROP_LOCATIONS, loadDrops, rollTable, rollOnce, rollSharedTable, placeDrops, tablesByNpc, sharedTables, applyOverrides, applyCustomDrops, isUniqueEntry, rareMultiplier },
+  __internals: { withoutOtherLocations, locationRequirement, DROP_LOCATIONS, loadDrops, rollTable, rollOnce, rollSharedTable, placeDrops, dropFor, tablesByNpc, sharedTables, applyOverrides, applyCustomDrops, isUniqueEntry, rareMultiplier },
 };

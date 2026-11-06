@@ -240,6 +240,21 @@ const AXES_BEST_FIRST = [...AXES].reverse();
 
 const TREES = [
   {
+    // Trouble Brewing's placement/team handler requests this through woodcutting:chop.
+    name: "scrapey tree",
+    objectNames: [],
+    requiredLevel: 1,
+    xpReward: 25,
+    logId: ItemIds.SCRAPEY_TREE_LOGS,
+    // Wiki's rounded success chart endpoints, bronze through dragon (revision 15240304).
+    cutChance: [[23, 75], [36, 113], [49, 151], [55, 159], [62, 191], [76, 226], [85, 264], [90, 286]],
+    roundedCutChance: true,
+    respawnTicks: 24,
+    stumpId: ObjectIds.SCRAPEY_TREE_2,
+    multi: true,
+    depleteChance: 8,
+  },
+  {
     name: "normal tree",
     objectNames: ["Tree", "Dead tree", "Evergreen tree", "Dying tree"],
     action: ["Chop down", "Chop-down"],
@@ -711,7 +726,9 @@ function cutChanceRange(tree, axe) {
 
 function calculateCutChance(level, tree, axe) {
   const [low, high] = cutChanceRange(tree, axe);
-  const successes = 1 + Math.floor((low * (99 - level)) / 98) + Math.floor((high * (level - 1)) / 98);
+  const successes = tree.roundedCutChance
+    ? Math.round((low * (99 - level) + high * (level - 1)) / 98)
+    : 1 + Math.floor((low * (99 - level)) / 98) + Math.floor((high * (level - 1)) / 98);
   return Math.min(1, Math.max(0, successes / 256));
 }
 
@@ -750,6 +767,28 @@ function useFellingRation(player, axe) {
   return request.taken === 1;
 }
 
+/** Ordinary one-handed axes can use a ration for energy on a successful chop.
+ * Jagex Forestry Part One specifies 30% and 20 run-energy points; Wiki: Forester's ration
+ * specifies the below-90% threshold. Felling axes retain their separate existing behavior.
+ */
+function rollForesterRationEnergy(player, axe) {
+  if (!axe || axe.felling || !AXES.includes(axe) || !pluginApi.core.WorldDefinition.isMembersWorld()) return false;
+  if (pluginApi.core.ItemDefinition.forId(axe.id).isDoubleHanded()) return false;
+  if (!player.getInventory().contains(axe.id) && getEquippedWeaponId(player) !== axe.id) return false;
+  if (player.getRunEnergyUnits() >= 9000 || availableFellingRations(player) < 1) return false;
+  if (Math.random() >= 0.3) return false;
+  const ration = ItemIds.FORESTERS_RATION;
+  if (player.getInventory().contains(ration)) player.getInventory().deleteNumber(ration, 1);
+  else {
+    const request = { player, itemId: ration, amount: 1, taken: 0 };
+    pluginApi.emitCustomEvent("storage:take", request);
+    if (request.taken !== 1) return false;
+  }
+  player.addRunEnergyUnits(2000);
+  player.getPacketSender().sendRunEnergy();
+  return true;
+}
+
 /** Same cut chance and cadence: a ration changes XP and delivery, not whether the chop succeeds. */
 function fellingChop(player, axe) {
   const rationUsed = useFellingRation(player, axe);
@@ -779,6 +818,11 @@ function countLog(player) {
   const chopped = (player.getAttribute(LOGS_CHOPPED_ATTRIBUTE) ?? 0) + 1;
   player.setAttribute(LOGS_CHOPPED_ATTRIBUTE, chopped);
   player.getPacketSender().sendConfig(pluginApi.core.CacheDefinitions.getVarpId(LOGS_CHOPPED_VARP), chopped);
+}
+
+/** The counter for whoever shows it ("woodcutting:logs-chopped", the league summary's logs row). */
+function answerLogsChopped(query) {
+  query.count = query.player?.getAttribute(LOGS_CHOPPED_ATTRIBUTE) ?? 0;
 }
 
 function sendLogsChopped({ player }) {
@@ -929,19 +973,21 @@ function searchBirdNest(player, nestId) {
     return false;
   }
 
-  if (player.getInventory().getFreeSlots() <= 0) {
+  const inventory = player.getInventory();
+  const freeSlots = inventory.getFreeSlots();
+  const seed = freeSlots > 0 && SEED_NEST_IDS.has(nestId) ? rollNestSeed() : null;
+  if (freeSlots <= 0 || (seed && inventory.getAddableAmount(new Item(seed.id, 1)) < 1)) {
     player.getDialogueManager().startDialogues(
       new pluginApi.core.DialogueChainBuilder().add(new pluginApi.core.StatementDialogue(0, NEST_FULL_MESSAGE))
     );
     return true;
   }
 
-  player.getInventory().deleteNumber(nestId, 1);
-  player.getInventory().adds(BIRD_NESTS.EMPTY_NEST, 1);
+  inventory.deleteNumber(nestId, 1);
+  inventory.adds(BIRD_NESTS.EMPTY_NEST, 1);
 
-  if (SEED_NEST_IDS.has(nestId)) {
-    const seed = rollNestSeed();
-    player.getInventory().adds(seed.id, 1);
+  if (seed) {
+    inventory.adds(seed.id, 1);
     sendSpam(player, `You take ${seed.text} out of the bird's nest.`);
     return true;
   }
@@ -1205,6 +1251,7 @@ function processWoodcuttingTick(activeSessions, currentTick) {
     // A nest falls instead of that roll's log: no log, line or XP (rsprox capture 293, five nests).
     if (state.tree.logId >= 0 && !maybeDropBirdNest(player)) {
       const felling = fellingChop(player, state.axe);
+      rollForesterRationEnergy(player, state.axe);
       const baseXp = state.tree.xpReward * lumberjackXpMultiplier(player);
       const xp = felling.bonus ? baseXp + baseXp / 10 : baseXp;
       let pendingLog = null;
@@ -1229,6 +1276,7 @@ function processWoodcuttingTick(activeSessions, currentTick) {
         petBase: state.tree.petBase,
         petRolled: petRoll.handled,
         logId: state.tree.logId,
+        location: state.location,
         // Resource-count consumers distinguish a felling omission from the successful action.
         logAmount: felling.skipLog ? 0 : 1,
         axeId: state.axe?.id ?? null,
@@ -1328,6 +1376,7 @@ module.exports = {
     api.onCustomEvent("level-up:popup-opened", pauseWoodcutting);
     api.persistAttribute(LOGS_CHOPPED_ATTRIBUTE, 0);
     api.onPlayerLogin(sendLogsChopped);
+    api.onCustomEvent("woodcutting:logs-chopped", answerLogsChopped);
 
     api.onItemFirstAction((event) => {
       if (searchBirdNest(event.player, event.itemId)) {

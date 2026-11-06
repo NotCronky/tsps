@@ -445,7 +445,7 @@ module.exports = function registerLegendsQuest(api) {
   function standableTile(x, y, z) {
     RegionManager.loadMapFiles?.(x, y);
     const clip = RegionManager.getRegion?.(x, y)?.getClip?.(x, y, z);
-    return typeof clip === "number" && (clip & 0x12c0100) === 0;
+    return typeof clip === "number" && (clip & RegionManager.BLOCKED_MASK) === 0;
   }
 
   /**
@@ -2104,6 +2104,8 @@ module.exports = function registerLegendsQuest(api) {
     varpId: VARP_LEGENDS_QUEST,
     startedValue: STAGE_STARTED,
     completionValue: STAGE_COMPLETE,
+    // Keep persisted gameplay stages; publish the cache quest state, including its final reward phase.
+    varpValue: stage => stage >= STAGE_COMPLETE ? 75 : stage,
     questPoints: 4,
     xpRewards: [],
     otherRewards: [

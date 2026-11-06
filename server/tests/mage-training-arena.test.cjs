@@ -10,7 +10,10 @@ const { Server } = require('../dist/Server');
 Server.installProductionPathResolver();
 const { PluginManager } = require('../dist/plugins/PluginManager');
 const { CachePipeline } = require('../dist/game/cache/CachePipeline');
+const { Player } = require('../dist/game/entity/impl/player/Player');
+const { PlayerSession } = require('../dist/net/PlayerSession');
 const core = PluginManager.getCoreApi();
+let realCasters = 0;
 
 let Common, Guardians, Lobby, Telekinetic, Enchanting, Alchemists, Graveyard, Rewards, events, ironmanMode, testApi;
 
@@ -68,8 +71,9 @@ function fakePlayer(x = 3363, y = 9644, z = 0) {
   const strings = new Map();
   const hidden = new Map();
   const camera = [];
+  const scripts = [];
   const player = {
-    messages: [], attributes: {}, xp, strings, hidden, camera, magic: 99, anims: 0, runEnergy: 100,
+    messages: [], attributes: {}, xp, strings, hidden, camera, scripts, magic: 99, anims: 0, runEnergy: 100,
     getLocation: () => tile,
     moveTo: (to) => { tile = to; },
     isRegistered: () => true,
@@ -81,6 +85,7 @@ function fakePlayer(x = 3363, y = 9644, z = 0) {
     setRunEnergy: (value) => { player.runEnergy = value; },
     getPacketSender: () => ({
       sendSubInterface() {}, closeSubInterface() {}, sendSound() {}, sendSoundEffect() {}, sendRunEnergy() {},
+      sendClientScript: (...args) => scripts.push(args),
       sendString: (text, id) => strings.set(id, text),
       sendInterfaceDisplayState: (id, hide) => hidden.set(id, hide),
       sendCameraLookAt: (x, y, height, motion) => camera.push({ mode: 'look', x, y, height, motion }),
@@ -236,6 +241,22 @@ test('each pile gives its shape, 1 in 32 a dragonstone; nothing with a full pack
   Enchanting.takeFromPile({ player, objectId: locs.cubePile }, () => 0.5);
   assert.equal(player.items.get(items.cube) ?? 0, 0);
   assert.equal(player.messages.at(-1), Common.message('inventoryFull'));
+});
+
+test('MTA level 1 and 2 enchants return to the spellbook only after a successful cast', () => {
+  for (const level of [1, 2]) {
+    for (const accepted of [false, true]) {
+      const player = fakePlayer();
+      const itemId = Common.ids.items.cube;
+      player.items.set(itemId, 1);
+      player.slots = [{ getId: () => itemId }];
+      const spell = { canCast: () => accepted, baseExperience: () => 17.5,
+        data: { animation: 719, graphic: 114, sound: 136 } };
+      Enchanting.enchantShape({ player, spell, spellName: `Lvl-${level} Enchant`, itemId, slot: 0 });
+      assert.deepEqual(player.scripts, accepted ? [[915, 6]] : []);
+      assert.equal(player.items.get(itemId), accepted ? 0 : 1);
+    }
+  }
 });
 
 test('enchant points: the spell level, doubled every 10th shape, +2 on the bonus shape, double for a dragonstone', () => {
@@ -903,7 +924,7 @@ function castBones(player, spellName) {
   }
 }
 
-test('Bones to Peaches plays sound 114 with its cast; no Bones to Bananas cast is captured, so it plays none', () => {
+test('both bones spells play sound 114 with their cast in the room (Wiki, List of sound IDs: bones_to_bananas_all)', () => {
   const [x, y, z] = graveyardTile();
   const peaches = fakePlayer(x, y, z);
   const peachEffects = recordEffects(peaches);
@@ -919,8 +940,64 @@ test('Bones to Peaches plays sound 114 with its cast; no Bones to Bananas cast i
   bananas.items.set(Common.ids.items.bones1, 2);
   castBones(bananas, 'Bones to Bananas');
   assert.equal(bananas.items.get(Common.ids.items.banana), 2);
-  assert.deepEqual(bananaEffects.sounds, [], 'no capture of a Bones to Bananas cast, so no sound is invented for it');
+  assert.deepEqual(bananaEffects.sounds, [114], 'used for both spells, once a cast');
+  assert.deepEqual(bananaEffects.animations, [722]);
 });
+
+test('a bones spell cast in the room stays in the room, so the normal cast adds no second sound', () => {
+  const [x, y, z] = graveyardTile();
+  const player = fakePlayer(x, y, z);
+  recordEffects(player);
+  player.items.set(Common.ids.items.bones1, 1);
+  const Spell = core.Spell.prototype;
+  const original = Spell.canCast;
+  Spell.canCast = () => true;
+  const event = { player, spellName: 'Bones to Bananas', handled: false };
+  try {
+    Graveyard.castBonesSpell(event);
+  } finally {
+    Spell.canCast = original;
+  }
+  assert.equal(event.handled, true, 'emitSpellCast runs before EffectSpells.handleSpell, and a handled cast stops there');
+});
+
+function realCaster(t) {
+  const channel = {
+    kind: 'test', remoteAddress: '127.0.0.1', isOpen: () => true, send: () => true,
+    close() {}, onData() {}, onError() {}, onClose() {},
+  };
+  const player = new Player(new PlayerSession(channel));
+  player.setIndex(5600 + (realCasters++));
+  player.setUsername(`bonesqa${realCasters}`);
+  player.setRegistered(true);
+  player.needsPlacement = false;
+  player.getSkillManager().setMaxLevels(core.Skill.MAGIC, 99, false).setCurrentLevels(core.Skill.MAGIC, 99, false);
+  const sounds = [];
+  t.mock.method(player.getPacketSender(), 'sendSoundEffect', (id) => { sounds.push(id); return player.getPacketSender(); });
+  t.after(() => player.setRegistered(false));
+  return { player, sounds };
+}
+
+function giveRunes(player) {
+  for (const [id, amount] of [[561, 2], [555, 4], [557, 4]]) player.getInventory().add(new core.Item(id, amount), false);
+}
+
+for (const [name, fruit] of [['BONES_TO_BANANAS', 1963], ['BONES_TO_PEACHES', 6883]]) {
+  test(`the normal cast of ${name} plays sound 114 once, and none without bones`, (t) => {
+    const spell = core.EffectSpells[name];
+    const control = realCaster(t);
+    giveRunes(control.player);
+    core.EffectSpells.handleSpell(control.player, spell.spellId());
+    assert.deepEqual(control.sounds, [], 'control: no bones, no cast, no sound');
+
+    const { player, sounds } = realCaster(t);
+    giveRunes(player);
+    player.getInventory().add(new core.Item(526, 2), false);
+    core.EffectSpells.handleSpell(player, spell.spellId());
+    assert.equal(player.getInventory().getAmount(fruit), 2, 'the cast happened');
+    assert.deepEqual(sounds, [114], 'one sound for the cast, however many bones');
+  });
+}
 
 test('turning fruit in plays animation 832 and sound 1663; an empty chute plays neither', () => {
   const [x, y, z] = graveyardTile();
@@ -1137,6 +1214,8 @@ test('wands are upgrades: each takes the tier before it', () => {
   assert.equal(Rewards.buy(player, slotOf(6910), 1), 1);
   assert.equal(player.items.get(6908), 0, 'the beginner wand is handed in');
   assert.equal(player.items.get(6910), 1);
+  assert.ok(events.some(([name, event]) => name === 'collection-log:obtain' && event.itemId === 6910 && event.amount === 1),
+    'the bought wand is credited to the collection log');
 });
 
 test('Bones to Peaches is a one-time unlock needing Magic 60, read by the Graveyard', () => {
@@ -1149,6 +1228,8 @@ test('Bones to Peaches is a one-time unlock needing Magic 60, read by the Gravey
   assert.equal(Rewards.buy(player, slotOf(6926), 5), 1);
   assert.equal(player.getAttribute(Common.PEACHES_UNLOCKED_ATTRIBUTE), true);
   assert.equal(player.items.get(6926) ?? 0, 0, 'no item, an unlock');
+  assert.ok(events.some(([name, event]) => name === 'collection-log:obtain' && event.itemId === 6926 && event.amount === 1),
+    'the Bones to Peaches unlock is credited to the collection log');
   assert.equal(Rewards.buy(player, slotOf(6926), 1), 0);
   assert.equal(player.messages.at(-1), Common.message('shopAlreadyUnlocked'));
 });
@@ -1202,23 +1283,36 @@ test('training-room deaths keep real gear and Hardcore status, clean room items 
   const { GameConstants } = require('../dist/game/GameConstants');
   const { ItemOnGroundManager } = require('../dist/game/entity/impl/grounditem/ItemOnGroundManager');
   const areas = [];
+  const errors = [];
+  const reportError = console.error;
+  t.mock.method(console, 'error', (...args) => { errors.push(args); reportError(...args); });
   const api = PluginManager.createApi('MageTrainingArenaDeathRegression');
   const registerArea = api.registerArea;
   api.registerArea = (area) => { areas.push(area); registerArea(area); };
   const deaths = new Map();
-  api.onPlayerDeath((event) => deaths.set(event.player, event));
+  const deathCounts = new Map();
+  api.onPlayerDeath((event) => {
+    deaths.set(event.player, event);
+    deathCounts.set(event.player, (deathCounts.get(event.player) ?? 0) + 1);
+  });
   const Ironman = require('../plugins/modes/ironman/Common.Ironman');
   Ironman.init(api);
   require('../plugins/modes/ironman/Hardcore.Ironman')(api);
   require('../plugins/minigames/MageTrainingArena.plugin').register(api);
+  // Pinned rev-241 gamevals for the actual room items and retained helmet.
+  assert.equal(Common.ids.items.banana, 1963);
+  assert.equal(Common.ids.items.cube, 6899);
+  assert.equal(Common.ids.items.arenaCoins, 8890);
+  assert.equal(core.CacheDefinitions.getObjId('bronze_full_helm'), 1155);
   t.mock.method(ItemOnGroundManager, 'registerLocation', () => {});
   t.mock.method(core.TaskManager, 'submit', () => {});
   const saves = [];
   t.mock.method(GameConstants.PLAYER_PERSISTENCE, 'requestSave', (player, reason) => {
-    saves.push({ player, reason, location: player.getLocation().clone(), items: player.getInventory().getValidItems().map((item) => item.getId()) });
+    saves.push({ player, reason, location: player.getLocation().clone(), items: player.getInventory().getValidItems().map((item) => item.getId()), points: Common.POINT_TYPES.map((type) => Common.points(player, type)) });
   });
   const roomData = Object.entries(Common.data).filter(([key, room]) => key !== 'lobby' && room?.bounds && room?.arrive);
-  for (const [name, room] of roomData) await t.test(name, (t) => {
+  const cases = roomData.flatMap(([name, room]) => (name === 'graveyard' ? [0, 7, 10, 20] : [20]).map((balance) => ({ name, room, balance })));
+  for (const { name, room, balance } of cases) await t.test(`${name} with ${balance} Graveyard points`, (t) => {
     const player = new Player(null, Common.toLocation(room.arrive));
     player.setUsername('mta_safe_death');
     player.setRegistered(true);
@@ -1226,6 +1320,8 @@ test('training-room deaths keep real gear and Hardcore status, clean room items 
     t.mock.method(player, 'sendMessage', () => {});
     t.after(() => player.setRegistered(false));
     player.setAttribute('ironman:mode', 'hardcore');
+    for (const type of Common.POINT_TYPES) Common.addPoints(player, type, type === 'graveyard' ? balance : 20);
+    const beforePoints = Common.POINT_TYPES.map((type) => Common.points(player, type));
     const area = areas.find((area) => area.getBoundaries().some((bounds) => bounds.inside(player.getLocation())));
     assert.ok(area, 'the native plugin registered this room');
     area.enter(player);
@@ -1236,10 +1332,11 @@ test('training-room deaths keep real gear and Hardcore status, clean room items 
     const roomItem = { enchanting: Common.ids.items.cube, alchemists: Common.ids.items.arenaCoins, graveyard: Common.ids.items.banana }[name];
     player.getInventory().adds(roomItem, 1);
     const task = new PlayerDeathTask(player);
-    task.execute();
-    task.execute();
-    task.execute();
+    for (let tick = 0; tick < 5; tick++) task.execute();
+    assert.equal(deathCounts.get(player), 1, 'one real death dispatch');
     assert.equal(deaths.get(player)?.itemsLost, false);
+    const expectedPoints = beforePoints.map((value, i) => Common.POINT_TYPES[i] === 'graveyard' && name === 'graveyard' ? Math.max(0, value - 10) : value);
+    assert.deepEqual(Common.POINT_TYPES.map((type) => Common.points(player, type)), expectedPoints);
     assert.equal(Ironman.modeOf(player), 'hardcore');
     for (const id of carried) assert.equal(player.getInventory().getAmount(id), 100);
     assert.equal(player.getEquipment().get(core.Equipment.HEAD_SLOT).getId(), 1155);
@@ -1247,12 +1344,29 @@ test('training-room deaths keep real gear and Hardcore status, clean room items 
     assert.equal(area.hasMember(player), false);
     assert.equal(player.getArea(), null);
     assert.deepEqual([player.getLocation().getX(), player.getLocation().getY(), player.getLocation().getZ()], Common.data.lobby.arrive);
+    const beforeRespawn = saves.findLast((save) => save.player === player && save.reason === 'death');
+    assert.deepEqual(beforeRespawn?.points, beforePoints, 'death save precedes the death hook');
     const saved = saves.findLast((save) => save.player === player && save.reason === 'respawn');
     assert.ok(saved);
+    assert.deepEqual(saved.points, expectedPoints, 'respawn save observes the penalty exactly once');
     assert.equal(saved.items.includes(roomItem), false);
   });
   const outside = new Player(null, loc(3200, 3200));
   assert.equal(PluginManager.emitShouldDropItemsOnDeath(outside, null), null, 'normal deaths keep their existing policy');
+  outside.setUsername('mta_outside');
+  outside.setRegistered(true);
+  t.after(() => outside.setRegistered(false));
+  t.mock.method(outside, 'getSession', () => ({ sendClientPacket: () => true, write: () => true }));
+  t.mock.method(outside, 'sendMessage', () => {});
+  for (const type of Common.POINT_TYPES) Common.addPoints(outside, type, 20);
+  const outsideBefore = Common.POINT_TYPES.map((type) => Common.points(outside, type));
+  const outsideTask = new PlayerDeathTask(outside);
+  for (let tick = 0; tick < 5; tick++) outsideTask.execute();
+  assert.equal(deathCounts.get(outside), 1, 'outside death dispatches once');
+  assert.equal(deaths.get(outside)?.itemsLost, true);
+  assert.deepEqual(Common.POINT_TYPES.map((type) => Common.points(outside, type)), outsideBefore);
+  assert.deepEqual(saves.findLast((save) => save.player === outside && save.reason === 'respawn')?.points, outsideBefore);
+  assert.equal(errors.length, 0, 'death tasks did not catch and log an exception');
 });
 
 test('native reward purchases charge only what fits in real rune stacks and freed wand slots', async (t) => {

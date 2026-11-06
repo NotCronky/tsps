@@ -16,6 +16,7 @@ import { Misc } from '../util/Misc';
 import { TreeMap } from 'treemap'
 import { PluginManager } from '../plugins/PluginManager';
 import { ServerPerf } from '../util/ServerPerf';
+import { CrossFloor } from "./CrossFloor";
 import { ActiveRegionIndex, ActiveRegionSnapshot } from './ActiveRegionIndex';
 import { ShopManager } from './model/container/shop/ShopManager';
 import { BoatManager } from "./content/sailing/BoatManager";
@@ -448,6 +449,7 @@ export class World {
         }
     }
 
+    /** Pets stay spatially indexed for visibility and lifecycle, but never block another NPC. */
     public static isNpcOccupyingTile(
         location: Location | null | undefined,
         ignoredNpc: NPC | null = null,
@@ -460,7 +462,7 @@ export class World {
         for (let x = 0; x < Math.max(1, size); x++) {
             for (let y = 0; y < Math.max(1, size); y++) {
                 const key = World.getNpcTileKey(location.getX() + x, location.getY() + y, location.getZ());
-                if (World.npcTileOccupants.get(key)?.some((npc) => npc && npc !== ignoredNpc &&
+                if (World.npcTileOccupants.get(key)?.some((npc) => npc && npc !== ignoredNpc && !npc.isPet() &&
                     (privateArea === undefined || npc.getPrivateArea() === privateArea))) {
                     return true;
                 }
@@ -488,6 +490,11 @@ export class World {
             }
         }
         return false;
+    }
+
+    public static isProjectileBlockingNpcOnTile(x: number, y: number, z: number, privateArea: any): boolean {
+        return World.npcTileOccupants.get(World.getNpcTileKey(x, y, z))?.some((npc) =>
+            npc.hasFlag(NPC.BLOCKS_PROJECTILES_FLAG) && npc.getPrivateArea() === (privateArea ?? null)) ?? false;
     }
 
     private static addToUpdateBucket<T extends Mobile>(
@@ -678,14 +685,17 @@ export class World {
         // collection is a better tie-break than lowest index when the cap bites.
         const viewDistance = player.getViewDistance();
         const privateArea = BoatManager.syncArea(player);
-        return World.collectFromBuckets(
-            World.playerUpdateBuckets,
-            BoatManager.rootLocation(player),
-            Math.max(0, Math.ceil(viewDistance / 8)),
-            World.MAX_LOCAL_PLAYERS + World.MAX_NEW_LOCAL_PLAYERS_PER_CYCLE,
-            (candidate) => World.getPlayers().get(candidate.getIndex()) === candidate
-                && BoatManager.syncArea(candidate) === privateArea
-        );
+        const origin = BoatManager.rootLocation(player);
+        const radius = Math.max(0, Math.ceil(viewDistance / 8));
+        const budget = World.MAX_LOCAL_PLAYERS + World.MAX_NEW_LOCAL_PLAYERS_PER_CYCLE;
+        const found: Player[] = [];
+        const planes = CrossFloor.enabled() && origin.getZ() >= 0 && origin.getZ() < 4 ? [origin.getZ(), ...[0, 1, 2, 3].filter(z => z !== origin.getZ())] : [origin.getZ()];
+        for (const z of planes) {
+            found.push(...World.collectFromBuckets(World.playerUpdateBuckets,
+                new Location(origin.getX(), origin.getY(), z), radius, budget - found.length,
+                candidate => World.getPlayers().get(candidate.getIndex()) === candidate && BoatManager.syncArea(candidate) === privateArea));
+        }
+        return found;
     }
 
     public static getNearbyPlayersForUpdate(player: Player): Player[] {
@@ -716,15 +726,19 @@ export class World {
 
     public static getNearbyNpcsForUpdate(player: Player): NPC[] {
         const radius = Math.max(World.UPDATE_BUCKET_RADIUS, Math.ceil(World.npcViewDistance(player) / 8));
-        const nearby = World.collectFromBuckets(World.npcUpdateBuckets, BoatManager.rootLocation(player), radius);
-        nearby.sort((a, b) => a.getIndex() - b.getIndex());
+        const origin = BoatManager.rootLocation(player);
+        const planes = CrossFloor.enabled() && origin.getZ() >= 0 && origin.getZ() < 4 ? [origin.getZ(), ...[0, 1, 2, 3].filter(z => z !== origin.getZ())] : [origin.getZ()];
+        const nearby = planes.flatMap(z => World.collectFromBuckets(World.npcUpdateBuckets, new Location(origin.getX(), origin.getY(), z), radius));
+        nearby.sort((a, b) =>
+            Number(BoatManager.rootLocation(a).getZ() !== origin.getZ()) - Number(BoatManager.rootLocation(b).getZ() !== origin.getZ()) ||
+            a.getIndex() - b.getIndex());
         return nearby;
     }
 
     private static readonly localPlayerScratch = new Set<number>();
     private static readonly MAX_LOCAL_PLAYERS = 255;
     private static readonly MAX_NEW_LOCAL_PLAYERS_PER_CYCLE = 25;
-    private static readonly MAX_LOCAL_NPCS = 255;
+    public static readonly MAX_LOCAL_NPCS = 255;
 
     // Maintains player.getLocalPlayers() - the per-tick sync path (PlayerSession.flushClient)
     // reads this list directly to know who to include in the player's view.
@@ -747,7 +761,7 @@ export class World {
                 local !== player &&
                 !seen.has(local.getIndex()) &&
                 World.getPlayers().get(local.getIndex()) === local &&
-                BoatManager.rootLocation(local).isViewableFromWithin(origin, viewDistance) &&
+                CrossFloor.visible(origin, BoatManager.rootLocation(local), viewDistance) &&
                 !local.isNeedsPlacement() &&
                 BoatManager.syncArea(local) === privateArea &&
                 BoatManager.canSeeAboard(player, local)
@@ -762,7 +776,7 @@ export class World {
         for (const candidate of World.getNearbyPlayersForUpdate(player)) {
             if (localPlayers.length >= World.MAX_LOCAL_PLAYERS || added >= World.MAX_NEW_LOCAL_PLAYERS_PER_CYCLE) break;
             if (!candidate || candidate === player || seen.has(candidate.getIndex())) continue;
-            if (!BoatManager.rootLocation(candidate).isViewableFromWithin(origin, viewDistance)) continue;
+            if (!CrossFloor.visible(origin, BoatManager.rootLocation(candidate), viewDistance)) continue;
             if (BoatManager.syncArea(candidate) !== privateArea) continue;
             if (!BoatManager.canSeeAboard(player, candidate)) continue;
             localPlayers.push(candidate);
@@ -803,7 +817,7 @@ export class World {
                 World.getNpcs().get(npc.getIndex()) === npc &&
                 npc.isRegistered() &&
                 npc.isVisible() &&
-                origin.isViewableFromWithin(BoatManager.rootLocation(npc), viewDistance) &&
+                CrossFloor.visible(origin, BoatManager.rootLocation(npc), viewDistance) &&
                 (!npc.isNeedsPlacement() || World.staysInViewWhenPlaced(npc)) &&
                 BoatManager.syncArea(npc) === privateArea &&
                 BoatManager.canSeeAboard(player, npc) &&
@@ -826,7 +840,7 @@ export class World {
             (!currentPet.isNeedsPlacement() || World.staysInViewWhenPlaced(currentPet)) &&
             BoatManager.syncArea(currentPet) === privateArea &&
             BoatManager.canSeeAboard(player, currentPet) &&
-            BoatManager.rootLocation(currentPet).isViewableFromWithin(origin, viewDistance)) {
+            CrossFloor.visible(origin, BoatManager.rootLocation(currentPet), viewDistance)) {
             if (localNpcs.length === World.MAX_LOCAL_NPCS) {
                 localIndexes.delete(localNpcs.pop()!.getIndex());
             }
@@ -842,7 +856,7 @@ export class World {
             if (BoatManager.syncArea(npc) !== privateArea) continue;
             if (!BoatManager.canSeeAboard(player, npc)) continue;
             if (npc.isOwnerOnly?.() && npc.getOwner?.() !== player) continue;
-            if (!BoatManager.rootLocation(npc).isViewableFromWithin(origin, viewDistance)) continue;
+            if (!CrossFloor.visible(origin, BoatManager.rootLocation(npc), viewDistance)) continue;
             localNpcs.push(npc);
             localIndexes.add(npc.getIndex());
         }
@@ -882,7 +896,8 @@ export class World {
             (player) => World.shouldRunNetworkUpdates(player) || World.removePlayerQueue.includes(player),
             World.processCycle,
             Date.now(),
-            (player) => (BoatManager.getBoatAboard(player) ? BoatManager.rootLocation(player) : undefined)
+            (player) => (BoatManager.getBoatAboard(player) ? BoatManager.rootLocation(player) : undefined),
+            CrossFloor.enabled()
         );
         PluginManager.emitActiveRegionsUpdated(snapshot);
     }

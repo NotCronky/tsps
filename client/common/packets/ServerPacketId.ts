@@ -83,7 +83,7 @@ export const enum ServerPacketId {
     WIDGET_SET_ANGLE = 113, // IF_SETANGLE: model angle and zoom (112 went to IF_SETEVENTS_V2 on main)
     WIDGET_SET_ANIMATION = 114,
     WIDGET_SET_PLAYER_HEAD = 115,
-    WIDGET_SET_QUEST_LIST = 116,
+    WIDGET_SET_ROTATE_SPEED = 116, // IF_SETROTATESPEED: model x/y rotation speed per graphics cycle
     WIDGET_SET_MODEL = 117,
     WIDGET_SET_POSITION = 118,
     WIDGET_SET_COLOUR = 119,
@@ -109,6 +109,7 @@ export const enum ServerPacketId {
     LOC_DEL = 135,
     LOC_ANIM = 136,
     CAMERA_CONTROL = 137,
+    LOC_MERGE = 138, // temporary player/loc model attachment
     SOUND = 131,
     PLAY_JINGLE = 132,
     PLAY_SONG = 133,
@@ -120,6 +121,8 @@ export const enum ServerPacketId {
     SET_INTERACTION_MODE = 145, // OSRS set_interaction_mode: what tile/entity clicks do in a world
     RESET_INTERACTION_MODE = 146, // OSRS reset_interaction_mode: drops a world's own mode
     REGION_REPLACEMENT_COMPRESSED = 147, // deflated REGION_REPLACEMENT payload; dense regions do not fit raw
+    HIDE_NPC_OPS = 148, // OSRS set_hide_npc_actions: one global boolean hiding NPC menu actions
+    HIDE_OBJ_OPS = 149, // OSRS set_item_ops_disabled (ground items): one global boolean hiding ground-item menu actions
 
     // ========================================
     // SHOP/TRADE (150-169)
@@ -231,6 +234,7 @@ export const SERVER_PACKET_LENGTHS: Record<ServerPacketId, number> = {
     [ServerPacketId.WIDGET_SET_MODEL]: 8, // uid(4) + raw modelId(4)
     [ServerPacketId.WIDGET_SET_POSITION]: 8, // uid(4) + x(2) + y(2)
     [ServerPacketId.WIDGET_SET_ANGLE]: 10, // uid(4) + angleX(2) + angleY(2) + zoom(2)
+    [ServerPacketId.WIDGET_SET_ROTATE_SPEED]: 8, // uid(4) + speedY(2, high) + speedX(2, low)
     [ServerPacketId.WIDGET_SET_COLOUR]: 6, // uid(4) + 15-bit rgb colour(2)
     [ServerPacketId.WIDGET_SET_HIDDEN]: 5, // uid(4) + hidden(1)
     [ServerPacketId.WIDGET_SET_ITEM]: 10, // uid(4) + itemId(2) + quantity(4)
@@ -241,7 +245,6 @@ export const SERVER_PACKET_LENGTHS: Record<ServerPacketId, number> = {
     [ServerPacketId.WIDGET_SET_FLAGS]: 8, // uid(4) + flags(4)
     [ServerPacketId.WIDGET_SET_ANIMATION]: 6, // uid(4) + animId(2)
     [ServerPacketId.WIDGET_SET_PLAYER_HEAD]: 4, // uid(4)
-    [ServerPacketId.WIDGET_SET_QUEST_LIST]: -2,
 
     [ServerPacketId.CHAT_MESSAGE]: -2, // var-short: tutorial/quest game messages exceed 255 bytes
     [ServerPacketId.FRIENDS_CHAT_UPDATE]: -2,
@@ -256,6 +259,7 @@ export const SERVER_PACKET_LENGTHS: Record<ServerPacketId, number> = {
     [ServerPacketId.LOC_CHANGE]: -1,
     [ServerPacketId.LOC_ADD_CHANGE]: -1,
     [ServerPacketId.LOC_DEL]: -1,
+    [ServerPacketId.LOC_MERGE]: 18, // loc/tile/shape + player index + cycle interval + signed bounds
     [ServerPacketId.LOC_ANIM]: 10, // locId(2) + x(2) + y(2) + level(1) + shape/rot(1) + animId(2)
     [ServerPacketId.CAMERA_CONTROL]: -1,
     [ServerPacketId.SOUND]: -1,
@@ -271,6 +275,8 @@ export const SERVER_PACKET_LENGTHS: Record<ServerPacketId, number> = {
     [ServerPacketId.REGION_REPLACEMENT_COMPRESSED]: -2, // regionId(2) + flags(1) + lengths(8) + deflated data
     [ServerPacketId.SET_INTERACTION_MODE]: 4, // worldId(2) + tileMode(1) + entityMode(1)
     [ServerPacketId.RESET_INTERACTION_MODE]: 2, // worldId(2)
+    [ServerPacketId.HIDE_NPC_OPS]: 1, // hidden(1)
+    [ServerPacketId.HIDE_OBJ_OPS]: 1, // hidden(1)
 
     [ServerPacketId.SHOP_OPEN]: -2,
     [ServerPacketId.SHOP_SLOT]: -1,

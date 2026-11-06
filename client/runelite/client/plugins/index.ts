@@ -4,6 +4,7 @@ import { VoiceChatPlugin } from "../../../game/plugins/voice/VoiceChatPlugin";
 import { AnimationSmoothingPlugin } from "../../../game/plugins/animationsmoothing/AnimationSmoothingPlugin";
 import { BankPlugin } from "../../../game/plugins/bank/BankPlugin";
 import { BankTagsPlugin } from "../../../game/plugins/banktags/BankTagsPlugin";
+import { ClueScrollPlugin } from "../../../game/plugins/cluescrolls/ClueScrollPlugin";
 import { BoostsPlugin } from "../../../game/plugins/boosts/BoostsPlugin";
 import { ChatNotificationsPlugin } from "../../../game/plugins/chatnotifications/ChatNotificationsPlugin";
 import { ChatPastePlugin } from "../../../game/plugins/chatpaste/ChatPastePlugin";
@@ -12,6 +13,7 @@ import { MouseHighlightPlugin } from "../../../game/plugins/mousehighlight/Mouse
 import { RegenMeterPlugin } from "../../../game/plugins/regenmeter/RegenMeterPlugin";
 import { RunEnergyPlugin } from "../../../game/plugins/runenergy/RunEnergyPlugin";
 import { TimestampPlugin } from "../../../game/plugins/timestamp/TimestampPlugin";
+import { TickCounterPlugin } from "../../../game/plugins/tickcounter/TickCounterPlugin";
 import { WikiPlugin } from "../../../game/plugins/wiki/WikiPlugin";
 import { CombatLevelPlugin } from "../../../game/plugins/combatlevel/CombatLevelPlugin";
 import { CameraPlugin } from "../../../game/plugins/camera/CameraPlugin";
@@ -24,6 +26,7 @@ import { GpuPlugin } from "../../../game/plugins/gpu/GpuPlugin";
 import { GroundItemsConfig } from "../../../game/plugins/grounditems/GroundItemsConfig";
 import { GroundItemsPlugin } from "../../../game/plugins/grounditems/GroundItemsPlugin";
 import { GroundMarkerPlugin } from "../../../game/plugins/groundmarkers/GroundMarkerPlugin";
+import { MultiLinesPlugin } from "../../../game/plugins/multilines/MultiLinesPlugin";
 import { HdPlugin } from "../../../game/plugins/hd/HdPlugin";
 import { IdleNotifierPlugin } from "../../../game/plugins/idlenotifier/IdleNotifierPlugin";
 import { ImplingsPlugin } from "../../../game/plugins/implings/ImplingsPlugin";
@@ -34,6 +37,9 @@ import { ItemStatsPlugin } from "../../../game/plugins/itemstats/ItemStatsPlugin
 import { ItemPricesPlugin } from "../../../game/plugins/itemprices/ItemPricesPlugin";
 import { ItemRarityPlugin } from "../../../game/plugins/itemrarity/ItemRarityPlugin";
 import { MenuSwapperPlugin } from "../../../game/plugins/menuswapper/MenuSwapperPlugin";
+import { DoorKickerPlugin } from "../../../game/plugins/doorkicker/DoorKickerPlugin";
+import { InventorySetupsPlugin } from "../../../game/plugins/inventorysetups/InventorySetupsPlugin";
+import { LootTrackerPlugin } from "../../../game/plugins/loottracker/LootTrackerPlugin";
 import { NotesConfig } from "../../../game/plugins/notes/NotesPlugin";
 import { ObjectIndicatorsPlugin } from "../../../game/plugins/objectindicators/ObjectIndicatorsPlugin";
 import { NpcIndicatorsPlugin } from "../../../game/plugins/npcindicators/NpcIndicatorsPlugin";
@@ -50,14 +56,18 @@ import { TimersPlugin } from "../../../game/plugins/statustimer/TimersPlugin";
 import { LegacyTileMarkersConfig } from "../../../game/plugins/tilemarkers/migrateTileMarkers";
 import { TileMarkersPlugin } from "../../../game/plugins/tilemarkers/TileMarkersPlugin";
 import { TilePacksPlugin } from "../../../game/plugins/tilepacks/TilePacksPlugin";
-import { WeatherPlugin } from "../../../game/plugins/weather/WeatherPlugin";
+import { LowEndDevicePlugin } from "../../../game/plugins/lowenddevice/LowEndDevicePlugin";
 import { XpTrackerPlugin } from "../../../game/plugins/xptracker/XpTrackerPlugin";
 import { XpGlobesPlugin } from "../../../game/plugins/xpglobes/XpGlobesPlugin";
 import { GuidePlugin } from "../../../game/plugins/optimalquestguide/GuidePlugin";
 import { ShortestPathPlugin } from "../../../game/plugins/shortestpath/ShortestPathPlugin";
+import { AgilityTrackerPlugin } from "../../../game/plugins/agilitytracker/AgilityTrackerPlugin";
+import { GatheringTrackerPlugin } from "../../../game/plugins/gatheringtracker/GatheringTrackerPlugin";
+import { SlayerTrackerPlugin } from "../../../game/plugins/slayertracker/SlayerTrackerPlugin";
 import type { LegacyConfigMigration } from "../../impl/LegacyConfigMigration";
 import { migrateGroundItemsConfig } from "../../../game/plugins/grounditems/migrateGroundItems";
 import { TooltipPlugin } from "../ui/overlay/tooltip/TooltipOverlay";
+import { OsrsTranslatePlugin } from "../../../game/plugins/osrstranslate/OsrsTranslatePlugin";
 import { ConfigPlugin } from "./config/ConfigPlugin";
 import type { PluginClass } from "./Plugin";
 
@@ -71,8 +81,12 @@ export const CORE_PLUGINS: ReadonlyArray<PluginClass> = [
     PortraitModePlugin,
     GameFrame317Plugin,
     GroundItemsPlugin,
+    LootTrackerPlugin,
+    InventorySetupsPlugin,
+    DoorKickerPlugin,
     InteractHighlightPlugin,
     GroundMarkerPlugin,
+    MultiLinesPlugin,
     TileMarkersPlugin,
     TilePacksPlugin,
     MenuSwapperPlugin,
@@ -84,6 +98,8 @@ export const CORE_PLUGINS: ReadonlyArray<PluginClass> = [
     BankTagsPlugin,
     // After Bank Tags: its tag tab title is set before the value joins it.
     BankPlugin,
+    // After Bank Tags: it registers its "clue" tags with Bank Tags' TagManager.
+    ClueScrollPlugin,
     CombatLevelPlugin,
     NotesPlugin,
     NpcIndicatorsPlugin,
@@ -94,13 +110,15 @@ export const CORE_PLUGINS: ReadonlyArray<PluginClass> = [
     ChatPastePlugin,
     TimestampPlugin,
     ChatFilterPlugin,
+    // Rewrites drawn text only; after the chat plugins, whose chatbox callbacks it shares.
+    OsrsTranslatePlugin,
     AnimationSmoothingPlugin,
     TimersPlugin,
-    WeatherPlugin,
     StatusBarsPlugin,
     BoostsPlugin,
     RegenMeterPlugin,
     RunEnergyPlugin,
+    TickCounterPlugin,
     IdleNotifierPlugin,
     OpponentInfoPlugin,
     SpellbookPlugin,
@@ -109,10 +127,14 @@ export const CORE_PLUGINS: ReadonlyArray<PluginClass> = [
     FairyRingPlugin,
     StretchedModePlugin,
     GpuPlugin,
+    LowEndDevicePlugin,
     CameraPlugin,
     QuestHelperPlugin,
     XpTrackerPlugin,
     XpGlobesPlugin,
+    AgilityTrackerPlugin,
+    GatheringTrackerPlugin,
+    SlayerTrackerPlugin,
     GuidePlugin,
     ShortestPathPlugin,
     // After VoiceChatPlugin: while voice chat holds the chatbox Report button, its clicks are voice's.

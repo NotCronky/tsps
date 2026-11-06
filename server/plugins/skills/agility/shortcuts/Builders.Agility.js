@@ -77,14 +77,17 @@ function between({ ends, cross, ...entry }) {
   };
 }
 
-/** A two-tile stile/fence along `axis`: the player's side is `before`, the far side `after`. */
-function stile({ axis = "x", before = -1, after = 2, anim = ShortcutAnim.CLIMB_OVER, end = "You climb over the stile.", ...entry }) {
+/** A two-tile stile/fence across its rotated footprint, unless the data declares an axis. */
+function stile({ axis, before = -1, after = 2, anim = ShortcutAnim.CLIMB_OVER, end = "You climb over the stile.", ...entry }) {
   return between({
     ...entry,
     end,
-    ends: ({ obj }) => (axis === "x"
-      ? [[obj.x + before, obj.y, obj.z], [obj.x + after, obj.y, obj.z]]
-      : [[obj.x, obj.y + before, obj.z], [obj.x, obj.y + after, obj.z]]),
+    ends: ({ obj }) => {
+      const crossAxis = axis ?? (obj.sizeY > obj.sizeX ? "y" : "x");
+      return crossAxis === "x"
+        ? [[obj.x + before, obj.y, obj.z], [obj.x + after, obj.y, obj.z]]
+        : [[obj.x, obj.y + before, obj.z], [obj.x, obj.y + after, obj.z]];
+    },
     cross: (from, to) => [climbOver(to, anim)],
   });
 }
@@ -111,7 +114,9 @@ function hops(...tiles) {
  * Squeezes through a pipe in two crawls, via its middle tile, as captured (rsprox: the Edgeville,
  * Taverley and Yanille dungeon pipes): each half moves from cycle 30 to 126 and lands 4 ticks
  * later with the pipe's sound; the second half starts a tick after the first lands. The crawl
- * replays with each half, so the squeeze pose (no weapon in hand) lasts the whole way. A long pipe
+ * replays with each half. Its hand overrides apply only after the 30-cycle start delay (native
+ * `Actor.dp()` gates on `sequenceFrame`), which is the cycle the exact move starts, so the empty
+ * hands take over just as the player moves into the pipe. A long pipe
  * passes `resume`, the tile its second half starts from: the player is moved there unseen a tick
  * after the first half lands, and crawls on the tick after (rsprox 449-461, the Wilderness course).
  */

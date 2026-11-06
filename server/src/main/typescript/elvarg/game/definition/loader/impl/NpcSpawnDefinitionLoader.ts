@@ -1,4 +1,5 @@
 import { World } from "../../../World";
+import { CrossFloor } from "../../../CrossFloor";
 import { NpcDefinition } from "../../NpcDefinition";
 import { NpcSpawnDefinition } from "../../NpcSpawnDefinition";
 import { NPC } from "../../../entity/impl/npc/NPC";
@@ -238,18 +239,32 @@ export class NpcSpawnDefinitionLoader extends DefinitionLoader {
             const regionX = location.getX() >> 6;
             const regionY = location.getY() >> 6;
             const radius = Math.max(1, Math.ceil((viewDistance + NpcSpawnDefinitionLoader.MAX_DEFERRED_WANDER_RADIUS) / 64));
-            for (let dx = -radius; dx <= radius; dx++) {
-                for (let dy = -radius; dy <= radius; dy++) {
-                    const key = `${location.getZ()}:${regionX + dx}:${regionY + dy}`;
-                    const pending = NpcSpawnDefinitionLoader.pendingByRegion.get(key);
-                    if (!pending) continue;
-                    const remaining: NpcSpawnDefinition[] = [];
-                    for (const definition of pending) {
-                        if (NpcSpawnDefinitionLoader.spawn(definition)) applied++;
-                        else remaining.push(definition);
+            const levels = CrossFloor.enabled() && location.getZ() >= 0 && location.getZ() < 4
+                ? Array.from({ length: location.getZ() + 1 }, (_, level) => level)
+                : [location.getZ()];
+            for (const level of levels) {
+                for (let dx = -radius; dx <= radius; dx++) {
+                    for (let dy = -radius; dy <= radius; dy++) {
+                        const key = `${level}:${regionX + dx}:${regionY + dy}`;
+                        const pending = NpcSpawnDefinitionLoader.pendingByRegion.get(key);
+                        if (!pending) continue;
+                        const remaining: NpcSpawnDefinition[] = [];
+                        for (const definition of pending) {
+                            const spawnPosition = definition.getPosition();
+                            const activationRange = viewDistance + (definition.getRadius() ?? NpcSpawnDefinitionLoader.DEFAULT_WANDER_RADIUS);
+                            if (level !== location.getZ() && Math.max(
+                                Math.abs(spawnPosition.getX() - location.getX()),
+                                Math.abs(spawnPosition.getY() - location.getY()),
+                            ) > activationRange) {
+                                remaining.push(definition);
+                                continue;
+                            }
+                            if (NpcSpawnDefinitionLoader.spawn(definition)) applied++;
+                            else remaining.push(definition);
+                        }
+                        if (remaining.length) NpcSpawnDefinitionLoader.pendingByRegion.set(key, remaining);
+                        else NpcSpawnDefinitionLoader.pendingByRegion.delete(key);
                     }
-                    if (remaining.length) NpcSpawnDefinitionLoader.pendingByRegion.set(key, remaining);
-                    else NpcSpawnDefinitionLoader.pendingByRegion.delete(key);
                 }
             }
             // shortcut: activated NPCs stay alive to preserve scripts and respawn timers; add sleeping only with state-safe lifecycle support.
@@ -257,8 +272,32 @@ export class NpcSpawnDefinitionLoader extends DefinitionLoader {
         });
     }
 
+    /**
+     * Put a live world spawn back on its region's pending list, for content that stands
+     * its own copy on the tile for a while (a seasonal version of the NPC). It returns
+     * through activateNear, tracked as before, once onCanSpawnNpc stops vetoing it.
+     */
+    public static requeue(npc: NPC): boolean {
+        if (!NpcSpawnDefinitionLoader.lineage || npc.getSpawnLineage() !== NpcSpawnDefinitionLoader.lineage) return false;
+        // A dead or dying spawn already has its respawn queued, and that clone would not
+        // ask onCanSpawnNpc: requeueing it too would bring the NPC back twice.
+        if (!npc.isRegistered() || npc.isDyingFunction()) return false;
+        const home = npc.getSpawnPosition();
+        const definition = NpcSpawnDefinition.all().find((entry) => entry.getId() === npc.getId() && entry.getPosition().equals(home));
+        if (!definition) return false;
+        (npc as NPC & { __skipDefaultRespawn?: boolean }).__skipDefaultRespawn = true;
+        World.getNpcs().remove(npc);
+        const key = `${home.getZ()}:${home.getX() >> 6}:${home.getY() >> 6}`;
+        const pending = NpcSpawnDefinitionLoader.pendingByRegion.get(key);
+        if (pending) pending.push(definition);
+        else NpcSpawnDefinitionLoader.pendingByRegion.set(key, [definition]);
+        return true;
+    }
+
     private static spawn(definition: NpcSpawnDefinition): boolean {
         if (World.getNpcs().isFull()) return false;
+        // A content veto keeps the spawn pending: it comes back when the veto ends.
+        if (PluginManager.emitCanSpawnNpc(definition.getId(), definition.getPosition()) === false) return false;
         const npc = NPC.create(definition.getId(), definition.getPosition().clone());
         npc.getMovementCoordinator().setRadius(definition.getRadius() ?? NpcSpawnDefinitionLoader.DEFAULT_WANDER_RADIUS);
         npc.setFace(definition.getFacing());

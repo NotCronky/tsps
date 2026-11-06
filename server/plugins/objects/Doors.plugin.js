@@ -7,6 +7,10 @@ let core;
 // 300 seconds (500 ticks @ 600ms/tick). Cross-checked against rsmod/OpenRune-Server
 // (DoorConstants.DURATION = 500) and a from-scratch OSRS-parity server (DOOR_AUTO_CLOSE_TICKS).
 const DOOR_AUTO_CLOSE_TICKS = 500;
+/** MovementQueue.IGNORE_CLIPPING_FLAG: the flagged mobile's steps go on whatever the map blocks. */
+const IGNORE_CLIPPING_FLAG = "movement:ignore-clipping";
+/** A walkOver opener keeps the flag until they are across, and no longer than this. */
+const WALK_OVER_MAX_TICKS = 2;
 
 // Single-door closed/open pairs are discovered from this server's own cache instead of a
 // hand-picked ID list: OSRS models every plain door as two consecutive loc ids where the
@@ -25,7 +29,7 @@ const DOOR_AUTO_CLOSE_TICKS = 500;
 // the open ids are not closed+1). Same trick works for NPCs/items via C.getNpc / C.getItem.
 const DOOR_NAMES = new Set([
   "Door", "Doors", "Large door", "Large doors", "Castle door", "Cell Door", "Cell door",
-  "Glass door", "Magic door", "Metal door", "Mind Door", "Mithril door", "Tent door", "Wall",
+  "Glass door", "Magic door", "Magic guild door", "Metal door", "Mind Door", "Mithril door", "Tent door", "Wall",
   "Gate", "Metal gate", "Doorway", "Tree Door", "Storeroom Door", "Ardougne Wall Door",
   "Vitur door", "Myrmel door", "Shadum door", "Jovkai door", "Chained door", "Trapdoor",
   "Longhall door", "Prison door", "Arena Entrance", "Arena Exit",
@@ -54,6 +58,9 @@ const NAMELESS_DOOR_LEAF_IDS = Object.freeze({
   ARENA_EXIT_OPEN: 3787, // troll_stronghold_arena_exit_inactive
   PRISON_DOOR_9_OPEN: 3781, // troll_stronghold_prison_door_open, capture 740
   GRUM_DOOR_OPEN: 1542, // Grum's Gold Exchange; capture 465
+  PIP_MAUSOLEUM_GATE_OPEN: 3446, // inacpip_underground_door; Priest in Peril capture 2026-11-02
+  CRANDOR_SECRET_DOOR_OPEN: 25039, // dragonsecretdoor_open; capture 2951
+  INVISWALL: 38848, // actionless collision blocker; captures 2951 and 740
 });
 
 let SELF_OPENING_DOOR_IDS, IN_PLACE_DOOR_IDS, OWN_TILE_DOOR_IDS, SINGLE_DOOR_OPEN_IDS, COMPOSITE_DOOR_OPENINGS, WOODEN_GATES, WOODEN_GATE_BY_ID;
@@ -69,7 +76,9 @@ function defineDoorData({ ObjectIdentifiers: O }) {
   // door whose same-model "Close" locs (5245, 11617, 15205, 17115) all belong to other doors.
   // GATE_52 (Gnome Ball pitch and Tree Gnome Village): its same-model open variants (193, 2395)
   // are nameless with no actions and are never placed, so the pairing below cannot find them.
-  SELF_OPENING_DOOR_IDS = new Set([O.DOOR_223, O.DOOR_225, O.DOOR_226, O.DOOR_227, O.DOOR_228, O.DOOR_229, O.DOOR_230, O.DOOR_231, O.DOOR_358, O.GATE_52, O.WALL_9, O.DOOR_115, O.LARGE_DOOR_23,
+  SELF_OPENING_DOOR_IDS = new Set([O.DOOR_223, O.DOOR_225, O.DOOR_226, O.DOOR_227, O.DOOR_228, O.DOOR_229, O.DOOR_230, O.DOOR_231,
+    O.DOOR_283, // Ardougne Castle's lockpick door has no separate open loc in the cache.
+    O.DOOR_287, O.DOOR_358, O.GATE_52, O.WALL_9, O.DOOR_115, O.LARGE_DOOR_23,
     // The Blood Moon Rises crank-wheel house exit (61824) has no cache Close partner.
     O.DOOR_831,
     // The Vitur food-shop door (61838) also has no cache Close partner.
@@ -144,7 +153,9 @@ function defineDoorData({ ObjectIdentifiers: O }) {
   // turned a quarter, instead of stepping onto the next tile. buildDoorCatalog adds every door
   // whose cache name ends in "_reverse"; these are the others. Jatizso's city gates (rsprox 75:
   // 21403/21405 at 2413,3797 face 3 open as 21404/21406 face 2/0 on the same tiles).
-  OWN_TILE_DOOR_IDS = new Set([O.GATE_155, O.GATE_157]);
+  // Yanille's south entrance door has blocked floor immediately west of the doorway, so its
+  // map-backed open pose turns on the closed tile instead of swinging into that wall.
+  OWN_TILE_DOOR_IDS = new Set([O.GATE_155, O.GATE_157, O.DOOR_287]);
 
   // Tree Gnome Stronghold main gate: one 5x2 loc (190, face 2) opens into two
   // nameless 2x2 leaves (191/192), leaving the centre tile clear.
@@ -395,23 +406,34 @@ function defineDoorData({ ObjectIdentifiers: O }) {
       crossX: 2897,
       closeTicks: 2,
     }),
-    // Troll arena exit, north wall. No capture; Mort Myre's layout, as above.
+    // Troll arena exit, north wall. No capture; Mort Myre's layout, as above. Dad's check guards the
+    // click, so blockers keep the opening shut to ordinary walking and the opener is carried (carry).
+    // The blockers are inferred: the prison door's capture shows one on its doorway, and nothing shows
+    // this gate, so one on each leaf's own edge is our reading.
     Object.freeze({
       closed: [[O.ARENA_EXIT, 2916, 3629, 0, 3], [O.ARENA_EXIT_2, 2917, 3629, 0, 3]],
       opened: [
         [NAMELESS_DOOR_LEAF_IDS.ARENA_EXIT_OPEN, 2916, 3628, 0, 0],
         [NAMELESS_DOOR_LEAF_IDS.ARENA_EXIT_OPEN, 2917, 3628, 0, 2],
+        [NAMELESS_DOOR_LEAF_IDS.INVISWALL, 2916, 3629, 0, 3],
+        [NAMELESS_DOOR_LEAF_IDS.INVISWALL, 2917, 3629, 0, 3],
       ],
       crossY: 3629,
+      carry: true,
       closeTicks: 2,
     }),
     // Troll Stronghold prison door (capture 740 ticks 1470-1473): an "Unlock" loc the quest opens
-    // through door:open. The leaf swings to the tile west and shuts two ticks later; the inviswall
-    // live puts on the doorway is left out, as for Guidor's gate.
+    // through door:open. The leaf swings to the tile west and shuts two ticks later. Live puts inviswall
+    // 38848 on the doorway for those ticks, so the opening stays shut to ordinary walking and following:
+    // the key-holding opener is carried over it (carry) and anyone else is stopped by the real clipping.
     Object.freeze({
       closed: [[O.PRISON_DOOR_9, 2848, 10107, 1, 0]],
-      opened: [[NAMELESS_DOOR_LEAF_IDS.PRISON_DOOR_9_OPEN, 2847, 10107, 1, 1]],
+      opened: [
+        [NAMELESS_DOOR_LEAF_IDS.PRISON_DOOR_9_OPEN, 2847, 10107, 1, 1],
+        [NAMELESS_DOOR_LEAF_IDS.INVISWALL, 2848, 10107, 1, 0],
+      ],
       crossX: 2848,
+      carry: true,
       closeTicks: 2,
       openSoundId: 62,
     }),
@@ -425,6 +447,56 @@ function defineDoorData({ ObjectIdentifiers: O }) {
       crossX: 3016,
       closeTicks: 2,
       openSoundId: 62, // the door sound, as captured
+    }),
+    // Priest in Peril mausoleum gates (RSProx recordings 2026-10-17 tick 1117, 2026-11-02 ticks
+    // 11016, 11664-11666 and 11708-11710): Open swaps the gate for INVISWALL on its own tile and
+    // the one inactive leaf on the tile beyond, the player steps through, and the gate is back two
+    // ticks later. The opener crosses with an ordinary walk (no exactmove in either recording), so
+    // they walk over the blocker (walkOver) instead of being carried; anyone else is stopped by it,
+    // which keeps the first gate's golden-key lock. The quest's key rule runs before this
+    // (door:toggle).
+    Object.freeze({
+      closed: [[O.GATE_70, 3405, 9895, 0, 3]],
+      opened: [
+        [NAMELESS_DOOR_LEAF_IDS.INVISWALL, 3405, 9895, 0, 3],
+        [NAMELESS_DOOR_LEAF_IDS.PIP_MAUSOLEUM_GATE_OPEN, 3405, 9894, 0, 0],
+      ],
+      crossY: 9895,
+      walkOver: true,
+      closeTicks: 2,
+      openSoundId: 69,
+    }),
+    Object.freeze({
+      closed: [[O.GATE_71, 3431, 9897, 0, 2]],
+      opened: [
+        [NAMELESS_DOOR_LEAF_IDS.INVISWALL, 3431, 9897, 0, 2],
+        [NAMELESS_DOOR_LEAF_IDS.PIP_MAUSOLEUM_GATE_OPEN, 3432, 9897, 0, 3],
+      ],
+      crossX: 3432,
+      walkOver: true,
+      closeTicks: 2,
+      openSoundId: 69,
+    }),
+    // Dragon Slayer's secret wall into Crandor's dungeon (capture 2951 ticks 85-89): the quest opens it
+    // through door:open once the shortcut is unlocked. The player walks 2836,9598 -> 9599 -> 9600 while
+    // dragonsecretdoor (2606, 2836,9600 rot 3) becomes dragonsecretdoor_open (25039, 2836,9599 rot 0)
+    // with sound 2410, and it shuts two ticks later. Sounds 400 and 2768 (delay 20) arrive in that same
+    // tick as a fight hit on the player, so they are unattributed and not played here. Live puts the
+    // actionless blocker 38848 on the doorway for those two ticks, so the opening is kept shut to
+    // ordinary walking and following: the quest-gated opener is carried over it by a forced movement
+    // (carry) and anyone else is stopped by the real clipping. Captured going north only; the way back
+    // south is the same wall in reverse. The wall is reachable only from the tiles beside it, so every
+    // crossing is one step.
+    Object.freeze({
+      closed: [[O.WALL_9, 2836, 9600, 0, 3]],
+      opened: [
+        [NAMELESS_DOOR_LEAF_IDS.CRANDOR_SECRET_DOOR_OPEN, 2836, 9599, 0, 0],
+        [NAMELESS_DOOR_LEAF_IDS.INVISWALL, 2836, 9600, 0, 3],
+      ],
+      crossY: 9600,
+      carry: true,
+      closeTicks: 2,
+      openSoundId: 2410,
     }),
   ]);
   DOUBLE_DOOR_FAMILY_IDS_BY_ID = new Map(
@@ -1367,15 +1439,77 @@ function carryAcrossGate(player, gate, y, z) {
       eastward ? 1 : 3, GATE_WALK_ANIMATION)));
 }
 
+/**
+ * A gate that keeps a collision blocker on its doorway while open: the opener, standing on the tile beside
+ * it, is carried the one tile over (forced movement ignores the blocker); nobody else can walk across.
+ */
+function carryOneTile(player, gate, x, y, z) {
+  const here = player.getLocation();
+  const acrossX = gate.crossX != null;
+  if (acrossX ? here.getY() !== y : here.getX() !== x) return;
+  const cross = acrossX ? gate.crossX : gate.crossY;
+  const position = acrossX ? here.getX() : here.getY();
+  const delta = (position < cross ? cross : cross - 1) - position;
+  if (Math.abs(delta) !== 1) return;
+  const direction = acrossX ? (delta > 0 ? 1 : 3) : (delta > 0 ? 0 : 2);
+  core.TaskManager.submit(new core.ForceMovementTask(player, 1,
+    new core.ForceMovement(cloneLocation(here.getX(), here.getY(), z),
+      new core.Location(acrossX ? delta : 0, acrossX ? 0 : delta, 0), 0, 30, direction, GATE_WALK_ANIMATION)));
+}
+
+/** Players walking over a walkOver gate's blocker, with whether they had the flag before. */
+const WALKING_OVER = new WeakMap();
+
+function endWalkOver(player, token) {
+  const state = WALKING_OVER.get(player);
+  if (!state || (token && state.token !== token)) return;
+  WALKING_OVER.delete(player);
+  if (!state.previous) player.removeFlag?.(IGNORE_CLIPPING_FLAG);
+}
+
+/**
+ * A gate that keeps a blocker on its doorway while open, crossed with an ordinary walk: the opener's
+ * one step ignores clipping and the flag ends once they are across (at most WALK_OVER_MAX_TICKS),
+ * so the blocker stops everyone else and no forced movement is sent.
+ */
+function walkOverGate(player, destination) {
+  endWalkOver(player);
+  const token = {};
+  WALKING_OVER.set(player, { token, previous: player.hasFlag?.(IGNORE_CLIPPING_FLAG) === true });
+  player.setFlag?.(IGNORE_CLIPPING_FLAG, true);
+  const queue = player.getMovementQueue();
+  queue.reset();
+  queue.addSteps(destination);
+  let ticks = WALK_OVER_MAX_TICKS;
+  const task = new core.Task(1, false);
+  task.execute = () => {
+    const here = player.getLocation();
+    const across = here.getX() === destination.getX() && here.getY() === destination.getY();
+    if (across || --ticks <= 0 || (queue.size?.() ?? 0) === 0) {
+      task.stop();
+      endWalkOver(player, token);
+    }
+  };
+  core.TaskManager.submit(task);
+}
+
 /** The player crosses on the clicked row or column, from whichever side they stand on. */
 function stepThroughGate(player, gate, x, y, z) {
   if (gate.crossBetween) {
     carryAcrossGate(player, gate, y, z);
     return;
   }
+  if (gate.carry) {
+    carryOneTile(player, gate, x, y, z);
+    return;
+  }
   const destination = gate.crossX != null
     ? cloneLocation(player.getLocation().getX() < gate.crossX ? gate.crossX : gate.crossX - 1, y, z)
     : cloneLocation(x, player.getLocation().getY() < gate.crossY ? gate.crossY : gate.crossY - 1, z);
+  if (gate.walkOver) {
+    walkOverGate(player, destination);
+    return;
+  }
   const queue = player.getMovementQueue();
   queue.reset();
   queue.addSteps(destination);

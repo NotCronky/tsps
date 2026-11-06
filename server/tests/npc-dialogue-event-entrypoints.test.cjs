@@ -2137,7 +2137,21 @@ test('Pandemonium native: the captured helm and sails still sail to the wreck wi
   assert.equal(ship.boat.helmPlayerId, f.player.getIndex(), 'Navigate uses the actual parent and reachable deck');
   await operate('sails', 2);
   assert.equal(ship.boat.moveMode, 2, 'Set starts the observed full-sail voyage');
-  for (let tick = 0; tick < 350 && f.quest.getStage(f.player) < 12; tick++) core.BoatManager.tick();
+  // The player, not a timed quest replay, steers along the recorded route.
+  const headings = new Map([[0, 0], [25, 2], [31, 1], [61, 0]]);
+  const { ClientPacketId } = require('../dist/net/protocol/NativeClientPackets');
+  const { decodeClientPackets } = require('../dist/net/protocol/ClientProtocol');
+  for (let tick = 0; tick < 350 && f.quest.getStage(f.player) < 12; tick++) {
+    if (headings.has(tick)) {
+      const heading = headings.get(tick);
+      const decoded = decodeClientPackets(Buffer.from([ClientPacketId.SET_HEADING, heading]));
+      assert.deepEqual(decoded, [{ type: 'set_heading', heading }]);
+      await f.connection.dispatch(decoded);
+      f.connection.processTurnPackets();
+      assert.equal(ship.boat.heading, heading * 128, 'the helmsman\'s native input steers the supplied boat');
+    }
+    core.BoatManager.tick();
+  }
   assert.equal(f.quest.getStage(f.player), 12,
     `the existing route arrives with the wider hull (boat ${ship.boat.tileX},${ship.boat.tileY}, ${JSON.stringify(ship.boat.lastStep)})`);
   f.player.closeInterruptibleInterfaces();
@@ -3012,3 +3026,274 @@ for (const droppedName of ['SECATEURS', 'WHITE_BERRIES']) {
     assert.match(messages.at(-1), /materials/);
   });
 }
+
+function amikRoutingFixture(t, frozen = false) {
+  const f = fixture(t), { player } = f;
+  core.RegionManager.init();
+  const quests = require('../plugins/quests/QuestRuntime').getRegisteredQuests();
+  f.quest = key => { const quest = quests.find(q => q.key === key); assert.ok(quest, key); return quest; };
+  for (const key of ['black_knights_fortress', 'druidic_ritual']) {
+    const quest = f.quest(key); quest.setStage(player, quest.completionValue);
+  }
+  f.quest('recipe_for_disaster').setStage(player, 4);
+  player.setAttribute(RFD_FEAST_SEEN, true);
+  player.setAttribute(RFD_FEAST_PENDING, false);
+  player.setAttribute('quest.points', 5);
+  // Castle coordinates are Sir Amik's canonical npc-spawns.json entry.
+  const tile = frozen ? new core.Location(1865, 5345, 0) : new core.Location(2960, 3336, 2);
+  player.setLocation(new core.Location(tile.getX() + 1, tile.getY(), tile.getZ()));
+  player.setNeedsPlacement(false);
+  const id = frozen ? core.NpcIdentifiers.SIR_AMIK_VARZE_3 : core.NpcIdentifiers.SIR_AMIK_VARZE_4;
+  if (frozen) {
+    t.after(() => {
+      const owned = [...core.World.getNpcs(), ...core.World.getAddNPCQueue()].filter(npc => npc.getOwner() === player);
+      for (const npc of owned) {
+        const index = npc.getIndex(); PM.removeNpc(npc);
+        assert.notEqual(core.World.getNpcs().get(index), npc);
+        assert.equal(npc.isRegistered(), false);
+        assert.ok(!core.World.getAddNPCQueue().includes(npc));
+      }
+    });
+    PM.emitCustomEvent('player:bootstrap-complete', { player });
+    f.npc = [...core.World.getNpcs()].find(npc => npc.getOwner() === player && npc.getId() === id);
+    assert.ok(f.npc, 'real RFD bootstrap spawns the frozen council actor');
+    assert.equal(core.World.getNpcs().get(f.npc.getIndex()), f.npc);
+  } else {
+    f.npc = core.NPC.create(id, tile);
+    const spawnedAmik = f.npc;
+    t.after(() => {
+      const index = spawnedAmik.getIndex();
+      core.World.getNpcs().remove(spawnedAmik);
+      assert.notEqual(core.World.getNpcs().get(index), spawnedAmik);
+      assert.equal(spawnedAmik.isRegistered(), false);
+    });
+    assert.equal(core.World.getNpcs().add(spawnedAmik), true);
+    assert.equal(core.World.getNpcs().get(spawnedAmik.getIndex()), spawnedAmik);
+  }
+  f.operated = [];
+  const operatedHooks = PM.customEventHooks.get('npc:operated') ?? [];
+  const operatedStart = operatedHooks.length;
+  t.after(() => PM.customEventHooks.get('npc:operated')?.splice(operatedStart));
+  PM.createApi('AmikRoutingTest').onCustomEvent('npc:operated', event => {
+    if (event.player === player) f.operated.push({ npcId: event.npcId, option: event.option });
+  });
+  f.messages = [];
+  const send = player.sendMessage;
+  t.mock.method(player, 'sendMessage', function(message) { f.messages.push(message); return send.call(this, message); });
+  f.talk = async () => {
+    player.closeInterruptibleInterfaces();
+    const operatedBefore = f.operated.length;
+    const actions = f.npc.getCurrentDefinition(player).getActions();
+    const clickType = (actions.includes('Talk-to') ? actions.indexOf('Talk-to') : actions.indexOf('Inspect')) + 1;
+    assert.ok(clickType > 0, 'canonical actor has Talk-to or Inspect');
+    await f.connection.dispatch([{ type: 'npc_option', index: f.npc.getIndex(), clickType }]);
+    f.connection.processTurnPackets();
+    for (let n = 0; n < 4; n++) {
+      core.TaskManager.processWalkTo(player.getIndex());
+      player.getMovementQueue().beginCycle(); player.getMovementQueue().process(); core.TaskManager.process();
+    }
+    assert.equal(f.operated.length, operatedBefore + 1, JSON.stringify({
+      checkpoint: 'native NPC operation reached', player: player.getLocation(), npc: f.npc.getLocation(),
+      contentId: f.npc.getContentId(player), messages: f.messages,
+      current: player.getDialogueManager().getCurrent()?.getText(), pending: MultiChatboxPrompt.getPending(player),
+    }));
+  };
+  return f;
+}
+
+test('castle Sir Amik starts Recruitment Drive after the RFD opening without Legends requirements', async t => {
+  const f = amikRoutingFixture(t), { player } = f;
+  const before = rfdSavedProgress(player);
+  await f.talk();
+  for (let n = 0; n < 16 && !MultiChatboxPrompt.getPending(player) && player.getDialogueManager().getCurrent(); n++) await nextLine(f);
+  assert.equal(MultiChatboxPrompt.getPending(player)?.title, 'Start the Recruitment Drive quest?', JSON.stringify({ messages: f.messages, current: player.getDialogueManager().getCurrent()?.getText(), operated: f.operated }));
+  assert.ok(!f.messages.some(text => text.includes("Legends' Quest")), 'no unrelated rescue refusal');
+  await choose(f, 1);
+  for (let n = 0; n < 12 && player.getDialogueManager().getCurrent(); n++) await nextLine(f);
+  assert.equal(f.quest('recruitment_drive').getStage(player), 1);
+  assert.equal(f.quest('legends_quest').getStage(player), 0);
+  assert.equal(rfdSavedProgress(player), before, 'the rescue, points and inventory are unchanged');
+  await f.talk();
+  const lines = [];
+  for (let n = 0; n < 10 && player.getDialogueManager().getCurrent(); n++) {
+    lines.push(player.getDialogueManager().getCurrent().getText()); await nextLine(f);
+  }
+  // wrapText retains trailing spaces and the runner joins lines with another space.
+  const expected = 'No, I am afraid not. I suggest you go meet Sir Tiffy in Falador Park, he will be expecting you.';
+  assert.ok(lines.some(text => text.replace(/\s+/g, ' ').trim() === expected), JSON.stringify({
+    checkpoint: 'started Recruitment route remains available', lines,
+    pending: MultiChatboxPrompt.getPending(player), operated: f.operated, messages: f.messages,
+  }));
+});
+
+test('frozen Sir Amik keeps the RFD Legends prerequisite refusal', async t => {
+  const f = amikRoutingFixture(t, true), { player } = f;
+  const before = rfdSavedProgress(player);
+  await f.talk();
+  assert.ok(f.messages.includes("You need 107 quest points, the Legends' Quest prerequisites and access to the Kharazi Jungle before helping Sir Amik."));
+  assert.equal(f.quest('recruitment_drive').getStage(player), 0);
+  assert.equal(rfdSavedProgress(player), before);
+});
+
+test('eligible frozen Sir Amik retains RFD rescue guidance', async t => {
+  const f = amikRoutingFixture(t, true), { player } = f;
+  for (const key of ['family_crest', 'heroes_quest', 'lost_city', 'merlins_crystal', 'shield_of_arrav',
+    'dragon_slayer_i', 'shilo_village', 'jungle_potion', 'druidic_ritual', 'underground_pass',
+    'biohazard', 'plague_city', 'waterfall_quest']) {
+    const quest = f.quest(key); quest.setStage(player, quest.completionValue);
+  }
+  f.quest('legends_quest').setStage(player, 5);
+  player.setAttribute('quest.points', 107);
+  const before = rfdSavedProgress(player);
+  await f.talk();
+  assert.ok(f.messages.includes('Speak to Aris about freeing Sir Amik Varze to learn the next step.'));
+  assert.ok(!f.messages.some(text => text.includes("Legends' Quest")));
+  assert.equal(f.quest('recruitment_drive').getStage(player), 0);
+  assert.equal(rfdSavedProgress(player), before);
+});
+
+test('castle Sir Amik transcript selector defers RFD to Recruitment Drive after the opening', t => {
+  const f = amikRoutingFixture(t), { player, npc } = f;
+  const index = require('../data/definitions/npc-dialogue-index.json');
+  const pages = index[npc.getId()].map(entry => ({ ...entry, page: entry.page.replace(/^Transcript:/, '') }));
+  const choice = PM.emitNpcDialogueVariant({ player, npc, npcId: npc.getId(), definition: npc.getCurrentDefinition(player), pages });
+  assert.deepEqual(choice, { page: 'Recruitment Drive', variant: 'starting-out-talking-to-sir-amik-varze' });
+});
+
+test('castle Sir Amik still offers Black Knights Fortress after the RFD opening', async t => {
+  const f = amikRoutingFixture(t), { player } = f;
+  f.quest('black_knights_fortress').setStage(player, 0);
+  player.setAttribute('quest.points', 12);
+  await f.talk();
+  for (let n = 0; n < 24 && !MultiChatboxPrompt.getPending(player) && player.getDialogueManager().getCurrent(); n++) await nextLine(f);
+  for (const option of ['I seek a quest!', 'I laugh in the face of danger!']) {
+    const selected = MultiChatboxPrompt.getPending(player)?.options.indexOf(option) ?? -1;
+    assert.ok(selected >= 0, JSON.stringify({ option, pending: MultiChatboxPrompt.getPending(player), messages: f.messages, operated: f.operated }));
+    await choose(f, selected + 1);
+    for (let n = 0; n < 24 && !MultiChatboxPrompt.getPending(player) && player.getDialogueManager().getCurrent(); n++) await nextLine(f);
+  }
+  assert.equal(MultiChatboxPrompt.getPending(player)?.title, "Start the Black Knights' Fortress quest?", JSON.stringify({ messages: f.messages, current: player.getDialogueManager().getCurrent()?.getText(), operated: f.operated }));
+  assert.equal(f.quest('recruitment_drive').getStage(player), 0);
+  assert.ok(!f.messages.some(text => text.includes("Legends' Quest")));
+});
+
+test('Legends guard still refuses an ineligible player after the RFD opening', async t => {
+  const f = amikRoutingFixture(t), { player } = f;
+  const amik = f.npc;
+  const guard = core.NPC.create(core.NpcIdentifiers.LEGENDS_GUARD, new core.Location(2728, 3348));
+  t.after(() => {
+    const index = guard.getIndex();
+    core.World.getNpcs().remove(guard);
+    assert.notEqual(core.World.getNpcs().get(index), guard);
+    assert.equal(guard.isRegistered(), false);
+    f.npc = amik;
+  });
+  assert.equal(core.World.getNpcs().add(guard), true);
+  assert.equal(core.World.getNpcs().get(guard.getIndex()), guard);
+  f.npc = guard;
+  player.setLocation(new core.Location(2729, 3348)); player.setNeedsPlacement(false);
+  const before = rfdSavedProgress(player);
+  await f.talk();
+  for (const option of ['How do I get in here?', 'Can I speak to someone in charge?', 'Can I go on the quest?']) {
+    for (let n = 0; n < 20 && !MultiChatboxPrompt.getPending(player) && player.getDialogueManager().getCurrent(); n++) await nextLine(f);
+    const selected = MultiChatboxPrompt.getPending(player)?.options.indexOf(option) ?? -1;
+    assert.ok(selected >= 0, option); await choose(f, selected + 1);
+  }
+  const lines = [];
+  for (let n = 0; n < 20 && !MultiChatboxPrompt.getPending(player) && player.getDialogueManager().getCurrent(); n++) {
+    lines.push(player.getDialogueManager().getCurrent().getText()); await nextLine(f);
+  }
+  assert.ok(lines.some(text => text.startsWith("I'm very sorry but you need to complete more quests")), 'actual Legends requirements refusal remains');
+  assert.equal(f.quest('legends_quest').getStage(player), 0);
+  assert.equal(rfdSavedProgress(player), before);
+});
+
+function lostTribeSilverwareFixture(t, { ham = 2, stage = 9, contact = 2, silverware = true } = {}) {
+  const f = fixture(t);
+  f.quest = registeredQuest('the_lost_tribe');
+  f.quest.setStage(f.player, stage);
+  f.player.setAttribute('quest.the_lost_tribe.ham', ham);
+  f.player.setAttribute('quest.the_lost_tribe.contact', contact);
+  f.npc = core.NPC.create(core.NpcIdentifiers.DUKE_HORACIO, new core.Location(3211, 3220, 1));
+  if (silverware) f.player.getInventory().add(new core.Item(core.ItemIdentifiers.SILVERWARE, 1), false);
+  f.talk = () => PM.emitNpcInteraction({ player: f.player, npc: f.npc, npcId: f.npc.getId(), action: 'Talk-to', clickType: 1, handled: false });
+  f.search = () => {
+    const id = core.ObjectIdentifiers.CRATE_65, location = new core.Location(3152, 9645, 0);
+    const object = new core.GameObject(id, location, 10, 0, null);
+    return PM.emitObjectInteraction({ player: f.player, object, location,
+      objectId: id, x: 3152, y: 9645, z: 0, option: 'Search', clickType: 1, handled: false });
+  };
+  return f;
+}
+async function lostTribeContinue(f) {
+  const group = f.player.getPacketSender().getChatboxGroupId();
+  await f.connection.dispatch([{ type: 'dialogue_continue', widgetId: (group << 16) | 5, childIndex: -1 }]);
+  f.connection.processTurnPackets();
+}
+async function lostTribeHandIn(f) {
+  f.talk();
+  for (let n = 0; n < 10 && !MultiChatboxPrompt.getPending(f.player); n++) await lostTribeContinue(f);
+  const options = MultiChatboxPrompt.getPending(f.player)?.options ?? [];
+  const index = options.indexOf('I found the missing silverware in the HAM cave!');
+  assert.ok(index >= 0, 'actual Duke transcript offers the hand-in');
+  await choose(f, index + 1);
+  for (let n = 0; n < 20 && f.player.getDialogueManager().getCurrent(); n++) await lostTribeContinue(f);
+}
+test('Lost Tribe silverware stays owned across Duke opener cancellation and signs only at real hand-in (#2893)', async t => {
+  const f = lostTribeSilverwareFixture(t), I = core.ItemIdentifiers;
+  assert.equal(f.talk(), true);
+  assert.equal(f.player.getInventory().getAmount(I.SILVERWARE), 1, 'opening Duke dialogue does not consume the item');
+  f.player.closeInterruptibleInterfaces();
+  assert.equal(f.quest.getStage(f.player), 9);
+  for (let n = f.player.getInventory().getFreeSlots(); n > 0; n--) f.player.getInventory().add(new core.Item(I.BRONZE_DAGGER, 1), false);
+  assert.equal(f.player.getInventory().getFreeSlots(), 0);
+  await lostTribeHandIn(f);
+  assert.equal(f.quest.getStage(f.player), 10);
+  assert.equal(f.player.getInventory().getAmount(I.SILVERWARE), 0);
+  assert.equal(f.player.getInventory().getAmount(I.PEACE_TREATY), 1, 'silverware slot becomes treaty even with full inventory');
+  f.player.closeInterruptibleInterfaces(); f.talk();
+  assert.equal(f.player.getInventory().getAmount(I.PEACE_TREATY), 1, 'retalk does not duplicate treaty');
+});
+test('Lost Tribe historical consumed silverware can be recovered from the real crate and handed in after save reload (#2893)', async t => {
+  const f = lostTribeSilverwareFixture(t, { silverware: false }), I = core.ItemIdentifiers;
+  const save = require('../dist/game/entity/impl/player/persistence/PlayerSave').PlayerSave.fromPlayer(f.player);
+  const restored = lostTribeSilverwareFixture(t, { silverware: false });
+  save.applyToPlayer(restored.player);
+  restored.search();
+  for (let n = 0; n < 12 && restored.player.getDialogueManager().getCurrent(); n++) await lostTribeContinue(restored);
+  assert.equal(restored.player.getInventory().getAmount(I.SILVERWARE), 1, 'ham2 without item remains recoverable');
+  restored.search();
+  assert.equal(restored.player.getInventory().getAmount(I.SILVERWARE), 1, 'no duplicate silverware');
+  await lostTribeHandIn(restored);
+  assert.equal(restored.quest.getStage(restored.player), 10);
+  assert.equal(restored.player.getInventory().getAmount(I.PEACE_TREATY), 1);
+});
+
+test('Lost Tribe silverware search preserves capacity, duplicate and stage/contact gates (#2893)', async t => {
+  const I = core.ItemIdentifiers;
+  for (const ham of [0, 2]) {
+    const f = lostTribeSilverwareFixture(t, { ham, silverware: false });
+    for (let n = 0; n < 28; n++) f.player.getInventory().add(new core.Item(I.BRONZE_DAGGER, 1), false);
+    f.search();
+    assert.equal(f.player.getInventory().getAmount(I.SILVERWARE), 0, 'full inventory cannot acquire silverware');
+    assert.equal(f.player.getAttribute('quest.the_lost_tribe.ham'), ham, 'failed acquisition preserves progress');
+    f.player.closeInterruptibleInterfaces();
+    f.player.getInventory().deleteNumber(I.BRONZE_DAGGER, 1);
+    f.search();
+    for (let n = 0; n < 12 && f.player.getDialogueManager().getCurrent(); n++) await lostTribeContinue(f);
+    assert.equal(f.player.getInventory().getAmount(I.SILVERWARE), 1);
+    f.search();
+    assert.equal(f.player.getInventory().getAmount(I.SILVERWARE), 1, 'repeat does not duplicate');
+  }
+  const banked = lostTribeSilverwareFixture(t, { silverware: false });
+  banked.player.getBank(0).add(new core.Item(I.SILVERWARE, 1), false);
+  banked.search();
+  assert.equal(banked.player.getInventory().getAmount(I.SILVERWARE), 0, 'banked silverware is not lost');
+  assert.equal(banked.player.getBanks()[0].getAmount(I.SILVERWARE), 1);
+  for (const setup of [{ stage: 8 }, { stage: 10 }, { stage: 12 }, { contact: 1 }]) {
+    const f = lostTribeSilverwareFixture(t, { ...setup, silverware: false });
+    f.search();
+    assert.equal(f.player.getInventory().getAmount(I.SILVERWARE), 0, 'only the current objective can recover it');
+    assert.equal(f.quest.getStage(f.player), setup.stage ?? 9);
+  }
+});

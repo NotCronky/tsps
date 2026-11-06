@@ -31,6 +31,12 @@ export class RegionManager {
     public static BLOCKED_TILE = 0x200000;
     public static UNLOADED_TILE = 0x1000000;
     public static OCEAN_TILE = 2097152;
+    /**
+     * The flags that fill a tile for walking, as blocked() reads them: a solid loc (0x100), a
+     * blocking floor decoration (0x40000), UNKNOWN, BLOCKED_TILE and UNLOADED_TILE. Plugins
+     * testing whether a tile can be stood on use this rather than their own copy.
+     */
+    public static BLOCKED_MASK = 0x12c0100;
 
     public static regions: Map<number, Region> = new Map<number, Region>();
     private static loadingRegions: Set<number> = new Set<number>();
@@ -537,40 +543,41 @@ export class RegionManager {
         return (RegionManager.getClipping(position.getX(), position.getY(), position.getZ(), privateArea) & 0x20000) === 0;
     }
 
+    // Floor decorations (0x40000) block steps just like locs and terrain, as in the route finder.
     public static blocked(pos: Location, privateArea: PrivateArea) {
-        return (RegionManager.getClipping(pos.getX(), pos.getY(), pos.getZ(), privateArea) & 0x1280100) !== 0;
+        return (RegionManager.getClipping(pos.getX(), pos.getY(), pos.getZ(), privateArea) & RegionManager.BLOCKED_MASK) !== 0;
     }
 
     public static blockedNorth(pos: Location, privateArea: PrivateArea) {
-        return (RegionManager.getClipping(pos.getX(), pos.getY() + 1, pos.getZ(), privateArea) & 0x1280120) !== 0;
+        return (RegionManager.getClipping(pos.getX(), pos.getY() + 1, pos.getZ(), privateArea) & 0x12c0120) !== 0;
     }
 
     public static blockedEast(pos: Location, privateArea: PrivateArea) {
-        return (RegionManager.getClipping(pos.getX() + 1, pos.getY(), pos.getZ(), privateArea) & 0x1280180) !== 0;
+        return (RegionManager.getClipping(pos.getX() + 1, pos.getY(), pos.getZ(), privateArea) & 0x12c0180) !== 0;
     }
 
     public static blockedSouth(pos: Location, privateArea: PrivateArea) {
-        return (RegionManager.getClipping(pos.getX(), pos.getY() - 1, pos.getZ(), privateArea) & 0x1280102) !== 0;
+        return (RegionManager.getClipping(pos.getX(), pos.getY() - 1, pos.getZ(), privateArea) & 0x12c0102) !== 0;
     }
 
     public static blockedWest(pos: Location, privateArea: PrivateArea): boolean {
-        return (RegionManager.getClipping(pos.getX() - 1, pos.getY(), pos.getZ(), privateArea) & 0x1280108) != 0;
+        return (RegionManager.getClipping(pos.getX() - 1, pos.getY(), pos.getZ(), privateArea) & 0x12c0108) != 0;
     }
 
     public static blockedNorthEast(pos: Location, privateArea: PrivateArea): boolean {
-        return (RegionManager.getClipping(pos.getX() + 1, pos.getY() + 1, pos.getZ(), privateArea) & 0x12801e0) != 0;
+        return (RegionManager.getClipping(pos.getX() + 1, pos.getY() + 1, pos.getZ(), privateArea) & 0x12c01e0) != 0;
     }
 
     public static blockedNorthWest(pos: Location, privateArea: PrivateArea): boolean {
-        return (RegionManager.getClipping(pos.getX() - 1, pos.getY() + 1, pos.getZ(), privateArea) & 0x1280138) != 0;
+        return (RegionManager.getClipping(pos.getX() - 1, pos.getY() + 1, pos.getZ(), privateArea) & 0x12c0138) != 0;
     }
 
     public static blockedSouthEast(pos: Location, privateArea: PrivateArea): boolean {
-        return (RegionManager.getClipping(pos.getX() + 1, pos.getY() - 1, pos.getZ(), privateArea) & 0x1280183) != 0;
+        return (RegionManager.getClipping(pos.getX() + 1, pos.getY() - 1, pos.getZ(), privateArea) & 0x12c0183) != 0;
     }
 
     public static blockedSouthWest(pos: Location, privateArea: PrivateArea): boolean {
-        return (RegionManager.getClipping(pos.getX() - 1, pos.getY() - 1, pos.getZ(), privateArea) & 0x128010e) != 0;
+        return (RegionManager.getClipping(pos.getX() - 1, pos.getY() - 1, pos.getZ(), privateArea) & 0x12c010e) != 0;
     }
     public static canProjectileAttack(attacker: Mobile, from: Location, to: Location): boolean {
         let a = from;
@@ -641,6 +648,12 @@ export class RegionManager {
         );
     }
 
+    private static getProjectileClipping(x: number, y: number, height: number, privateArea: PrivateArea): number {
+        // Dynamic NPC blockers must not enter the map clips used by movement pathfinding.
+        return RegionManager.getClipping(x, y, height, privateArea) |
+            (World.isProjectileBlockingNpcOnTile(x, y, height, privateArea) ? RegionManager.PROJECTILE_TILE_BLOCKED : 0);
+    }
+
     private static canProjectileRay(
         startX: number,
         startY: number,
@@ -671,12 +684,12 @@ export class RegionManager {
                 x += offsetX;
                 const y = Math.floor(scaledY / scale);
                 const atEnd = x === endX && y === endY;
-                if ((RegionManager.getClipping(x, y, height, privateArea) &
+                if ((RegionManager.getProjectileClipping(x, y, height, privateArea) &
                     (atEnd ? xFlags & ~RegionManager.PROJECTILE_TILE_BLOCKED : xFlags)) !== 0) return false;
                 scaledY += tangent;
                 const nextY = Math.floor(scaledY / scale);
                 const nextAtEnd = x === endX && nextY === endY;
-                if (nextY !== y && (RegionManager.getClipping(x, nextY, height, privateArea) &
+                if (nextY !== y && (RegionManager.getProjectileClipping(x, nextY, height, privateArea) &
                     (nextAtEnd ? yFlags & ~RegionManager.PROJECTILE_TILE_BLOCKED : yFlags)) !== 0) return false;
             }
         } else {
@@ -687,12 +700,12 @@ export class RegionManager {
                 y += offsetY;
                 const x = Math.floor(scaledX / scale);
                 const atEnd = x === endX && y === endY;
-                if ((RegionManager.getClipping(x, y, height, privateArea) &
+                if ((RegionManager.getProjectileClipping(x, y, height, privateArea) &
                     (atEnd ? yFlags & ~RegionManager.PROJECTILE_TILE_BLOCKED : yFlags)) !== 0) return false;
                 scaledX += tangent;
                 const nextX = Math.floor(scaledX / scale);
                 const nextAtEnd = nextX === endX && y === endY;
-                if (nextX !== x && (RegionManager.getClipping(nextX, y, height, privateArea) &
+                if (nextX !== x && (RegionManager.getProjectileClipping(nextX, y, height, privateArea) &
                     (nextAtEnd ? xFlags & ~RegionManager.PROJECTILE_TILE_BLOCKED : xFlags)) !== 0) return false;
             }
         }
@@ -708,36 +721,36 @@ export class RegionManager {
             for (let i = 0; i < xLength; i++) {
                 for (let i2 = 0; i2 < yLength; i2++)
                     if (diffX < 0 && diffY < 0) {
-                        if ((RegionManager.getClipping((currentX + i) - 1, (currentY + i2) - 1, height, privateArea) & 0x128010e) !== 0
-                            || (RegionManager.getClipping((currentX + i) - 1, currentY + i2, height, privateArea) & 0x1280108) !== 0
-                            || (RegionManager.getClipping(currentX + i, (currentY + i2) - 1, height, privateArea) & 0x1280102) !== 0)
+                        if ((RegionManager.getClipping((currentX + i) - 1, (currentY + i2) - 1, height, privateArea) & 0x12c010e) !== 0
+                            || (RegionManager.getClipping((currentX + i) - 1, currentY + i2, height, privateArea) & 0x12c0108) !== 0
+                            || (RegionManager.getClipping(currentX + i, (currentY + i2) - 1, height, privateArea) & 0x12c0102) !== 0)
                             return false;
                     } else if (diffX > 0 && diffY > 0) {
-                        if ((RegionManager.getClipping(currentX + i + 1, currentY + i2 + 1, height, privateArea) & 0x12801e0) !== 0
-                            || (RegionManager.getClipping(currentX + i + 1, currentY + i2, height, privateArea) & 0x1280180) !== 0
-                            || (RegionManager.getClipping(currentX + i, currentY + i2 + 1, height, privateArea) & 0x1280120) !== 0)
+                        if ((RegionManager.getClipping(currentX + i + 1, currentY + i2 + 1, height, privateArea) & 0x12c01e0) !== 0
+                            || (RegionManager.getClipping(currentX + i + 1, currentY + i2, height, privateArea) & 0x12c0180) !== 0
+                            || (RegionManager.getClipping(currentX + i, currentY + i2 + 1, height, privateArea) & 0x12c0120) !== 0)
                             return false;
                     } else if (diffX < 0 && diffY > 0) {
-                        if ((RegionManager.getClipping((currentX + i) - 1, currentY + i2 + 1, height, privateArea) & 0x1280138) !== 0
-                            || (RegionManager.getClipping((currentX + i) - 1, currentY + i2, height, privateArea) & 0x1280108) !== 0
-                            || (RegionManager.getClipping(currentX + i, currentY + i2 + 1, height, privateArea) & 0x1280120) !== 0)
+                        if ((RegionManager.getClipping((currentX + i) - 1, currentY + i2 + 1, height, privateArea) & 0x12c0138) !== 0
+                            || (RegionManager.getClipping((currentX + i) - 1, currentY + i2, height, privateArea) & 0x12c0108) !== 0
+                            || (RegionManager.getClipping(currentX + i, currentY + i2 + 1, height, privateArea) & 0x12c0120) !== 0)
                             return false;
                     } else if (diffX > 0 && diffY < 0) {
-                        if ((RegionManager.getClipping(currentX + i + 1, (currentY + i2) - 1, height, privateArea) & 0x1280183) !== 0
-                            || (RegionManager.getClipping(currentX + i + 1, currentY + i2, height, privateArea) & 0x1280180) !== 0
-                            || (RegionManager.getClipping(currentX + i, (currentY + i2) - 1, height, privateArea) & 0x1280102) !== 0)
+                        if ((RegionManager.getClipping(currentX + i + 1, (currentY + i2) - 1, height, privateArea) & 0x12c0183) !== 0
+                            || (RegionManager.getClipping(currentX + i + 1, currentY + i2, height, privateArea) & 0x12c0180) !== 0
+                            || (RegionManager.getClipping(currentX + i, (currentY + i2) - 1, height, privateArea) & 0x12c0102) !== 0)
                             return false;
                     } else if (diffX > 0 && diffY === 0) {
-                        if ((RegionManager.getClipping(currentX + i + 1, currentY + i2, height, privateArea) & 0x1280180) !== 0)
+                        if ((RegionManager.getClipping(currentX + i + 1, currentY + i2, height, privateArea) & 0x12c0180) !== 0)
                             return false;
                     } else if (diffX < 0 && diffY === 0) {
-                        if ((RegionManager.getClipping((currentX + i) - 1, currentY + i2, height, privateArea) & 0x1280108) !== 0)
+                        if ((RegionManager.getClipping((currentX + i) - 1, currentY + i2, height, privateArea) & 0x12c0108) !== 0)
                             return false;
                     } else if (diffX === 0 && diffY > 0) {
-                        if ((RegionManager.getClipping(currentX + i, currentY + i2 + 1, height, privateArea) & 0x1280120) !== 0)
+                        if ((RegionManager.getClipping(currentX + i, currentY + i2 + 1, height, privateArea) & 0x12c0120) !== 0)
                             return false;
                     } else if (diffX === 0 && diffY < 0
-                        && (RegionManager.getClipping(currentX + i, (currentY + i2) - 1, height, privateArea) & 0x1280102) !== 0)
+                        && (RegionManager.getClipping(currentX + i, (currentY + i2) - 1, height, privateArea) & 0x12c0102) !== 0)
                         return false;
 
             }

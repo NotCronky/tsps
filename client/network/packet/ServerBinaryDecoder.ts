@@ -714,14 +714,16 @@ export function decodeServerPacket(data: Uint8Array | ArrayBuffer): DecodedServe
 
         case ServerPacketId.NPC_INFO: {
             const loopCycle = reader.readInt();
-            const large = reader.readBoolean();
+            const npcFlags = reader.readByte();
+            const large = (npcFlags & 1) !== 0;
+            const crossFloor = (npcFlags & 2) !== 0;
             const rootTileX = reader.readShort();
             const rootTileY = reader.readShort();
             const packetLen = reader.readShort();
             const packet = reader.readBytes(packetLen);
             return {
                 type: "npc_info",
-                payload: { loopCycle, large, rootTileX, rootTileY, packet },
+                payload: { loopCycle, large, crossFloor, rootTileX, rootTileY, packet },
             };
         }
 
@@ -971,6 +973,23 @@ export function decodeServerPacket(data: Uint8Array | ArrayBuffer): DecodedServe
                 },
             };
 
+        case ServerPacketId.WIDGET_SET_ROTATE_SPEED: {
+            // IF_SETROTATESPEED: uid, then y (yaw) speed in the high short and x in the low,
+            // both signed graphics-cycle deltas (recording 1723).
+            const uid = reader.readInt();
+            const packed = reader.readInt();
+            const signed = (value: number) => (value > 0x7fff ? value - 0x10000 : value);
+            return {
+                type: "widget",
+                payload: {
+                    action: "set_rotate_speed",
+                    uid,
+                    speedX: signed(packed & 0xffff),
+                    speedY: signed((packed >>> 16) & 0xffff),
+                },
+            };
+        }
+
         case ServerPacketId.WIDGET_SET_POSITION:
             return {
                 type: "widget",
@@ -1122,39 +1141,6 @@ export function decodeServerPacket(data: Uint8Array | ArrayBuffer): DecodedServe
                 },
             };
 
-        case ServerPacketId.WIDGET_SET_QUEST_LIST: {
-            const groupCount = reader.readShort();
-            const groups: Array<{
-                title: string;
-                quests: Array<{ key: string; slot: number; status: number; displayName: string }>;
-            }> = [];
-            for (let i = 0; i < groupCount; i++) {
-                const title = reader.readString();
-                const questCount = reader.readShort();
-                const quests: Array<{
-                    key: string;
-                    slot: number;
-                    status: number;
-                    displayName: string;
-                }> = [];
-                for (let j = 0; j < questCount; j++) {
-                    quests.push({
-                        slot: reader.readShort(),
-                        status: reader.readByte(),
-                        key: reader.readString(),
-                        displayName: reader.readString(),
-                    });
-                }
-                groups.push({ title, quests });
-            }
-            return {
-                type: "widget",
-                payload: {
-                    action: "set_quest_list",
-                    groups,
-                },
-            };
-        }
 
         case ServerPacketId.CHAT_MESSAGE: {
             const messageTypes: Record<number, string> = {
@@ -1705,6 +1691,32 @@ export function decodeServerPacket(data: Uint8Array | ArrayBuffer): DecodedServe
 
         case ServerPacketId.RESET_INTERACTION_MODE: {
             return { type: "reset_interaction_mode", payload: { worldId: reader.readSignedShort() } };
+        }
+
+        case ServerPacketId.HIDE_NPC_OPS: {
+            return { type: "hide_npc_ops", payload: { hidden: (reader.readByte() & 0xff) !== 0 } };
+        }
+
+        case ServerPacketId.HIDE_OBJ_OPS: {
+            return { type: "hide_obj_ops", payload: { hidden: (reader.readByte() & 0xff) !== 0 } };
+        }
+
+        case ServerPacketId.LOC_MERGE: {
+            const locId = reader.readShort();
+            const tile = { x: reader.readShort(), y: reader.readShort() };
+            const level = reader.readByte();
+            const shapeRot = reader.readByte();
+            const playerIndex = reader.readShort();
+            const start = reader.readShort();
+            const end = reader.readShort();
+            const minX = (reader.readByte() << 24) >> 24;
+            const minZ = (reader.readByte() << 24) >> 24;
+            const maxX = (reader.readByte() << 24) >> 24;
+            const maxZ = (reader.readByte() << 24) >> 24;
+            return { type: "loc_merge", payload: {
+                locId, tile, level, shape: shapeRot >> 2, rotation: shapeRot & 3,
+                playerIndex, start, end, minX, minZ, maxX, maxZ,
+            } };
         }
 
         case ServerPacketId.LOC_ANIM: {

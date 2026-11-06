@@ -1,3 +1,4 @@
+import { CrossFloor } from "../game/CrossFloor";
 import { PluginManager } from "../plugins/PluginManager";
 import { MAX_GAME_MESSAGE_BYTES } from "./BinaryChannel";
 import { BoatManager } from "../game/content/sailing/BoatManager";
@@ -8,7 +9,7 @@ import { PacketBuilder } from "./packet/PacketBuilder";
 import { NetworkConstants } from "./NetworkConstants";
 import type { Player } from "../game/entity/impl/player/Player";
 import type { NpcExactMove } from "../game/entity/impl/npc/NPC";
-import type { Location } from "../game/model/Location";
+import { Location } from "../game/model/Location";
 import { Appearance } from "../game/model/Appearance";
 import { Flag } from "../game/model/Flag";
 import {
@@ -18,6 +19,8 @@ import {
   encodePlayerAppearance,
   encodeInitialPlayerSync,
   encodeLogoutResponse,
+  encodeHideNpcOps,
+  encodeHideObjOps,
   encodeWalkInteractionMode,
   encodeNpcSync,
   encodePlayerSync,
@@ -159,10 +162,14 @@ export class PlayerSession {
   }
 
   public isTileInScene(x: number, y: number, level: number): boolean {
-    return this.hasReplayedScene
-      && level === this.replayedSceneLevel
-      && x >= this.replayedSceneBaseX && x < this.replayedSceneBaseX + 104
-      && y >= this.replayedSceneBaseY && y < this.replayedSceneBaseY + 104;
+    if (!this.hasReplayedScene
+      || x < this.replayedSceneBaseX || x >= this.replayedSceneBaseX + 104
+      || y < this.replayedSceneBaseY || y >= this.replayedSceneBaseY + 104) return false;
+    if (level === this.replayedSceneLevel) return true;
+    const player = this.player;
+    return !!player && CrossFloor.visible(
+      player.getLocation(), new Location(x, y, level), 52,
+    );
   }
 
   private sendRebuildNormal(
@@ -223,6 +230,8 @@ export class PlayerSession {
    */
   public logout(): void {
     this.sendClientPacket(encodeWalkInteractionMode());
+    this.sendClientPacket(encodeHideNpcOps(false));
+    this.sendClientPacket(encodeHideObjOps(false));
     this.sendClientPacket(encodeLogoutResponse());
     this.flushPackets();
     this.channel.close?.(1000, "logout");
@@ -309,6 +318,10 @@ export class PlayerSession {
 
     const initialSync = !this.playerSyncState;
     if (initialSync) {
+      // Live sends hidenpcops=false and hideobjops=false at login, so a world switch cannot
+      // inherit the previous world's cutscene state; the client keeps the booleans across logins.
+      this.sendClientPacket(encodeHideNpcOps(false));
+      this.sendClientPacket(encodeHideObjOps(false));
       this.sceneBaseX = Math.max(0, (sceneTile.x - 48) & ~7);
       this.sceneBaseY = Math.max(0, (sceneTile.y - 48) & ~7);
     } else {
@@ -455,6 +468,7 @@ export class PlayerSession {
           const boat = BoatManager.getBoat(worldView);
           return boat ? { x: boat.deckBaseX, y: boat.deckBaseY, level: 0 } : undefined;
         },
+        CrossFloor.enabled(),
       )
     );
 

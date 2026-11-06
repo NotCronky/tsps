@@ -33,7 +33,8 @@ function tickIndex(at, offset) {
 }
 function emptyPatch(now, farm, weeds = 0) {
     return { stage: 0, weeds, compost: 0, watered: false, status: "growing", checked: false,
-        protected: false, lives: 0, nextAt: nextGrowth(now, Data.FORMULAS.growth.tickMinutes, farm.offset), plantedAt: now };
+        protected: false, lives: 0, plantExperiencePending: false,
+        nextAt: nextGrowth(now, Data.FORMULAS.growth.tickMinutes, farm.offset), plantedAt: now };
 }
 function startingLives(crop, compost) {
     if (Data.COMPOSTABLE_YIELD.has(crop.type)) return 3 + compost;
@@ -175,10 +176,11 @@ function nextDue(farm) {
     return due;
 }
 
-function advanceFarm(farm, now, random = Math.random) {
+function advanceFarm(farm, now, random = Math.random, onMature = null) {
     for (const { state } of patchStates(farm)) if (state.crop === "REDWOOD") Redwood.advance(state, now);
     const kronos = new Map();
     const planted = [];
+    const matured = [];
     for (const entry of patchStates(farm)) if (growing(entry.state)) planted.push(entry);
     for (;;) {
         let due;
@@ -213,6 +215,7 @@ function advanceFarm(farm, now, random = Math.random) {
             } else if (state.stage >= crop.stages) {
                 state.status = "grown";
                 state.lives = startingLives(crop, state.compost);
+                if (onMature) matured.push({ patch, state, at });
             } else if (Data.CACHE.states[crop.type][crop.key].DISEASED?.[state.stage] != null
                 && state.stage < crop.stages - (crop.type === "FRUIT_TREE" ? 1 : 0)
                 && !diseaseFree(farm, patch, state, at)
@@ -233,6 +236,7 @@ function advanceFarm(farm, now, random = Math.random) {
             state.nextAt = nextGrowth(now, Data.FORMULAS.growth.tickMinutes, farm.offset);
         }
     }
+    for (const entry of matured) onMature(entry.patch, entry.state, entry.at);
 }
 
 function patchValue(patch, state) {

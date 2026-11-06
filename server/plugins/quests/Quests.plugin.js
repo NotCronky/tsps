@@ -7,6 +7,7 @@
  * (King Roald, Reldo, ...) fall back to it after the other quests' handlers.
  */
 const QUESTS = [
+  "AlfredGrimhandsBarcrawl",
   "RecipeForDisaster",
   "WhileGuthixSleeps",
   "ANightAtTheTheatre",
@@ -19,7 +20,7 @@ const QUESTS = [
   "BigChompyBirdHunting", "Biohazard", "BlackKnightsFortress", "BoneVoyage",
   "CabinFever", "ChildrenOfTheSun", "ClientOfKourend", "ClockTower",
   "ColdWar", "Contact", "CooksAssistant", "CorsairCurse",
-  "CrabQuest", "CreatureOfFenkenstrain", "CurrentAffairs", "CurseOfArrav",
+  "CrabQuest", "CreatureOfFenkenstrain", "CurrentAffairs", "CurseOfArrav", "CurseOfTheEmptyLord",
   "DaddysHome",
   "DarknessOfHallowvale", "DeathOnTheIsle", "DeathPlateau", "DeathToTheDorgeshuun",
   // BearYourSoul also searches the Arceuus Library shelves; DepthsOfDespair's active

@@ -61,6 +61,8 @@ import { ServerPerf } from "../../../../util/ServerPerf";
 import { getSequencePriority } from "../../../cache/NpcAnimationScanner";
 import { LOGIN_TOKENS_ATTRIBUTE } from "../../../../net/login/LoginTokens";
 import { CacheDefinitions } from "../../../cache/CacheDefinitions";
+import type { GameObject } from "../object/GameObject";
+import { type LocMergeBounds, validateLocMerge } from "../../../../net/protocol/LocMerge";
 
 const ATTR_SKIP_PERSISTENCE = "bot-skip-persistence";
 const DEFAULT_AUDIO_SETTINGS: Readonly<Record<number, number>> = {
@@ -196,7 +198,7 @@ export class Player extends Mobile {
     public banks: Bank[] = Array(Bank.TOTAL_BANK_TABS).fill(null); // last index is for bank searches
     private searchingBank = false;
     private searchSyntax = "";
-    private fightType = FightType.UNARMED_KICK;
+    private fightType = FightType.UNARMED_PUNCH;
     public weapon: WeaponInterfaces = WeaponInterfaces.UNARMED;
     private autoRetaliate = true;
     private audioSettings: Record<number, number> = { ...DEFAULT_AUDIO_SETTINGS };
@@ -247,8 +249,10 @@ export class Player extends Mobile {
         PrayerHandler.deactivatePrayers(this);
         this.getEquipment().refreshItems();
         this.getInventory().refreshItems();
+        // Every level back to where it rests: the base, raised by a plugin's permanent boost
+        // (SkillManager.registerRestingLevelModifier), so a death keeps such a boost.
         for (let skill of Skill.values())
-            this.getSkillManager().setCurrentLevels(skill, this.getSkillManager().getMaxLevel(skill));
+            this.getSkillManager().setCurrentLevels(skill, this.getSkillManager().getRestingLevel(skill));
         this.setRunEnergy(100);
         this.getPacketSender().sendRunEnergy();
         this.getMovementQueue().setBlockMovement(false).reset();
@@ -290,13 +294,13 @@ export class Player extends Mobile {
     }
 
     public getAttackAnim(target?: Mobile): number {
-        const fightType = FightType.resolve(this.getFightType()) ?? FightType.UNARMED_KICK;
+        const fightType = FightType.resolve(this.getFightType()) ?? FightType.UNARMED_PUNCH;
         const againstNpc = target?.isNpc?.() === true;
         return WeaponProfiles.attackAnimation(this, fightType.getAnimationAgainst(againstNpc), againstNpc);
     }
 
     public getAttackSound(): Sound {
-        const fightType = FightType.resolve(this.getFightType()) ?? FightType.UNARMED_KICK;
+        const fightType = FightType.resolve(this.getFightType()) ?? FightType.UNARMED_PUNCH;
         return WeaponProfiles.get(this)?.attackSound ?? fightType.getAttackSound();
     }
 
@@ -987,6 +991,25 @@ export class Player extends Mobile {
         if (this.viewDistance < Player.PREFERRED_VIEW_DISTANCE) this.viewDistance++;
     }
 
+    /** Send the legacy loc_merge contract; revision241 consumes it without rendering changes. */
+    public mergeObject(object: GameObject, start: number, end: number, bounds: LocMergeBounds): this {
+        const location = object.getLocation();
+        const merge = {
+            ...bounds, locId: object.getId(), tile: { x: location.getX(), y: location.getY() },
+            level: location.getZ(), shape: object.getType(), rotation: object.getFace(),
+            playerIndex: this.getIndex(), start, end,
+        };
+        validateLocMerge(merge);
+        this.getPacketSender().sendObjectMerge(merge);
+        // View membership belongs to the recipient and can be asymmetric at crowded edges.
+        World.getPlayers().forEach(viewer => {
+            if (viewer !== this && viewer.getLocalPlayers().includes(this)) {
+                viewer.getPacketSender().sendObjectMerge(merge);
+            }
+        });
+        return this;
+    }
+
     public getLocalPlayers(): Player[] {
         return this.localPlayers;
     }
@@ -1510,7 +1533,7 @@ export class Player extends Mobile {
             }
         }
 
-        this.fightType = FightType.UNARMED_KICK;
+        this.fightType = FightType.UNARMED_PUNCH;
         return this.fightType;
     }
 

@@ -1,7 +1,7 @@
 // Run after `yarn build`: node --test tests/bow-specials.test.cjs
 // Magic shortbow Snapshot, Dark bow Descent and Ballista Concentrated Shot.
 const assert = require("node:assert/strict");
-const { test } = require("node:test");
+const { test, before } = require("node:test");
 
 const { Server } = require("../dist/Server");
 Server.installProductionPathResolver();
@@ -21,6 +21,8 @@ const projectiles = [];
 let rolledBounds = [];
 let sourceMax = 0;
 const hitDamageHandlers = [];
+const customHandlers = new Map();
+const synthSounds = [], areaSounds = [];
 const core = {
   ...PluginManager.getCoreApi(),
   CombatSpecial: Object.assign(Object.create(CombatSpecial), { drain: (_, amount) => drains.push(amount) }),
@@ -35,7 +37,7 @@ const core = {
   },
   DamageFormulas: { sourceMaxHit: () => sourceMax },
   PluginManager: { modifyRangedMaxHit: (_a, _t, maxHit) => maxHit },
-  Projectile: { createProjectile: (...args) => {
+  Projectile: { ticksToLand: (cycles) => Math.max(1, Math.ceil(cycles / 30)), createProjectile: (...args) => {
     const shot = { args };
     projectiles.push(shot);
     return {
@@ -44,16 +46,22 @@ const core = {
       sendProjectile() {},
     };
   } },
-  Sounds: { sendSound() {} },
+  Sounds: {
+    sendSound(entity,sound) { synthSounds.push({entity,id:sound.getId(),delay:sound.getDelay()}); },
+    playAreaSound(options) { areaSounds.push({...options}); },
+    playAreaSoundAt(entity,sound,radius) { const at=entity.getLocation(); areaSounds.push({ source:entity,soundId:sound.getId(),delay:sound.getDelay(),radius,x:at.getX?.(),y:at.getY?.(),level:at.getZ?.() }); },
+  },
 };
 const api = {
   core,
   registerCombatSpecial: CombatSpecial.register,
   onCombatHitDamage: (handler) => hitDamageHandlers.push(handler),
+  onCustomEvent: (name,handler) => customHandlers.set(name,handler),
 };
 require("../plugins/combat/specials/MagicShortbow.SpecialAttack")(api);
 require("../plugins/combat/specials/DarkBow.SpecialAttack")(api);
 require("../plugins/combat/specials/Ballista.SpecialAttack")(api);
+require("../plugins/combat/specials/WebweaverBow.SpecialAttack")(api);
 
 function fakePlayer({ weapon, ammo = Ammunition.RUNE_ARROW, rangedWeapon, special, ammoStrength = 0, rangedLevel = 99, activated = true }) {
   const state = { activated, special: CombatSpecial.getById(special), animations: 0, slotGraphics: [] };
@@ -75,7 +83,7 @@ function fakePlayer({ weapon, ammo = Ammunition.RUNE_ARROW, rangedWeapon, specia
         : { getId: () => 0, getDefinition: () => ({ getBonuses: () => ({ 11: ammoStrength }) }) },
     }),
     getSkillManager: () => ({ getCurrentLevel: () => rangedLevel }),
-    getLocation: () => ({ getDistance: () => 1 }),
+    getLocation: () => new core.Location(3200, 3200, 0),
     performAnimation: () => { state.animations++; },
     performGraphic: () => {},
     performGraphicInSlot: (slot, graphic) => state.slotGraphics.push({ slot, graphic }),
@@ -84,7 +92,7 @@ function fakePlayer({ weapon, ammo = Ammunition.RUNE_ARROW, rangedWeapon, specia
   return player;
 }
 
-const target = { getLocation: () => ({}), performGraphic: () => {}, isNpc: () => true };
+const target = { getLocation: () => new core.Location(3201, 3200, 0), performGraphic: () => {}, isNpc: () => true };
 
 function shoot(attacker, accurate, startingDamage = 0) {
   rolledBounds = [];
@@ -235,6 +243,33 @@ test("Descent of Darkness: other arrows hit up to 1.3x, at least 5, uncapped", (
   assert.equal(hit.bounds[0].minimumBonus, 0);
 });
 
+test("Dark bow cross-floor hits use finite horizontal projectile travel delays", (t) => {
+  const { CombatPosition, Location, WeaponProfiles } = core;
+  const previous = Object.fromEntries(["CROSS_FLOOR_VISIBILITY", "CROSS_FLOOR_COMBAT"].map(key => [key, process.env[key]]));
+  t.after(() => { for (const [key, value] of Object.entries(previous)) { if (value === undefined) delete process.env[key]; else process.env[key] = value; } });
+  process.env.CROSS_FLOOR_VISIBILITY = "1";
+  process.env.CROSS_FLOOR_COMBAT = "1";
+  t.mock.method(WeaponProfiles, "hitDelays", (_player, distance) => distance > 100
+    ? [1501199875790166, 3002399751580331]
+    : [1, 2]);
+  t.mock.method(core.PendingHit.prototype, "prepareHits", () => []);
+
+  const attacker = fakePlayer({ weapon: I.DARK_BOW, special: "dark_bow" });
+  attacker.getLocation = () => new Location(3200, 3200, 1);
+  const victim = {
+    ...target,
+    getLocation: () => new Location(3200, 3200, 0),
+    isNpc: () => true,
+    getHitpoints: () => 99,
+    isUntargetable: () => false,
+    isNeedsPlacement: () => false,
+  };
+  const hits = CombatSpecial.getById("dark_bow").getCombatMethod().hits(attacker, victim);
+
+  assert.equal(CombatPosition.projectileDistance(attacker, victim), 0);
+  assert.deepEqual(hits.map((hit) => hit.getDelay()), [2, 2]);
+});
+
 test("a dark bow arrow that misses still deals the minimum", () => {
   const dragon = fakePlayer({ weapon: I.DARK_BOW, ammo: Ammunition.DRAGON_ARROW, special: "dark_bow" });
   sourceMax = 40;
@@ -314,7 +349,7 @@ test("Descent serializes both captured player-target flight arcs at different di
 
 test("Descent measures its flights in combat coordinates across boat decks", (t) => {
   const { Location, CombatPosition } = core;
-  t.mock.method(CombatPosition, "distance", () => 4);
+  t.mock.method(CombatPosition, "projectileDistance", () => 4);
   projectiles.length = 0;
   const attacker = fakePlayer({ weapon: I.DARK_BOW, rangedWeapon: RangedWeapon.DARK_BOW, special: "dark_bow", ammo: Ammunition.DRAGON_ARROW });
   attacker.getLocation = () => new Location(16000, 16000, 0);
@@ -382,7 +417,7 @@ test("Snapshot and Descent each launch two independently delayed hits", (t) => {
     player.getEquipment = () => ({ getItems: () => items });
     player.getWeapon = () => profile;
     player.getFightType = () => null;
-    player.getLocation = () => ({ getDistance: () => 6 });
+    player.getLocation = () => new core.Location(3195, 3200, 0);
     const hits = CombatSpecial.getById(special).getCombatMethod().hits(player, target);
     assert.deepEqual(hits.map((hit) => hit.getDelay()), expected);
     assert.equal(hits.length, 2);
@@ -408,4 +443,101 @@ test("ordinary Descent rolls before clamping so over-cap rolls keep their probab
   assert.equal(shot.bounds[0].maximumBonus, 60);
   assert.equal(shot.bounds[0].minimumBonus, 0);
   assert.equal(shot.damage, 48);
+});
+
+
+test("Webweaver Swarm rolls four independent hits, each capped at ceil(40% max)", (t) => {
+  const { AccuracyFormulasDpsCalc, Misc, RangedCombatMethod } = core;
+  const { BonusManager } = require("../dist/game/model/equipment/BonusManager");
+  const { DamageFormulas } = PluginManager.getCoreApi();
+  t.mock.method(RangedCombatMethod, "playerHitDelays", () => [2]);
+  t.mock.method(DamageFormulas, "effectiveRangedStrength", () => 500);
+  const accuracyRolls = [];
+  t.mock.method(AccuracyFormulasDpsCalc, "rollAccuracyCount", (...args) => {
+    accuracyRolls.push(args);
+    return 1;
+  });
+  const damageRolls = [];
+  t.mock.method(Misc, "randomInclusive", (minimum, maximum) => {
+    damageRolls.push([minimum, maximum]);
+    return maximum;
+  });
+
+  const attacker = fakePlayer({ weapon: I.WEBWEAVER_BOW, special: "webweaver_bow" });
+  attacker.isNpc = () => false;
+  attacker.getBonusManager = () => ({ getOtherBonus: () => ({ [BonusManager.RANGED_STRENGTH]: 0, [BonusManager.STRENGTH]: 0 }) });
+  const victim = {
+    ...target,
+    isPlayer: () => false,
+    getHitpoints: () => 200,
+    getCombat: () => ({ getLastDamager: () => null }),
+  };
+  const hits = CombatSpecial.getById("webweaver_bow").getCombatMethod().hits(attacker, victim);
+
+  assert.equal(hits.length, 4, "the four Swarm hits are four PendingHits");
+  assert.deepEqual(hits.map((hit) => hit.getHits().length), [1, 1, 1, 1], "each PendingHit rolls one splat, not four");
+  assert.equal(hits.flatMap((hit) => hit.getHits()).length, 4, "four hit splats total");
+  assert.equal(accuracyRolls.length, 4, "one independent accuracy roll per hit");
+  assert.equal(damageRolls.length, 4, "one damage roll per hit");
+  assert.deepEqual(damageRolls.map(([, maximum]) => maximum), [20, 20, 20, 20], "each hit caps at ceil(40% of 50)");
+  assert.equal(hits.reduce((total, hit) => total + hit.getTotalDamage(), 0), 80);
+});
+
+before(async () => {
+  await require('../dist/game/cache/CachePipeline').CachePipeline.initialize(require('node:path').resolve(__dirname,'..'));
+  new (require('../dist/game/definition/loader/impl/NpcDefinitionLoader').NpcDefinitionLoader)().load();
+  require('../plugins/items/ItemDefinitionLoader.plugin').register({ log() {},onPlayerLogin() {},registerContentEndpoint() {} });
+});
+
+test('raw Dark Bow dragon and shadow impacts are queued once per arrow at the original target tile', () => {
+  const { Location }=core;
+  for (const [npc,distance,ends,ammo] of [
+    [true,9,[91,145],Ammunition.DRAGON_ARROW],
+    [false,3,[64,85],Ammunition.RUNE_ARROW],
+  ]) {
+    const archer=fakePlayer({weapon:I.DARK_BOW,ammo,rangedWeapon:RangedWeapon.DARK_BOW,special:'dark_bow'});
+    archer.getLocation=()=>new Location(3005,3309+distance);
+    let location=new Location(3005,3309);
+    const victim={getLocation:()=>location,isNpc:()=>npc,performGraphic() {}};
+    areaSounds.length=0;synthSounds.length=0;
+    CombatSpecial.getById('dark_bow').getCombatMethod().start(archer,victim);
+    assert.deepEqual(synthSounds.map(s=>s.id),ammo===Ammunition.DRAGON_ARROW?[3731,3733]:[3731,3736],'private activation contract from attacker273 is retained');
+    assert.deepEqual(areaSounds.map(s=>[s.soundId,s.delay,s.radius,s.x,s.y]),ends.map(delay=>[3737,delay,10,3005,3309]),npc?'raw273 tick497':'raw2510 tick940');
+    location=new Location(3010,3310);
+    assert.ok(areaSounds.every(s=>s.x===3005&&s.y===3309),'scheduled impact locations are independent of later target movement/removal');
+  }
+});
+
+test('Dark Bow target doublefire is emitted by the actual first attack after equipping, with stale ranged state empty', t => {
+  const { Player }=require('../dist/game/entity/impl/player/Player');
+  const { WeaponInterfaceManager }=require('../dist/game/content/combat/WeaponInterfaceManager');
+  const real=PluginManager.getCoreApi();
+  const api=PluginManager.createApi('DarkBowFirstAttackTest');
+  api.onCustomEvent('combat:attack-started',customHandlers.get('combat:attack-started'));
+  const player=new Player(null);player.setUsername('darkbow-first');player.setIndex(1805);
+  const sender=new Proxy({}, {get:()=>()=>sender});player.getPacketSender=()=>sender;player.getSession=()=>({sendClientPacket:()=>true});
+  player.setLocation(new real.Location(3220,3220));player.setRegistered(true);player.setNeedsPlacement(false);
+  for (const skill of real.Skill.values()) {player.getSkillManager().setCurrentLevel(skill,99);player.getSkillManager().setMaxLevel(skill,99);}
+  real.RegionManager.init();real.RegionManager.loadMapFiles(3220,3220);
+  player.getEquipment().set(Equipment.WEAPON_SLOT,new real.Item(I.DARK_BOW));
+  player.getEquipment().set(Equipment.AMMUNITION_SLOT,new real.Item(I.DRAGON_ARROW,30));
+  WeaponInterfaceManager.assign(player);
+  player.getCombat().setRangedWeapon(null);player.getCombat().setAmmunition(null);
+  const victim=PluginManager.spawnNpc({id:real.NpcIdentifiers.MUGGER_2,x:3220,y:3224});
+  victim.setHitpoints(500);victim.setNeedsPlacement(false);victim.getMovementQueue().setBlockMovement(true);
+  t.after(()=> {
+    player.getCombat().reset();player.setRegistered(false);PluginManager.removeNpc(victim);real.World.unregisterPlayerPosition(player);
+    const hooks=PluginManager.customEventHooks.get('combat:attack-started')??[];
+    PluginManager.customEventHooks.set('combat:attack-started',hooks.filter(h=>h.pluginName!=='DarkBowFirstAttackTest'));
+  });
+  areaSounds.length=0;player.getCombat().attack(victim);
+  for(let i=0;i<12&&areaSounds.length===0;i++) {
+    real.World.processCycle++;real.TaskManager.process();
+    player.getCombat().preMovementProcess();player.getMovementQueue().process();player.getCombat().postMovementProcess();
+  }
+  assert.equal(player.getCombat().getRangedWeapon(),RangedWeapon.DARK_BOW,'native method resolution populated ranged state');
+  assert.equal(areaSounds.length,1,'one target sound on the first accepted ordinary shot');
+  const sound=areaSounds[0];
+  assert.deepEqual([sound.soundId,sound.x,sound.y,sound.radius],[3731,3220,3224,10]);
+  assert.equal(sound.source,victim);assert.equal(sound.exclude,player,'the archer retains only the private launch');
 });

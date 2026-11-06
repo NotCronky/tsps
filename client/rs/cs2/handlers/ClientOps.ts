@@ -8,6 +8,7 @@ import {
     DEFAULT_SCREEN_WIDTH,
 } from "../../../game/ClientState";
 import { getClientClock } from "../../../game/TransmitCycles";
+import { getRebootTimer } from "../../../network/serverConnection/timing";
 import { getSafeAreaBounds } from "../../../common/utils/DeviceUtil";
 import { isMobileClient, reportedClientType } from "../ClientType";
 import { VARBIT_ROOF_REMOVAL } from "../../../common/vars";
@@ -16,6 +17,7 @@ import { chatHistory } from "../ChatHistory";
 import { getHoverTarget, getInteractionCanvases, minMenuSnapshot, type MinMenuSnapshot } from "../minimenu";
 import { Opcodes } from "../Opcodes";
 import type { HandlerMap } from "./HandlerTypes";
+import { menuOptionDisplayText } from "../../../ui/menu/menuOptionDisplayText";
 
 const DEVICE_OPTION_INTERFACE_SCALING = 27;
 // Fixed layout toplevel (OSRS fixed mode).
@@ -249,7 +251,7 @@ export function registerClientOps(handlers: HandlerMap): void {
     });
 
     handlers.set(Opcodes.REBOOTTIMER, (ctx) => {
-        ctx.pushInt(-1);
+        ctx.pushInt(getRebootTimer());
     });
 
     handlers.set(Opcodes.PLAYERMOD, (ctx) => {
@@ -988,7 +990,8 @@ export function registerClientOps(handlers: HandlerMap): void {
 
     handlers.set(Opcodes.MINIMENU_ENTRY, (ctx) => {
         const snap = getMinMenuSnapshot(ctx);
-        ctx.pushString(snap.option);
+        // Shown text only (script 4726's mouseover); the snapshot keeps the game's option.
+        ctx.pushString(menuOptionDisplayText(snap.option));
         ctx.pushString(snap.target);
     });
 
@@ -1621,8 +1624,9 @@ export function registerClientOps(handlers: HandlerMap): void {
     });
 
     handlers.set(Opcodes.OPENURL, (ctx) => {
-        ctx.intStackSize--; // pop internal
-        ctx.stringStackSize--; // pop url
+        const newWindow = ctx.intStack[--ctx.intStackSize] === 1;
+        const url = String(ctx.stringStack[--ctx.stringStackSize] ?? "");
+        ctx.openUrl?.(url, newWindow);
     });
 
     // bug_report(template, string, string)

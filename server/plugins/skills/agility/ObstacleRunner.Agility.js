@@ -20,7 +20,8 @@
  *   { tele: [x, y, z?] }              place the player on a tile (plane changes)
  *   { wait: ticks }                   continue after this many ticks
  *   { face: [x, y] } | { faceDir: "north" | ... }
- *   { hit: n | [min, max] }           damage the player
+ *   { hit: n | [min, max] | { percent, plus } }
+ *                                     damage the player (the last: floor(HP * percent / 100) + plus)
  *   { msg: message } | { say: text }  chat message (see `sendMessage`) / overhead text
  *   { varbit: [id, value] }           set a player varbit (a multiloc's side, say)
  *   { sound: id, loops?, delay? }     sound effect (delay in client cycles)
@@ -28,6 +29,8 @@
  *                                     a sound at a tile, for every player near it
  *   { gfx: id, delay?, height? }      play a graphic on the player (delay in client cycles)
  *   { objAnim: id }                   animate the obstacle object
+ *   { merge: { start, end, minX, minZ, maxX, maxZ } }
+ *                                     send the legacy merge contract in client cycles
  *   { complete: true }                the obstacle counts as done here (XP, messages, the lap);
  *                                     the steps after it still play (a step off the landing)
  *   { run: (ctx) => void }            escape hatch for one-off behaviour
@@ -123,7 +126,9 @@ function sendMessage(player, message) {
 function hit(player, amount) {
   const damage = Array.isArray(amount)
     ? amount[0] + Math.floor(Math.random() * (amount[1] - amount[0] + 1))
-    : amount;
+    : typeof amount === "object"
+      ? Math.floor((player.getHitpoints() * amount.percent) / 100) + (amount.plus ?? 0)
+      : amount;
   if (damage > 0) {
     player.getCombat().getHitQueue().addPendingDamage([new HitDamage(damage, HitMask.RED)]);
   }
@@ -280,6 +285,11 @@ function createObstacleTask(Task) {
         player.performGraphic(step.height
           ? new Graphic(step.gfx, step.delay ?? 0, step.height)
           : new Graphic(step.gfx, step.delay ?? 0));
+      } else if (step.merge) {
+        if (this.context.object) {
+          const { start, end, ...bounds } = step.merge;
+          player.mergeObject(this.context.object, start, end, bounds);
+        }
       } else if (step.objAnim != null) {
         if (this.context.object) {
           player.getPacketSender().sendObjectAnimation(this.context.object, new Animation(step.objAnim));

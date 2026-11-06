@@ -95,6 +95,7 @@ function createPlayer(x, y, z, level = 99, { skills = {}, worn = [], held = [], 
     getUpdateFlag: () => ({ flag() {} }),
     performAnimation: (animation) => state.animations.push(animation.getId()),
     performGraphic() {},
+    mergeObject: (object, start, end, bounds) => { state.merges = [...(state.merges ?? []), { object, start, end, bounds }]; },
     setPositionToFace() {},
     forceChat() {},
     sendMessage: (message) => state.messages.push(message),
@@ -502,6 +503,39 @@ test("the shortcut data refuses unknown kinds, scripts, animations and keys", ()
   assert.throws(() => build({ ...base, script: "nope" }, 0), /unknown script "nope"/);
   assert.throws(() => build({ ...base, steps: [{ anim: "NOT_AN_ANIM" }] }, 0)[0].steps, /unknown animation "NOT_AN_ANIM"/);
   assert.throws(() => build({ ...base, steps: [], colour: "red" }, 0), /unknown key "colour"/);
+});
+
+test("cache-rotated Kandarin stiles route to the near side and cross their long footprint (#2871)", () => {
+  const { RegionManager } = require("../dist/game/collision/RegionManager");
+  const { MapObjects } = require("../dist/game/entity/impl/object/MapObjects");
+  RegionManager.init();
+  const placements = [
+    { at: [2761, 3436, 0], ends: [[2761, 3435, 0], [2761, 3438, 0]], approaches: [[2761, 3433, 0], [2761, 3440, 0]] },
+    { at: [2638, 3350, 0], ends: [[2637, 3350, 0], [2640, 3350, 0]] },
+    { at: [2647, 3375, 0], ends: [[2646, 3375, 0], [2649, 3375, 0]] },
+    { at: [2655, 3347, 0], ends: [[2654, 3347, 0], [2657, 3347, 0]] },
+    { at: [2917, 3438, 0], ends: [[2916, 3438, 0], [2919, 3438, 0]] },
+  ];
+  for (const { at, ends, approaches = ends } of placements) {
+    RegionManager.loadMapFiles(at[0], at[1]);
+    const object = MapObjects.get(ObjectIds.STILE, new Location(...at), null);
+    assert.ok(object, `cache stile at ${at}`);
+    for (const side of [0, 1]) {
+      const from = ends[side], to = ends[1 - side];
+      assert.equal(RegionManager.blocked(new Location(...from), null), false, "approach is walkable");
+      assert.equal(RegionManager.blocked(new Location(...to), null), false, "landing is walkable");
+      const player = createPlayer(...approaches[side], 1);
+      const route = { player, object, objectId: ObjectIds.STILE, clickType: 1, destination: null };
+      hooks.route.forEach(handler => handler(route));
+      assert.deepEqual(route.destination, { x: from[0], y: from[1], z: from[2] },
+        `the approach stays on side ${side} at ${at}`);
+      // Arrival is fixtured here; live MCP covers the actual approach path.
+      player.setLocation(new Location(...from));
+      assert.notEqual(operate(player, ObjectIds.STILE, at, object.getFace()), false);
+      assert.deepEqual(tileOf(player), to, `crossing from side ${side} at ${at}`);
+      assert.equal(player.state.xp, 0, "a level-1 stile grants no XP");
+    }
+  }
 });
 
 test("native Lizardman Canyon handholds enter and leave both crossings at level 1", () => {
@@ -1466,7 +1500,7 @@ test("Ape Atoll: the rope won't take a pet across (Wiki)", () => {
   }
 });
 
-test("Wilderness Agility dispenser (Wiki): a paid lap started without Tag resets the streak and the unclaimed ticket and reward; the payment stays", () => {
+test("Wilderness Agility dispenser (Wiki): a paid lap started without Tag resets the streak but keeps the unclaimed ticket and reward; the payment stays", () => {
   const listeners = {};
   const Dispenser = require("../plugins/skills/AgilityDispenser.plugin");
   Dispenser.register(new Proxy({
@@ -1475,6 +1509,9 @@ test("Wilderness Agility dispenser (Wiki): a paid lap started without Tag resets
   }, { get: (target, key) => (key in target ? target[key] : () => {}) }));
   const answers = ["agility:lap", "agility:obstacle-start"];
   for (const name of answers) hooks.answers[name] = listeners[name];
+  const random = Math.random;
+  // The Wilderness obstacles can fail even at 99; this is about the dispenser, so the laps pass.
+  Math.random = () => 0;
   try {
     const course = COURSES.find((entry) => entry.key === "wilderness");
     const player = createPlayer(3004, 3937, 0);
@@ -1484,11 +1521,18 @@ test("Wilderness Agility dispenser (Wiki): a paid lap started without Tag resets
     assert.equal(varbit("wildy_agility_reward_lap_new"), 1, "a paid lap: streak 1");
     assert.equal(varbit("wildy_agility_reward_available"), 1);
     player.setLocation(new Location(3004, 3937, 0));
-    runLap(course, player);
+    runLap(course, player, {
+      beforeLast: () => {
+        assert.equal(player.getAttribute(Dispenser.ATTRIBUTES.ticket), 1,
+          "starting another lap does not lose the pending ticket (#2711)");
+        assert.equal(player.getAttribute(Dispenser.ATTRIBUTES.reward), 1, "nor the pending reward");
+      },
+    });
     assert.equal(varbit("wildy_agility_reward_lap_new"), 1, "the untagged lap's pipe reset it, so this lap starts again at 1");
     assert.equal(player.getAttribute(Dispenser.ATTRIBUTES.deposit), 1, "the payment stays");
     assert.equal(varbit("wildy_agility_token_available"), 1, "this lap's own ticket");
   } finally {
+    Math.random = random;
     for (const name of answers) delete hooks.answers[name];
   }
 });
@@ -1774,7 +1818,7 @@ test("Agility Pyramid blocks slide out over two ticks, wait two, and slide back:
   assert.deepEqual([north.npc, north.home, north.dir], [5787, [3366, 2845, 3], [0, 1]]);
 });
 
-test("course pipes replay the squeeze with every crawl, so no weapon shows on the way", () => {
+test("course pipes replay the squeeze with every crawl", () => {
   const SQUEEZE_PIPE = 749; // human_doublepipesqueeze: both hands empty
   const pipes = [
     ["gnome", ObjectIds.OBSTACLE_PIPE_10, { x: 2484, y: 3430, z: 0 }],
@@ -1793,4 +1837,105 @@ test("course pipes replay the squeeze with every crawl, so no weapon shows on th
   const wildy = COURSES.find((entry) => entry.key === "wilderness").obstacles.find((entry) => entry.object === ObjectIds.OBSTACLE_PIPE_9);
   const route = wildy.steps({ player: null, obj: null, pos: { x: 3004, y: 3937, z: 0 } }).filter((step) => step.move || step.tele).map((step) => (step.move ?? step.tele)[1]);
   assert.deepEqual(route, [3940, 3947, 3950]);
+
+  // rsprox 449 sends SEQUENCE 749 exactly twice, on the two crawl ticks; the unseen middle tick
+  // has no sequence.
+  const steps = wildy.steps({ player: null, obj: null, pos: { x: 3004, y: 3937, z: 0 } });
+  assert.equal(steps.filter((step) => step.anim === SQUEEZE_PIPE).length, 2);
+  const gap = steps.findIndex((step) => step.tele);
+  assert.notEqual(gap, -1);
+  assert.equal(steps[gap + 1].anim, undefined, "no third sequence on the unseen tick");
+
+  // rsprox 449: each crawl's 30-cycle sequence delay and its exact-move start are the same cycle,
+  // so the client's native hand-override gate empties the hands exactly as the crawl begins.
+  for (const move of steps.filter((step) => step.anim === SQUEEZE_PIPE)) {
+    assert.equal(move.delay, 30);
+    assert.deepEqual(move.speed, [30, 126]);
+  }
+});
+
+test("Wilderness ridge door: opening the south door and the north gates swaps the captured locs for two ticks (rsprox 449/450)", () => {
+  const { RIDGE, openRidgeDoor, openRidgeGates } = require("../plugins/skills/agility/shortcuts/Wilderness.Agility")._test;
+  const events = [];
+  const placed = new Map();
+  const key = (id, tile) => `${id}:${tile[0]},${tile[1]},${tile[2]}`;
+  const place = (id, tile) => placed.set(key(id, tile), {
+    getId: () => id,
+    getLocation: () => new Location(tile[0], tile[1], tile[2]),
+  });
+  place(RIDGE.door, RIDGE.doorTile);
+  place(RIDGE.gateLeft, RIDGE.gateLeftTile);
+  place(RIDGE.gateRight, RIDGE.gateRightTile);
+  const core = {
+    Location,
+    GameObject: class {
+      constructor(id, location, type, face) { this.id = id; this.location = location; this.face = face; }
+      getId() { return this.id; }
+      getLocation() { return this.location; }
+    },
+    MapObjects: { get: (id, location) => placed.get(key(id, [location.getX(), location.getY(), location.getZ()])) ?? null },
+    ObjectManager: {
+      register: (object) => events.push(["register", object.getId()]),
+      deregister: (object) => events.push(["deregister", object.getId()]),
+    },
+    Task: class { constructor(delay, key) { this.delay = delay; this.key = key; } stop() { this.stopped = true; } },
+    TaskManager: { submit: (task) => events.push(["task", task]) },
+  };
+  const context = { core, player: { getPrivateArea: () => null } };
+
+  assert.equal(openRidgeDoor(context), true);
+  assert.deepEqual(events.slice(0, 3), [
+    ["deregister", RIDGE.door], ["register", RIDGE.invisWall], ["register", RIDGE.prisonDoorOpen],
+  ]);
+  assert.equal(events[3][0], "task");
+  const doorTask = events[3][1];
+  assert.equal(doorTask.delay, 2);
+  events.length = 0;
+  doorTask.execute();
+  assert.deepEqual(events, [
+    ["deregister", RIDGE.invisWall], ["deregister", RIDGE.prisonDoorOpen], ["register", RIDGE.door],
+  ]);
+
+  events.length = 0;
+  assert.equal(openRidgeGates(context), true);
+  assert.deepEqual(events.filter(([kind]) => kind !== "task"), [
+    ["deregister", RIDGE.gateLeft], ["deregister", RIDGE.gateRight],
+    ["register", RIDGE.invisWall], ["register", RIDGE.invisWall],
+    ["register", RIDGE.gateOpenLeft], ["register", RIDGE.gateOpenRight],
+  ]);
+
+  // A missing gate leaf leaves every closed loc in place: no partial swap.
+  placed.delete(key(RIDGE.gateRight, RIDGE.gateRightTile));
+  events.length = 0;
+  assert.equal(openRidgeGates(context), false);
+  assert.deepEqual(events, []);
+
+  const enter = require("../plugins/skills/agility/shortcuts/Wilderness.Agility").wildernessRidgeIn();
+  assert.deepEqual(enter.end, { spam: RIDGE.endIn });
+  assert.deepEqual(enter.steps[0], { msg: { spam: RIDGE.start } });
+  assert.deepEqual(enter.steps[2], { walk: [[2998, 3931]] });
+  const leave = require("../plugins/skills/agility/shortcuts/Wilderness.Agility").wildernessRidgeOut();
+  assert.deepEqual(leave.end, { spam: RIDGE.endOut });
+  assert.deepEqual(leave.steps[2], { walk: [[2998, 3918]] });
+  assert.deepEqual(leave.steps[4], { walk: [[2998, 3916]] });
+});
+
+test("Fossil Island sea-floor obstacles and holes each give 4.5 Agility XP (Wiki: Underwater Agility and Thieving)", () => {
+  const obstacles = [
+    [30962, [3758, 10260, 1], [3757, 10260, 1], 3759],
+    [30962, [3726, 10245, 1], [3725, 10245, 1], 3727],
+    [30962, [3824, 10264, 1], [3825, 10264, 1], 3823],
+    [30964, [3754, 10244, 1], [3754, 10243, 1], null],
+    [30964, [3808, 10253, 1], [3807, 10253, 1], 3809],
+  ];
+  for (const [object, at, from, landingX] of obstacles) {
+    const player = createPlayer(...from);
+    operate(player, object, at);
+    assert.equal(player.state.xp, 4.5, `${object} at ${at}`);
+    if (landingX != null) assert.equal(tileOf(player)[0], landingX, `${object} at ${at} crosses`);
+  }
+  const hole = createPlayer(3754, 10243, 1);
+  operate(hole, 30966, [3754, 10241, 1]);
+  assert.equal(hole.state.xp, 4.5);
+  assert.deepEqual(tileOf(hole), [3779, 10241, 1]);
 });

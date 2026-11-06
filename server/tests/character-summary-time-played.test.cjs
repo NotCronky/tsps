@@ -16,8 +16,12 @@ journal.register({
   persistAttribute: (key) => { (hooks.persisted ??= []).push(key); },
   onCustomEvent: (name, handler) => { hooks[name] = handler; },
   onPlayerLogin: (handler) => { hooks.login = handler; },
-  onPlayerLogout: (handler) => { hooks.logout = handler; },
+  onPlayerLogout: (handler) => {
+    const previous = hooks.logout;
+    hooks.logout = event => { previous?.(event); handler(event); };
+  },
   onExperienceGained: (handler) => { hooks.experience = handler; },
+  registerCustomInterface() {}, onCanGainExperience() {}, onPlayerProcess() {},
   onInterfaceActionButton: (id, handler) => handlers.push({ id, handler }),
   emitCustomEvent: () => {},
 });

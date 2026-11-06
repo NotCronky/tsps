@@ -35,7 +35,7 @@ function xericsTeleportType() {
  * Charged pieces, most charges first. `spent` is what the last charge leaves
  * behind (null when it crumbles); `eternal` ids never lose charges.
  *
- * Each destination is `{ label, tile }`; `tile` may be a function of the player.
+ * Each destination is `{ label, tile }`; `tile` may be a function of the player and plugin API.
  * `aliases` match worn-option names that differ from the dialogue label.
  */
 const JEWELLERY = [
@@ -108,7 +108,11 @@ const JEWELLERY = [
     destinations: [
       { label: "Burthorpe", tile: [2898, 3552, 0] },
       { label: "Barbarian Outpost", tile: [2519, 3572, 0] },
-      { label: "Corporeal Beast", tile: [2967, 4381, 2] },
+      { label: "Corporeal Beast", tile: (player, api) => {
+        const request = { player, tile: [2967, 4381, 2] };
+        api?.emitCustomEvent?.("corporeal:teleport-destination", request);
+        return request.tile;
+      } },
       { label: "Tears of Guthix", tile: [3245, 9500, 2] },
       { label: "Wintertodt Camp", tile: [1627, 3941, 0] },
     ],

@@ -1,18 +1,16 @@
 // TODO: ported from xrsps-typescript; untested.
 module.exports = function registerWebweaverBowSpecialAttack(api) {
-  const { Animation, CombatFactory, CombatSpecial, Graphic, ItemIdentifiers, Misc, PendingHit, RangedCombatMethod, WeaponProfiles } = api.core;
+  const { Animation, CombatFactory, CombatPosition, CombatSpecial, Graphic, ItemIdentifiers, Misc, PendingHit, RangedCombatMethod } = api.core;
 
   const DRAIN = 50;
   const SPECIAL_ANIMATION = new Animation(9964);
   const SPECIAL_VFX = new Graphic(2354);
   const IMPACT_GRAPHIC = new Graphic(2355);
-  const HIT_COUNT = 4;
   const POISON_POTENCY = 4;
 
   class WebweaverBowCombatMethod extends RangedCombatMethod {
     hits(character, target) {
-      const distance = character.getLocation().getDistance(target.getLocation());
-      const hitDelay = WeaponProfiles.hitDelays(character.getAsPlayer(), distance)[0];
+      const hitDelay = RangedCombatMethod.playerHitDelays(character, target, CombatPosition.projectileDistance(character, target))[0];
       // Swarm resolves in two close hitsplat groups of two independent rolls.
       return [
         new PendingHit(character, target, this, hitDelay),
@@ -52,11 +50,9 @@ module.exports = function registerWebweaverBowSpecialAttack(api) {
     drainAmount: DRAIN,
     strengthMultiplier: 1,
     accuracyMultiplier: 1,
-    // TODO: the Wilderness PvM passive (1.5x accuracy and damage) is target-tile
-    // dependent and cannot be varied by static core traits; only the base Swarm
-    // multipliers are registered.
+    // The target-dependent Wilderness passive is supplied by WebweaverBow.plugin.js.
     traits: {
-      hitCount: HIT_COUNT,
+      hitCount: 1,
       accuracyMultiplier: 2,
       accuracyMultiplierStages: [2],
       damageMultiplier: 0.4,
