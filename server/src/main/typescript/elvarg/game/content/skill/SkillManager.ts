@@ -122,7 +122,12 @@ export class SkillManager {
         return this.addExperience(skill, experience, true);
     }
 
-    addExperience(skill: Skill, experience: number, multipliers: boolean): SkillManager {
+    /**
+     * `multipliers` applies the world's rate and the player's own (a league character's): every
+     * gain takes them, reward XP included (lamps, tomes, quest rewards; #3672). Only content whose
+     * amount must not be multiplied (a league relic's bonus) passes false.
+     */
+    addExperience(skill: Skill, experience: number, multipliers: boolean = true): SkillManager {
         if (!skill || typeof skill.getIndex !== "function") {
             return this;
         }
@@ -135,9 +140,8 @@ export class SkillManager {
         }
 
         // Multipliers: the world's rate, then the player's own (a league profile's rate).
-        if (multipliers) {
-            experience *= GameConstants.EXPERIENCE_MULTIPLIER * gate.multiplier;
-        }
+        const rate = multipliers ? GameConstants.EXPERIENCE_MULTIPLIER * gate.multiplier : 1;
+        experience *= rate;
         // OSRS counts experience in tenths: a gain keeps its tenths and drops the rest
         // (4/3 per damage is 1.3 for one damage). The epsilon keeps 3.3 from reading as 3.29999.
         experience = Math.floor(experience * 10 + 1e-6) / 10;
@@ -192,8 +196,9 @@ export class SkillManager {
         // What landed: the gain less anything over the experience cap.
         PluginManager.emitExperienceGained({ player: this.player, skill, experience: this.skills.experience[skillIndex] - currentExperience });
         // The gain as it was added (after the rates and the tenths), for content that reacts to
-        // experience itself (a league relic's bonus XP). `multiplied` says whether the rates applied.
-        PluginManager.emitCustomEvent("skills:experience-gained", { player: this.player, skill, experience, multiplied: multipliers });
+        // experience itself (a league relic's bonus XP). `multiplied` says whether the rates applied,
+        // and `rate` is what they came to (1 when they didn't).
+        PluginManager.emitCustomEvent("skills:experience-gained", { player: this.player, skill, experience, multiplied: multipliers, rate });
         return this;
     }
 
@@ -585,6 +590,11 @@ export class SkillManager {
             if (restore.amount !== amount && Number.isFinite(restore.amount) && restore.amount >= 0) amount = Math.floor(restore.amount);
         }
         const curr = this.getCurrentLevel(skill);
+        // An increase never lowers a level: one already at or past the cap (Prayer over base from an ancient brew,
+        // then a restore capped at base) stays where it is.
+        if (curr >= max) {
+            return;
+        }
         if ((curr + amount) > max) {
             this.setCurrentLevels(skill, max);
             return;

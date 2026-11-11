@@ -60,6 +60,8 @@ const MINIMAP_STATE_VARBIT = "minimap_state";
 const BUSY_VARBIT = "busy";
 const PREVIOUS_DESTINATION_ATTRIBUTE = "charter-ships:previous-destination";
 const SKIP_CONFIRMATION_ATTRIBUTE = "charter-ships:skip-confirmation";
+/** All Settings > Warnings: "Charter Ships confirmation" (on: sail without the fare question). */
+const SKIP_CONFIRMATION_SETTING = 294;
 
 const CABIN_FEVER = "cabin_fever";
 const TRADING_POST_SHOP_ID = 1354; // shops.json "Trader Stan's Trading Post"
@@ -368,13 +370,17 @@ function sail(player, destination, fare, dontAskAgain = false) {
     offerFare(player, destination, fare);
     return;
   }
+  // The deck must be a place the passenger may go before the fare is taken: a league area still locked refuses
+  // here ("You haven't unlocked that area yet.") rather than taking the coins and sending them back on landing
+  // (Wiki: Charter ship). Only the destination is asked (TeleportHandler.destinationAllowed): a voyage is no teleport,
+  // so it leaves a teleblock running, as before.
+  if (!core.TeleportHandler.destinationAllowed(player, new core.Location(destination.deck.x, destination.deck.y, destination.deck.z))) {
+    return;
+  }
   const voyage = { landing: false, from: port };
   voyages.set(player, voyage);
   setPreviousDestination(player, destination);
-  if (dontAskAgain) {
-    player.setAttribute(SKIP_CONFIRMATION_ATTRIBUTE, true);
-    setVarbit(player, CONFIRM_WARNING_VARBIT, 1);
-  }
+  if (dontAskAgain) setSkipConfirmation(player, true);
   inventory.deleteNumber(core.ItemIdentifiers.COINS, fare);
   inventory.refreshItems?.();
   const sender = player.getPacketSender();
@@ -438,6 +444,17 @@ function sail(player, destination, fare, dontAskAgain = false) {
 
 function skipConfirmation(player) {
   return player.getAttribute(SKIP_CONFIRMATION_ATTRIBUTE) === true;
+}
+
+function setSkipConfirmation(player, skip) {
+  player.setAttribute(SKIP_CONFIRMATION_ATTRIBUTE, skip);
+  setVarbit(player, CONFIRM_WARNING_VARBIT, skip ? 1 : 0);
+}
+
+function confirmationSettingClicked(request) {
+  if (request.settingId !== SKIP_CONFIRMATION_SETTING) return;
+  request.handled = true;
+  setSkipConfirmation(request.player, !skipConfirmation(request.player));
 }
 
 /** The tick each re-asked fare question was opened on, so a click already in flight on that tick is not its answer. */
@@ -599,10 +616,11 @@ function start(api) {
 
 module.exports = {
   name: "CharterShips",
+  description: "Charter ship crew: pay a fare to sail between ports on the map, or trade with them, with Ring of Charos discounts and Sailing ports.",
   members: true,
   _test: {
     destinations, portAt, portOf, available, fareBetween, fareFor, choose, sail, offerFare, openMap,
-    charter, charterToLast, chooseOnMap, mapClosed, transcriptOpensMap, answerTranscriptCondition,
+    charter, charterToLast, chooseOnMap, mapClosed, transcriptOpensMap, answerTranscriptCondition, confirmationSettingClicked,
     reset: () => { rows = null; fareData = null; },
     PREVIOUS_DESTINATION_ATTRIBUTE, SKIP_CONFIRMATION_ATTRIBUTE,
   },
@@ -611,6 +629,7 @@ module.exports = {
     api.persistAttribute(PREVIOUS_DESTINATION_ATTRIBUTE, 0);
     api.persistAttribute(SKIP_CONFIRMATION_ATTRIBUTE, false);
     api.onPlayerLogin(restore);
+    api.onCustomEvent("settings:setting-clicked", confirmationSettingClicked);
     api.core.Mobile.onBeforeTeleport(voyageInterrupted);
     api.onNpcsInteraction(TRADERS, { Charter: charter, Trade: openTradingPost });
     api.onNpcInteraction(charterToLast);

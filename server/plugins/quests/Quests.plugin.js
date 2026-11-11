@@ -133,6 +133,13 @@ function questsForWorld({ WorldDefinition }) {
 
 module.exports = {
   name: "Quests",
+  description: "Registers every implemented quest from the quests folder, members and free-to-play, plus their shared widgets and ground items.",
+  config: {
+    "quests:equipment-requirements": {
+      type: "boolean", label: "Quest equipment and spellbook requirements", default: true,
+      help: "Require quest completion for equipment and spellbook access, and boss kills for ancient rings. Turn off to remove these restrictions. Player bots bypass equipment requirements.",
+    },
+  },
   QUESTS,
   register(api) {
     registerWatchtowerGroundItems(api);

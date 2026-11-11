@@ -7,6 +7,7 @@ const UNITS = [
   require("./slayer/State.Slayer"),
   require("./slayer/Tasks.Slayer"),
   require("./slayer/Choice.Slayer"),
+  require("./slayer/Offer.Slayer"),
   require("./slayer/Masters.Slayer"),
   require("./slayer/Combat.Slayer"),
   require("./slayer/Checks.Slayer"),
@@ -24,6 +25,7 @@ const UNITS = [
 
 module.exports = {
   name: "Slayer",
+  description: "Slayer: tasks, masters, points and rewards, superiors, finishers, and the slaughter and expeditious bracelets, built on the cache's Slayer tables.",
   members: true,
   register(api) {
     for (const unit of UNITS) unit.init?.(api);

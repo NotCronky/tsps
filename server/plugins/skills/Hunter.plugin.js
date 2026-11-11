@@ -25,6 +25,7 @@ const LAY_GROUND_OPTION = 4;
 
 module.exports = {
   name: "Hunter",
+  description: "Hunter: traps, birdhouses, crabs, drift nets, implings, rumours, tracking, aerial fishing and herbiboar.",
   members: true,
   register(api) {
     api.onServerStartup(Runtime.start.bind(null, api));
@@ -99,7 +100,7 @@ module.exports = {
     api.onObjectInteraction("Plant door", { Navigate: DriftNets.exit });
     for (const name of ["Huntmaster Gilman (Novice)", "Guild Hunter Cervus (Adept)", "Guild Hunter Ornus (Adept)",
       "Guild Hunter Aco (Expert)", "Guild Hunter Teco (Expert)", "Guild Hunter Wolf (Master)"])
-      api.onNpcInteraction(name, { "Talk-to": Rumours.interact, Rumour: Rumours.interact });
+      api.onNpcInteraction(name, { "Talk-to": Rumours.interact, Rumour: Rumours.rumour });
     api.onNpcInteraction("Guild Scribe Verity", { "Talk-to": Rumours.verity, "Rumour-settings": Rumours.verity });
     for (const name of ["Hunters' loot sack (basic)", "Hunters' loot sack (adept)", "Hunters' loot sack (expert)", "Hunters' loot sack (master)"])
       api.onItemAction(name, { Open: Rumours.open });

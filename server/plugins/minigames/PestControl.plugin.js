@@ -1078,6 +1078,7 @@ function createPestControl(api) {
   api.onNpcInteraction("Void Knight", { Exchange: exchangeRewards });
   api.onInterfaceActionButton(Rewards.CONFIRM_UID, Rewards.confirmReward);
   api.onNpcInteraction("Squire", { "Talk-to": talkToMatchSquire, Leave: leaveMatch });
+  api.onCustomEvent("escape-crystal:escape", escapeCrystal);
 
   api.onCanAttack((event) => {
     const player = event.attacker?.getAsPlayer?.();
@@ -1170,8 +1171,23 @@ function leaveMatch({ player, npc }) {
   player.moveTo(OUTPOST_RETURN.clone());
 }
 
+/**
+ * The escape crystal in a match (Wiki: Escape crystal, "Where it works"): off the island as the
+ * Squire's Leave takes the player, back to the outpost. The shared EscapeCrystal plugin decides
+ * when it fires and uses it up (`escape-crystal:escape`).
+ */
+function escapeCrystal(request) {
+  const match = request.handled ? null : request.player.getAttribute?.("pest-control:match");
+  if (!(match instanceof PestControlMatch)) return;
+  request.handled = true;
+  match.area.leave(request.player, false);
+  request.player.moveTo(OUTPOST_RETURN.clone());
+  request.escaped = true;
+}
+
 module.exports = {
   name: "PestControl",
+  description: "Adds Pest Control: novice, intermediate and veteran boats, portals, void knight defence, commendation points and the Squire's shop.",
   members: true,
   register(api) {
     AreaManager = api.getAreaManager();
@@ -1199,6 +1215,7 @@ module.exports = {
     Bots,
     PestControlMatch,
     gateGroupKey,
+    escapeCrystal,
     releaseMatchPlayer,
     cleanupMatchNpcs,
     resetStructures,

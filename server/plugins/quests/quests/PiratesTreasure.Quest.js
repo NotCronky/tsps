@@ -51,6 +51,8 @@ module.exports = function registerPiratesTreasureQuest(api) {
   const SHIP_AT_SEA_CHUNK = { sourceChunkX: 3064 >> 3, sourceChunkY: 3208 >> 3, sourcePlane: 1, rotation: 0 };
   const SHIP_JOURNEY_INTERFACE = 299;
   const SHIP_JOURNEY_SCRIPT = 1131;
+  /** toplevel_mainmodal_open: ship_journey's brown (0x2a1e06) fills the screen, as captured; cleared on landing. */
+  const MAIN_MODAL_OPEN = 2524, SHIP_JOURNEY_BACKGROUND = [0x2a1e06, 0], NO_MODAL_BACKGROUND = [-1, -1];
   const TO_KARAMJA_ROUTE = 4;
   const TO_PORT_SARIM_ROUTE = 5;
   const SHIP_JOURNEY_TICKS = 9;
@@ -626,7 +628,7 @@ module.exports = function registerPiratesTreasureQuest(api) {
     player.moveTo(ship.tile(0, 0, 0));
     ship.enter(player);
     const sender = player.getPacketSender();
-    sender.sendSong(SEA_SONG).sendJingle(SAILING_JINGLE, 0)
+    sender.sendSong(SEA_SONG).sendJingle(SAILING_JINGLE, 0).sendInterfaceScript(MAIN_MODAL_OPEN, SHIP_JOURNEY_BACKGROUND)
       .sendInterface(SHIP_JOURNEY_INTERFACE).sendClientScript(SHIP_JOURNEY_SCRIPT, route);
     for (const slot of [COMBAT_TAB, PRAYER_TAB, MAGIC_TAB, ...VOYAGE_TABS.map(([tab]) => tab)]) {
       sender.closeSubInterface((TOPLEVEL << 16) | slot);
@@ -654,7 +656,7 @@ module.exports = function registerPiratesTreasureQuest(api) {
     for (const [slot, group] of VOYAGE_TABS) sender.sendTabInterface(slot, group);
     player.getInventory().refreshItems();
     player.getEquipment().refreshItems();
-    sender.sendInterfaceRemoval();
+    sender.sendInterfaceRemoval().sendInterfaceScript(MAIN_MODAL_OPEN, NO_MODAL_BACKGROUND);
   }
 
   function payForBananas(player) {
@@ -772,6 +774,9 @@ module.exports = function registerPiratesTreasureQuest(api) {
   /**
    * The same closed door breaks the crate's route from the shop, so a crate click that
    * starts inside the shop is stepped through the door first, then walked to the crate.
+   * The step is a placement: until it lands, getMobility() is INVALID and walkToTile drops
+   * a walk, so a route destination set in the same tick was lost and only a second click
+   * searched. The walk waits for the placement instead (a new click cancels it, as any walk).
    */
   function handleObjectRoute(event) {
     if (event.objectId === STOCK_ROOM_DOOR_ID) {
@@ -786,8 +791,19 @@ module.exports = function registerPiratesTreasureQuest(api) {
       && sourceLocation.y >= y - 3 && sourceLocation.y <= y + 4;
     if (!inShop || !isEmployed(player, 2) || !wearingApron(player)) return;
     const z = player.getLocation().getZ();
+    const search = String(event.definition?.getInteractions?.()?.[event.clickType - 1] ?? "").toLowerCase().includes("search");
     player.moveTo(new Location(x - 1, y, z));
-    event.destination = { x: STORE_CRATE_TILE.x + 1, y: STORE_CRATE_TILE.y, z };
+    const walkToCrate = (tries) => TaskManager.submit(new CountdownTask(player.getIndex(), 1, () => {
+      if (player.isNeedsPlacement() && tries < 3) {
+        walkToCrate(tries + 1);
+        return;
+      }
+      player.getMovementQueue().walkToTile(new Location(STORE_CRATE_TILE.x + 1, STORE_CRATE_TILE.y, z), () => {
+        player.setPositionToFace(new Location(STORE_CRATE_TILE.x, STORE_CRATE_TILE.y, z));
+        if (search) searchStoreCrate(player);
+      });
+    }));
+    walkToCrate(0);
   }
 
   function closeChest(player) {

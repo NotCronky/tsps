@@ -77,7 +77,7 @@ const api = {
     ChatType: { SPAM: "spam" },
     TaskManager: { submit: (task) => tasks.push(task), cancelTasks: (key) => tasks.forEach((task) => task.key === key && task.stop()) },
     StatementDialogue: { send: (player, text) => player.sent.boxes.push(text) },
-    TeleportHandler: { checkReqs: () => true, teleport: () => assert.fail("a ferry must not cast a teleport") },
+    TeleportHandler: { checkReqs: () => true, destinationAllowed: () => true, teleport: () => assert.fail("a ferry must not cast a teleport") },
     TeleportType: { NORMAL: "NORMAL" },
   },
   onNpcInteraction: (handler) => hooks.npc.push(handler),
@@ -206,24 +206,27 @@ test("Take-boat to Entrana: the captured search line, ship_journey route 1, the 
   click(player, "Monk of Entrana", "Take-boat", { gameval: "shipmonk" });
   assert.deepEqual(player.sent.messages, ["After a quick search, the monk smiles at you and allows you to board."]);
   assert.deepEqual(player.sent.interfaces, [299]);
-  assert.deepEqual(player.sent.scripts, [[1131, 1]]);
+  // toplevel_mainmodal_open first: ship_journey's brown fills the screen (rev241/242 captures).
+  const journey = [[2524, 0x2a1e06, 0], [1131, 1]];
+  assert.deepEqual(player.sent.scripts, journey);
   assert.deepEqual(player.sent.songs, [147]);
   assert.deepEqual(player.sent.jingles, [172]);
   assert.ok(player.area, "at sea on the ship instance");
   assert.ok(player.blocked);
   assert.equal(click(player, "Monk of Entrana", "Take-boat", { gameval: "shipmonk" }).handled, true);
-  assert.deepEqual(player.sent.scripts, [[1131, 1]], "a second click while sailing does nothing");
+  assert.deepEqual(player.sent.scripts, journey, "a second click while sailing does nothing");
   tick(13);
   assert.deepEqual(at(player), [3064, 3208, 1]);
   tick(1);
   assert.deepEqual(at(player), [2834, 3331, 1]);
   assert.deepEqual(player.sent.boxes, ["The ship arrives at Entrana."]);
+  assert.deepEqual(player.sent.scripts, [...journey, [2524, -1, -1]], "landing clears the background for the next modal");
   assert.equal(player.blocked, false);
   assert.equal(player.area, null);
 });
 
 test("the monks turn back weapons or armour, worn or carried, with the transcript's own refusal", () => {
-  const sword = ItemIdentifiers.BRONZE_SWORD;
+  const sword = ItemIdentifiers.BRONZE_SHORTSWORD;
   const armed = createPlayer({ items: [sword] });
   click(armed, "Monk of Entrana", "Take-boat", { gameval: "shipmonk1_b" });
   assert.equal(armed.sent.interfaces.length, 0, "no boat");
@@ -253,7 +256,7 @@ test("the transcript's travel steps sail; Jarvald's paid trip takes 1,000 coins 
   const event = step("XkS9kZ");
   assert.equal(event.handled, true);
   assert.equal(event.end, true, "the transcript stops; the voyage says the ship arrives");
-  assert.deepEqual(player.sent.scripts, [[1131, 10]]);
+  assert.deepEqual(player.sent.scripts, [[2524, 0x2a1e06, 0], [1131, 10]]);
   tick(11);
   assert.deepEqual(at(player), [2663, 2676, 1]);
 
@@ -419,6 +422,39 @@ test("Jeb rows across under seaslug_boat_travel and lands on the platform with i
   tick(6);
   assert.deepEqual(player.sent.boxes, ["You arrive at the fishing platform."]);
   assert.equal(player.blocked, false);
+});
+
+test("Holgart's Sea Slug legs row under their own layers, play the silence song and land on the captured ticks", () => {
+  // Capture 20261110T112750 (rev 242): the platform -> Witchaven leg fades at 427, lands at 429 with
+  // song 147 and jingle 172 under layer 11, and shows its message box at 438 (eleven ticks on).
+  const player = createPlayer({ at: new Location(2782, 3274, 0) });
+  const request = { player, route: "sea-slug-witchaven", handled: false };
+  for (const handler of hooks.events.get("ferries:travel")) handler(request);
+  assert.equal(request.handled, true);
+  tick(2);
+  assert.deepEqual(at(player), [2722, 3305, 0]);
+  assert.deepEqual(player.sent.songs, [147]);
+  assert.deepEqual(player.sent.jingles, [172]);
+  assert.deepEqual(player.sent.shown, [CacheDefinitions.getComponentId("seaslug_boat_travel:seaslug_fishpier_to_witchhaven_layer")]);
+  tick(8);
+  assert.deepEqual(player.sent.boxes, [], "not yet at tick 10");
+  tick(1);
+  assert.deepEqual(player.sent.boxes, ["The boat arrives at Witchaven."]);
+  assert.equal(player.blocked, false);
+
+  // The island legs (ticks 172 and 220): layers 12 and 13.
+  for (const [route, layer, to] of [
+    ["sea-slug-island", "seaslug_fishpier_to_isle_layer", [2800, 3320, 0]],
+    ["sea-slug-island-return", "seaslug_isle_to_fishpier_layer", [2782, 3273, 0]],
+    ["sea-slug-platform", "seaslug_witchhaven_to_fishingpier_layer", [2782, 3273, 0]],
+  ]) {
+    const rower = createPlayer({ at: new Location(2782, 3274, 0) });
+    for (const handler of hooks.events.get("ferries:travel")) handler({ player: rower, route });
+    tick(2);
+    assert.deepEqual(at(rower), to, route);
+    assert.deepEqual(rower.sent.shown, [CacheDefinitions.getComponentId(`seaslug_boat_travel:${layer}`)], route);
+    tick(10);
+  }
 });
 
 test("a logout at sea lands the player at the destination; a shutdown lands everyone", () => {
@@ -675,7 +711,7 @@ test("Entrana boarding credit follows only an accepted outward voyage", () => {
   const back = createPlayer({ at: new Location(2829, 3335, 0) });
   click(back, "Monk of Entrana", "Take-boat", { gameval: "shipmonk2" });
   assert.deepEqual(boarded, [outward]);
-  const armed = createPlayer({ at: new Location(3045, 3235, 0), items: [ItemIdentifiers.BRONZE_SWORD] });
+  const armed = createPlayer({ at: new Location(3045, 3235, 0), items: [ItemIdentifiers.BRONZE_SHORTSWORD] });
   click(armed, "Monk of Entrana", "Take-boat", { gameval: "shipmonk" });
   assert.deepEqual(boarded, [outward]);
 });

@@ -100,28 +100,11 @@ export class TeleportHandler {
      *            The location to teleport to.
      * @param teleportType
      *            The type of teleport.
+     * @param _wildernessWarning
+     *            Unused. A Wilderness teleport's warning is asked before the teleport starts, by the spell or
+     *            tablet that has one (the SpellTeleports plugin), so nothing is used up if the player says no.
      */
-    public static teleport(player: Player, targetLocation: Location, teleportType: TeleportType, wildernessWarning: boolean, onArrival?: () => void, onMiddle?: () => void): void {
-        if (wildernessWarning) {
-            let warning = "";
-            const wilderness = Wilderness.isInLocation(targetLocation);
-            const wildernessLevel = Wilderness.levelAt(targetLocation.getX(), targetLocation.getY());
-            if (wilderness) {
-                warning += "Are you sure you want to teleport there? ";
-                if (wildernessLevel > 0) {
-                    warning += "It's in level @red@" + wildernessLevel + "@bla@ wilderness! ";
-                    if (Wilderness.isMulti(targetLocation.getX(), targetLocation.getY(), targetLocation.getZ())) {
-                        warning += "Additionally, @red@it's a multi zone@bla@. Other players may attack you simultaneously.";
-                    } else {
-                        warning += "Other players will be able to attack you.";
-                    }
-                } else {
-                    warning += "Other players will be able to attack you.";
-                }
-                return;
-            }
-        }
-
+    public static teleport(player: Player, targetLocation: Location, teleportType: TeleportType, _wildernessWarning: boolean, onArrival?: () => void, onMiddle?: () => void): void {
         player.getMovementQueue().setBlockMovement(true).reset();
         this.onTeleporting(player);
         player.performAnimation(teleportType.getStartAnimation());
@@ -173,6 +156,16 @@ export class TeleportHandler {
             return false;
         }
 
+        return TeleportHandler.destinationAllowed(player, targetLocation, wildernessLevelLimit, spellName);
+    }
+
+    /**
+     * Whether content lets the player go to `targetLocation` ("teleport:can-start", the area's canTeleport, the plugins'
+     * onCanTeleport: a league area still locked, a minigame's own rules), with no side effects and none of checkReqs'
+     * own checks (busy, Wilderness level, teleblock, blocked movement). For travel that isn't a teleport, such as a
+     * charter ship or a ferry, which must not end a teleblock.
+     */
+    public static destinationAllowed(player: Player, targetLocation: Location, wildernessLevelLimit: number = 20, spellName?: string): boolean {
         // Content can refuse a teleport without changing the area's existing override policy.
         const restriction = { player, destination: targetLocation, wildernessLevelLimit, spellName, allow: null as boolean | null };
         PluginManager.emitCustomEvent("teleport:can-start", restriction);

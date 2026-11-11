@@ -827,6 +827,9 @@ function landCatch(player, tool, variant, caught, spotId = null) {
     if (!variant.infernal || !InfernalHarpoon.tryCookFish(player, fish.id)) {
       giveCatch(player, fish.id, amount, fish.experience * xpMultiplier);
       spam(player, fish.message(amount));
+      // Junk (a casket, an old boot) is no fish, so it is its own event: "fishing:junk"
+      // { player, itemId, amount }, for a league's "Obtain a Casket from Fishing" or an old boot.
+      if (fish.junk) pluginApi.emitCustomEvent("fishing:junk", { player, itemId: fish.id, amount });
     }
     if (variant.crystal) {
       CrystalHarpoon.tryUseCharge(player);
@@ -1034,6 +1037,7 @@ function pauseFishing(event) {
 
 module.exports = {
   name: "Fishing",
+  description: "Fishing at all spot types: nets, cages, harpoons, rods and karambwan vessels, with tool animations, rolls and catches.",
   register(api) {
     pluginApi = api;
     TaskManager = api.getTaskManager();

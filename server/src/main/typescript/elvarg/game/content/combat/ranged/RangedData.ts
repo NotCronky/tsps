@@ -437,7 +437,7 @@ export class RangedWeapon {
 
     public static readonly LONGBOW = new RangedWeapon([839], [Ammunition.BRONZE_ARROW, Ammunition.IRON_ARROW], RangedWeaponType.LONGBOW)
     public static readonly SHORTBOW = new RangedWeapon([841], [Ammunition.BRONZE_ARROW, Ammunition.IRON_ARROW], RangedWeaponType.SHORTBOW)
-    public static readonly TRAINING_BOW = new RangedWeapon([ItemIdentifiers.TRAINING_BOW], [Ammunition.TRAINING_ARROWS], RangedWeaponType.SHORTBOW)
+    public static readonly TRAINING_BOW = new RangedWeapon([ItemIdentifiers.TRAINING_SHORTBOW], [Ammunition.TRAINING_ARROWS], RangedWeaponType.SHORTBOW)
     public static readonly OAK_LONGBOW = new RangedWeapon([845], [Ammunition.BRONZE_ARROW, Ammunition.IRON_ARROW, Ammunition.STEEL_ARROW], RangedWeaponType.LONGBOW)
     public static readonly OAK_SHORTBOW = new RangedWeapon([843], [Ammunition.BRONZE_ARROW, Ammunition.IRON_ARROW, Ammunition.STEEL_ARROW], RangedWeaponType.SHORTBOW)
     public static readonly WILLOW_LONGBOW = new RangedWeapon([847], [Ammunition.BRONZE_ARROW, Ammunition.IRON_ARROW, Ammunition.STEEL_ARROW, Ammunition.MITHRIL_ARROW], RangedWeaponType.LONGBOW)
@@ -448,6 +448,9 @@ export class RangedWeapon {
     public static readonly YEW_SHORTBOW = new RangedWeapon([857], [Ammunition.BRONZE_ARROW, Ammunition.IRON_ARROW, Ammunition.STEEL_ARROW, Ammunition.MITHRIL_ARROW, Ammunition.ADAMANT_ARROW, Ammunition.RUNE_ARROW, Ammunition.ICE_ARROW], RangedWeaponType.SHORTBOW)
     public static readonly MAGIC_LONGBOW = new RangedWeapon([859], [Ammunition.BRONZE_ARROW, Ammunition.IRON_ARROW, Ammunition.STEEL_ARROW, Ammunition.MITHRIL_ARROW, Ammunition.ADAMANT_ARROW, Ammunition.RUNE_ARROW, Ammunition.ICE_ARROW, Ammunition.BROAD_ARROW, Ammunition.AMETHYST_ARROW], RangedWeaponType.LONGBOW)
     public static readonly MAGIC_SHORTBOW = new RangedWeapon([861, ItemIdentifiers.MAGIC_SHORTBOW_I_, ItemIdentifiers.MAGIC_SHORTBOW_3], [Ammunition.BRONZE_ARROW, Ammunition.IRON_ARROW, Ammunition.STEEL_ARROW, Ammunition.MITHRIL_ARROW, Ammunition.ADAMANT_ARROW, Ammunition.RUNE_ARROW, Ammunition.ICE_ARROW, Ammunition.BROAD_ARROW, Ammunition.AMETHYST_ARROW], RangedWeaponType.SHORTBOW)
+    // Wiki (Bone shortbow): magic shortbow offensive stats, shortbow speed and range, "can fire up to
+    // amethyst arrows". Without an entry here the bow fell back to melee: melee experience, no arrows.
+    public static readonly BONE_SHORTBOW = new RangedWeapon([ItemIdentifiers.BONE_SHORTBOW], [Ammunition.BRONZE_ARROW, Ammunition.IRON_ARROW, Ammunition.STEEL_ARROW, Ammunition.MITHRIL_ARROW, Ammunition.ADAMANT_ARROW, Ammunition.RUNE_ARROW, Ammunition.ICE_ARROW, Ammunition.BROAD_ARROW, Ammunition.AMETHYST_ARROW], RangedWeaponType.SHORTBOW)
     // Wiki: 3rd Age bow shoots at shortbow speed with a 9-tile range and can fire dragon arrows.
     public static readonly THIRD_AGE_BOW = new RangedWeapon([ItemIdentifiers._3RD_AGE_BOW], [Ammunition.BRONZE_ARROW, Ammunition.IRON_ARROW, Ammunition.STEEL_ARROW, Ammunition.MITHRIL_ARROW, Ammunition.ADAMANT_ARROW, Ammunition.RUNE_ARROW, Ammunition.ICE_ARROW, Ammunition.BROAD_ARROW, Ammunition.AMETHYST_ARROW, Ammunition.DRAGON_ARROW, Ammunition.SEEKING_DRAGON_ARROW], RangedWeaponType.SHORTBOW)
     public static readonly CRYSTAL_BOW = new RangedWeapon(CRYSTAL_BOW_ALL_WEAPON_IDS, [Ammunition.CRYSTAL_BOW], RangedWeaponType.CRYSTAL_BOW)
@@ -462,7 +465,9 @@ export class RangedWeapon {
         (arrows) => new RangedWeapon([arrows.getItemId()], [arrows], RangedWeaponType.CRYSTAL_BOW)
     );
     public static readonly CRAWS_BOW = new RangedWeapon([ItemIdentifiers.CRAWS_BOW, ItemIdentifiers.CRAWS_BOW_2], [Ammunition.CRAWS_BOW], RangedWeaponType.SHORTBOW)
-    public static readonly SEERCULL = new RangedWeapon([ItemIdentifiers.SEERCULL], [Ammunition.BRONZE_ARROW, Ammunition.IRON_ARROW, Ammunition.STEEL_ARROW, Ammunition.MITHRIL_ARROW, Ammunition.ADAMANT_ARROW, Ammunition.RUNE_ARROW, Ammunition.ICE_ARROW, Ammunition.BROAD_ARROW, Ammunition.AMETHYST_ARROW, Ammunition.DRAGON_ARROW, Ammunition.SEEKING_DRAGON_ARROW], RangedWeaponType.SHORTBOW)
+    // Wiki (Seercull): arrows "up to Amethyst"; Dragon arrow: "only usable with the dark bow, twisted bow, venator bow,
+    // scorching bow, and the 3rd Age bow".
+    public static readonly SEERCULL = new RangedWeapon([ItemIdentifiers.SEERCULL], [Ammunition.BRONZE_ARROW, Ammunition.IRON_ARROW, Ammunition.STEEL_ARROW, Ammunition.MITHRIL_ARROW, Ammunition.ADAMANT_ARROW, Ammunition.RUNE_ARROW, Ammunition.ICE_ARROW, Ammunition.BROAD_ARROW, Ammunition.AMETHYST_ARROW], RangedWeaponType.SHORTBOW)
     public static readonly TWISTED_BOW = new RangedWeapon([ItemIdentifiers.TWISTED_BOW], [Ammunition.BRONZE_ARROW, Ammunition.IRON_ARROW, Ammunition.STEEL_ARROW, Ammunition.MITHRIL_ARROW, Ammunition.ADAMANT_ARROW, Ammunition.RUNE_ARROW, Ammunition.ICE_ARROW, Ammunition.BROAD_ARROW, Ammunition.AMETHYST_ARROW, Ammunition.DRAGON_ARROW, Ammunition.SEEKING_DRAGON_ARROW], RangedWeaponType.TWISTED_BOW)
 
     /** Wiki: fires any arrow, charged or not. */

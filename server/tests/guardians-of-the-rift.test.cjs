@@ -51,9 +51,12 @@ function fakeNpc(definition) {
     heal: (amount) => { npc.hp = Math.min(npc.getMaxHitpoints(), npc.hp + amount); },
     setNpcTransformationId: (id) => { npc.transform = id; return npc; },
     getMovementQueue: () => ({ setBlockMovement() {}, reset() {}, size: () => 0, routes: npc.routes }),
-    performAnimation: (animation) => npc.animations.push(animation.getId?.() ?? animation.id),
+    performAnimation: (animation) => {
+      npc.animations.push(animation.getId?.() ?? animation.id);
+      npc.animationDelays.push(animation.getDelay?.() ?? animation.delay ?? 0);
+    },
     forceChat() {},
-    flags: new Set(), routes: [], animations: [], splats: [],
+    flags: new Set(), routes: [], animations: [], animationDelays: [], splats: [],
     setFlag: (flag) => npc.flags.add(flag),
     getSize: () => Shared.core().NpcDefinition.forId(npc.id).getSize?.() ?? 1,
     setPositionToFace() {},
@@ -1406,6 +1409,34 @@ test('a rift guardian goes after a creature across the temple, not only within 1
   assert.ok(routes.some(([npc, x, y]) => npc === guardian && x === 3606 && y === 9503), 'walks at the far leech');
 });
 
+test('a new rift guardian rises for 4 ticks, then its first step ends the spawn sequence (issue 3837)', () => {
+  const player = fakePlayer();
+  openGame(player);
+  Game._game.phase = Game.PHASE.ATTACK;
+  const leech = fakeNpc({ id: Shared.npc('gotr_abyssal_leech'), x: 3611, y: 9517 });
+  Creatures.creatures.set(leech, { kind: 'leech', nextAttack: Infinity, attacker: null });
+  player.inventory.add(Shared.obj('chisel'), 1);
+  player.inventory.add(CELL(1), 1);
+  hooks.objects['Essence pile (elemental)'].Assemble({ player, objectId: Shared.loc('gotr_guardian_spawn_east') });
+  ticks(5);
+  const guardian = hooks.npcsSpawned.find((npc) => npc.id === Shared.npc('gotr_guardian_air'));
+  assert.ok(guardian, 'the guardian comes to life');
+  const spawn = Shared.seq('rift_guardian_spawn');
+  const reset = Shared.core().Animation.DEFAULT_RESET_ANIMATION.getId();
+  assert.deepEqual(guardian.animations, [spawn]);
+  ticks(3);
+  assert.deepEqual(guardian.routes, [], 'still rising: no step, even with a leech to fight');
+  assert.deepEqual(guardian.animations, [spawn]);
+  ticks(1);
+  // Capture 20261020T162558: the first step carries sequence -1, delay 95. The spawn sequence loops
+  // at priority 10, so left on, the client froze the guardian and dropped its attacks.
+  assert.deepEqual(guardian.animations, [spawn, reset]);
+  assert.equal(guardian.animationDelays.at(-1), 95);
+  assert.equal(guardian.routes.length, 1, 'walks out to its post');
+  ticks(1);
+  assert.deepEqual(guardian.routes.at(-1), [3611, 9517], 'then goes for the leech');
+});
+
 test('full power kills every creature', () => {
   const player = fakePlayer();
   openGame(player);
@@ -1801,9 +1832,12 @@ test("Atlax's diary: the captured 24 pages in indexed_book (680), with a content
     sendString: (text, uid) => { strings.set(uid & 0xffff, text); return packet; },
     sendInterfaceDisplayState: (uid, hide) => { hidden.set(uid & 0xffff, hide); return packet; },
     sendInterfaceScript: () => packet,
+    sendConfig: (id, value) => { configs.set(id, value); return packet; },
   };
+  const configs = new Map();
   player.getPacketSender = () => packet;
   hooks.items["Atlax's diary"].Read({ player });
+  assert.equal(configs.get(334), 0, "pagepos: the left page of the spread");
   assert.equal(player.interfaces.at(-1), 680);
   assert.ok(player.animations.includes(Shared.seq('human_readbook')));
   assert.equal(strings.get(6), "Atlax's Diary");
@@ -1816,8 +1850,11 @@ test("Atlax's diary: the captured 24 pages in indexed_book (680), with a content
   assert.equal(hidden.get(9), true, 'no index button on the contents');
 
   const click = (child) => buttons.get((680 << 16) | child)({ player, buttonId: (680 << 16) | child });
+  const opens = player.interfaces.length;
   click(110);
   assert.equal(strings.get(10), '3');
+  assert.equal(configs.get(334), 2);
+  assert.equal(player.interfaces.length, opens + 1, 'each spread is sent and then opened again, as live does');
   assert.equal(strings.get(45), "battle, but now there's just a");
   assert.equal(hidden.get(9), false, 'the index button past the contents');
   click(9);

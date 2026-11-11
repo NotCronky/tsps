@@ -35,6 +35,7 @@ function killedBoss(player, monster) {
 }
 
 function canWearRing(event) {
+  if (pluginApi.getPluginConfig("quests:equipment-requirements", true) === false) return;
   const monster = requirements().get(event.item.getId());
   if (!monster || event.player.isPlayerBot?.()) return;
   if (killedBoss(event.player, monster)) return;
@@ -44,6 +45,7 @@ function canWearRing(event) {
 
 module.exports = {
   name: "AncientRings",
+  description: "Stops the Ultor, Bellator, Magus and Venator rings being worn until the player has killed the matching Desert Treasure II boss.",
   members: true,
   _test: { canWearRing, requirements },
   register(api) {

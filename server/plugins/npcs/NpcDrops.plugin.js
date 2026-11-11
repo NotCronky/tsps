@@ -338,6 +338,7 @@ function applyWikiCorrections(tableById) {
   correctMadAngel(tableById.mad_angel);
   correctSkotizo(tableById.skotizo);
   correctAmoxliatl(tableById.amoxliatl);
+  correctAlchemicalHydra(tableById.alchemical_hydra);
   const kalphiteQueen = tableById.kalphite_queen;
   if (!kalphiteQueen) {
     return;
@@ -409,6 +410,15 @@ function correctAmoxliatl(table) {
   table.rolls = 2;
   for (const entry of table.entries || []) {
     if (entry.section === "Frozen tears") Object.assign(entry, { roll_group: "amoxliatl_tears", once_per_kill: true });
+  }
+}
+
+/** Two rolls per kill; the first can hit the unique pre-roll, the second is always on the standard table (Wiki, Drops). */
+function correctAlchemicalHydra(table) {
+  if (!table) return;
+  table.rolls = 2;
+  for (const entry of table.entries || []) {
+    if (entry.pre_roll) entry.once_per_kill = true;
   }
 }
 
@@ -693,7 +703,30 @@ function rulesMultiplier(entry, rules) {
   return Math.max(multiplier, floor);
 }
 
-function rollSharedTable(name, player, depth = 0) {
+/**
+ * Wiki (Gem drop table, note 4): "The Mega-rare drop table is replaced by a talisman if Legends' Quest is not
+ * completed" (Rare drop table: Legends' Quest "IS required to access it via the gem drop table"; the rare drop table's
+ * own mega-rare slot needs nothing). The talisman is the gem table's own: "a nature talisman will drop above ground
+ * level and a chaos talisman will drop underground" (underground: the map's y + 6400 band).
+ */
+const GEM_TABLE = "gem";
+const MEGA_RARE_TABLE = "megaRare";
+const UNDERGROUND_Y = 6400;
+
+function legendsQuestComplete(player) {
+  const query = { player, key: "legends_quest", complete: false };
+  pluginApi?.emitCustomEvent?.("quest:is-complete", query);
+  return query.complete === true;
+}
+
+function locationTalisman(player) {
+  const { ItemIdentifiers } = pluginApi.core;
+  const y = player?.getLocation?.()?.getY?.() ?? 0;
+  return y >= UNDERGROUND_Y ? ItemIdentifiers.CHAOS_TALISMAN : ItemIdentifiers.NATURE_TALISMAN;
+}
+
+/** `ringOfWealth: false` rolls the full pool even with a ring of wealth worn. */
+function rollSharedTable(name, player, depth = 0, { ringOfWealth = true } = {}) {
   // Shared tables reference each other (rare -> gem -> mega-rare), so cap the chain.
   if (depth > 4) {
     return [];
@@ -702,7 +735,7 @@ function rollSharedTable(name, player, depth = 0) {
   if (!entries || entries.length === 0) {
     return [];
   }
-  const pool = isWearingRingOfWealth(player) && RING_OF_WEALTH_TABLES.has(name)
+  const pool = ringOfWealth && isWearingRingOfWealth(player) && RING_OF_WEALTH_TABLES.has(name)
     ? entries.filter((entry) => !entry.nothing)
     : entries;
   // Published as per-item n/outOf slots sharing one pool, so roll the pool once and walk
@@ -718,7 +751,10 @@ function rollSharedTable(name, player, depth = 0) {
         return [];
       }
       if (entry.ref) {
-        return rollSharedTable(entry.ref, player, depth + 1);
+        if (name === GEM_TABLE && entry.ref === MEGA_RARE_TABLE && !legendsQuestComplete(player)) {
+          return [{ itemId: locationTalisman(player), amount: 1, noted: false }];
+        }
+        return rollSharedTable(entry.ref, player, depth + 1, { ringOfWealth });
       }
       const [min, max] = entry.quantity;
       return [{
@@ -773,9 +809,9 @@ function rollWeighted(entries, outOf, rules) {
 }
 
 /**
- * One roll on a table: its pre-roll, main roll and separate rolls. Separate rolls marked
- * `once_per_kill` are made on the first of a table's `rolls` only. `rules` are the kill's chance
- * rules (chanceRules), applied to every entry.
+ * One roll on a table: its pre-roll, main roll and separate rolls. Pre-roll and separate rolls
+ * marked `once_per_kill` are made on the first of a table's `rolls` only. `rules` are the kill's
+ * chance rules (chanceRules), applied to every entry.
  */
 function rollOnce(table, entries, player, first = true, context = null, rules = []) {
   const drops = [];
@@ -789,6 +825,7 @@ function rollOnce(table, entries, player, first = true, context = null, rules = 
     if (entry.always) {
       continue;
     } else if (entry.pre_roll) {
+      if (entry.once_per_kill && !first) continue;
       if (entry.roll_group) {
         const group = preRollGroups.get(entry.roll_group) || [];
         group.push(entry);
@@ -989,6 +1026,18 @@ function extraRolls(event) {
   for (let i = 0; i < (event.rolls ?? 0); i++) event.drops.push(...rollTable(rolling, event.player, event.npc));
 }
 
+/**
+ * Answers npc-drops:roll-shared { player, table, drops, ringOfWealth }: one roll of a shared table
+ * by name ("gem", "rareSeed", "usefulHerb" ...), pushed onto `drops`; an empty slot pushes nothing.
+ * For content outside NPC kills that rolls the same tables (sorting salvage). `ringOfWealth: false`
+ * keeps the empty slots when a ring of wealth is worn.
+ */
+function rollSharedRequest(event) {
+  ensureDropsLoaded?.();
+  if (!Array.isArray(event?.drops) || typeof event.table !== "string") return;
+  event.drops.push(...rollSharedTable(event.table, event.player, 0, { ringOfWealth: event.ringOfWealth !== false }));
+}
+
 let ensureDropsLoaded = null;
 
 /**
@@ -1096,6 +1145,13 @@ function placeDrops(player, drops, location, options = {}) {
 
 module.exports = {
   name: "NpcDrops",
+  description: "Rolls NPC drop tables from the Wiki-derived drop data, with subtables, tertiary drops and hand-edited overrides.",
+  config: {
+    "NpcDrops:bossRareMultiplier": {
+      type: "number", label: "Boss unique drop multiplier", default: 1, min: 1,
+      help: "Makes bosses' unique drops this many times likelier. 1 is the normal rate; values of 1 or less change nothing.",
+    },
+  },
   register(api) {
     pluginApi = api;
     itemOnGroundManager = api.getItemOnGroundManager();
@@ -1109,6 +1165,7 @@ module.exports = {
     };
     ensureDropsLoaded = ensureDrops;
     api.onCustomEvent("npc-drops:extra-rolls", extraRolls);
+    api.onCustomEvent("npc-drops:roll-shared", rollSharedRequest);
 
     // "npc-drops:roll-table" { player, table, drops }: a table outside an NPC's own (a boss's
     // chest) rolled with the same roller and shared tables; the drops are pushed onto `drops`.
@@ -1177,7 +1234,7 @@ module.exports = {
 
     api.log("registered", { lazy: true });
   },
-  _test: { loadDrops, tablesByNpc, sharedTables },
+  _test: { loadDrops, tablesByNpc, sharedTables, rollSharedTable, rollSharedRequest },
 
   // Exposed for the smoke test.
   __internals: { withoutOtherLocations, locationRequirement, DROP_LOCATIONS, loadDrops, rollTable, rollOnce, rollSharedTable, placeDrops, dropFor, tablesByNpc, sharedTables, applyOverrides, applyCustomDrops, isUniqueEntry, rareMultiplier, tableForNpc },

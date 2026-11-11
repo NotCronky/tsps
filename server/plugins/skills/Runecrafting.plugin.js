@@ -65,6 +65,14 @@ const OURANIA_DIARY_MESSAGE = "Your medium level knowledge of the local area all
 const OURANIA_NO_ESSENCE = "You do not have any pure or daeyalt essences to bind.";
 const RIFT_GUARDIAN_BASE = 1795758;
 const BLOOD_RIFT_GUARDIAN_BASE = 804984;
+
+/**
+ * Wiki (Rift guardian): 804,984 for "Blood runes (Arceuus)" (the dark essence altar, ObjectIdentifiers.BLOOD_ALTAR),
+ * 1,795,758 for every other altar, the true Blood Altar (Altar 83, pure essence) among them.
+ */
+function riftGuardianBase(altarId) {
+  return altarId === ObjectIdentifiers.BLOOD_ALTAR ? BLOOD_RIFT_GUARDIAN_BASE : RIFT_GUARDIAN_BASE;
+}
 /** The Ourania Altar's rift guardian base, whatever rune is made (Wiki: Rift guardian). */
 const OURANIA_RIFT_GUARDIAN_BASE = 1487213;
 const ABYSS_TELEPORT_STEP = "o8m7y6";
@@ -391,7 +399,10 @@ function ardougneMediumComplete(player) {
 /** Every pure and daeyalt essence becomes a rune rolled at the player's level (Wiki: Ourania Altar). */
 function craftOurania(player) {
   const inventory = player.getInventory();
-  if (!OURANIA_ESSENCE.some((essence) => inventory.contains(essence.id))) {
+  // What binds in place of pure essence binds as it does, after it.
+  const essences = OURANIA_ESSENCE.flatMap((essence) => essence.id !== ItemIdentifiers.PURE_ESSENCE ? [essence] : [essence,
+    ...standIns(player).filter((id) => !OURANIA_ESSENCE.some((own) => own.id === id)).map((id) => ({ id, xpScale: essence.xpScale }))]);
+  if (!essences.some((essence) => inventory.contains(essence.id))) {
     const { DialogueChainBuilder, StatementDialogue } = pluginApi.core;
     player.getDialogueManager().startDialogues(new DialogueChainBuilder().add(new StatementDialogue(0, OURANIA_NO_ESSENCE)));
     return;
@@ -402,7 +413,7 @@ function craftOurania(player) {
   // Roll and simulate the whole batch before spending essence, including diary bonus runes.
   const preview = new pluginApi.core.Inventory(player).setItems(inventory.getCopiedItems());
   const plan = [];
-  for (const essence of OURANIA_ESSENCE) {
+  for (const essence of essences) {
     while (preview.contains(essence.id)) {
       preview.deleted(essence.id, 1, false);
       const rune = rollOuraniaRune(weights);
@@ -463,15 +474,21 @@ function craftOurania(player) {
 }
 
 /**
- * The essence an altar binds: its own, and, where pure essence works, what content binds in its
- * place ("runecrafting:essence" { player, pure }: push item ids to `pure`, a league relic's soul
+ * What content binds in place of pure essence, or with `dark` of Kourend's dark essence fragments
+ * ("runecrafting:essence" { player, dark, pure }: push item ids to `pure`, a league relic's soul
  * shards).
  */
-function bindable(player, essence) {
-  if (!essence.ids.includes(ItemIdentifiers.PURE_ESSENCE)) return essence.ids;
-  const request = { player, pure: [] };
+function standIns(player, dark = false) {
+  const request = { player, dark, pure: [] };
   pluginApi.emitCustomEvent("runecrafting:essence", request);
-  return essence.ids.concat(request.pure.filter((id) => Number.isInteger(id) && !essence.ids.includes(id)));
+  return [...new Set(request.pure.filter((id) => Number.isInteger(id) && id >= 0))];
+}
+
+/** The essence an altar binds: its own, and what binds in place of its pure or dark essence. */
+function bindable(player, essence) {
+  const dark = essence.ids.includes(ItemIdentifiers.DARK_ESSENCE_FRAGMENTS);
+  if (!dark && !essence.ids.includes(ItemIdentifiers.PURE_ESSENCE)) return essence.ids;
+  return essence.ids.concat(standIns(player, dark).filter((id) => !essence.ids.includes(id)));
 }
 
 function handleCraftRunes(event) {
@@ -567,7 +584,7 @@ function handleCraftRunes(event) {
     pluginApi.emitCustomEvent("runecrafting:success", {
       player,
       skill: Skill.RUNECRAFTING,
-      petBase: runeData.runeId === ItemIdentifiers.BLOOD_RUNE ? BLOOD_RIFT_GUARDIAN_BASE : RIFT_GUARDIAN_BASE,
+      petBase: riftGuardianBase(event.objectId),
       rolls: craftedEssence,
       runeId: runeData.runeId,
       amountPerEssence,
@@ -596,7 +613,7 @@ function answerAltarRune(request) {
   const level = request.player.getSkillManager().getCurrentLevel(Skill.RUNECRAFTING);
   request.rune = {
     runeId: runeData.runeId, level: runeData.level, xp: runeData.xp, amount: runeMultiplier(level, runeData),
-    petBase: runeData.runeId === ItemIdentifiers.BLOOD_RUNE ? BLOOD_RIFT_GUARDIAN_BASE : RIFT_GUARDIAN_BASE,
+    petBase: riftGuardianBase(request.objectId),
   };
 }
 
@@ -1082,6 +1099,7 @@ function useDenseOnDarkAltar(event) {
 
 module.exports = {
   name: "Runecrafting",
+  description: "Runecrafting: entering altars with talismans or tiaras, crafting runes, binding tiaras, the Blood Altar and Dark Altar and exit portals.",
   register(api) {
     initialize(api);
     api.persistAttribute(ESSENCE_MINE_RETURN_ATTRIBUTE);
@@ -1099,7 +1117,7 @@ module.exports = {
     api.onObjectInteraction("Portal", { Use: handleExitPortal });
 
     Pouches.attach(api);
-    Combination.attach(api);
+    Combination.attach(api, { standIns });
     Raiments.attach(api);
     api.onCustomEvent("runecrafting:altar-rune", answerAltarRune);
 

@@ -212,6 +212,7 @@ const AXES = [
   axe(ItemIds.INFERNAL_AXE_UNCHARGED__2, 61, 7, 8778, { requiredFiremaking: 85 }),
   axe(ItemIds.INFERNAL_AXE_UNCHARGED__4, 61, 7, 8778, { requiredFiremaking: 85 }),
   axe(ItemIds.CRYSTAL_AXE_INACTIVE_, 71, 7, 8324, { requiredAgility: 50 }),
+  axe(ItemIds.CRYSTAL_FELLING_AXE_INACTIVE_, 71, 7, 10072, { requiredAgility: 50, felling: true }),
   axe(ItemIds.CRYSTAL_FELLING_AXE, 71, 7, 10072, { requiredAgility: 50, felling: true }),
   axe(ItemIds.CRYSTAL_AXE, 71, 7, 8324, { requiredAgility: 50 }),
   axe(ItemIds.INFERNAL_AXE, 61, 7, 2117, { requiredFiremaking: 85, speed: 0.3 }),
@@ -1039,6 +1040,9 @@ function searchBirdNest(player, nestId) {
 
   if (seed) {
     inventory.adds(seed.id, 1);
+    // "woodcutting:nest-search" { player, itemId }: the seed taken from the nest, for a league's
+    // "Obtain a High level tree seed from a birds nest".
+    pluginApi.emitCustomEvent("woodcutting:nest-search", { player, itemId: seed.id });
     sendSpam(player, `You take ${seed.text} out of the bird's nest.`);
     return true;
   }
@@ -1327,7 +1331,9 @@ function processWoodcuttingTick(activeSessions, currentTick) {
       if (!felling.skipLog) sendSpam(player, logMessage(state.tree));
       // Only the charged crystal axe doing the chopping spends a charge: one carried beside the axe in use (an infernal
       // axe ranked above it, or a dragon axe below the crystal's 50 Agility) is left alone, as Mining's pickaxe.
-      if (state.axe?.id === ItemIds.CRYSTAL_AXE) CrystalAxe.tryUseCharge(player);
+      if (state.axe?.id === ItemIds.CRYSTAL_AXE || state.axe?.id === ItemIds.CRYSTAL_FELLING_AXE) {
+        CrystalAxe.tryUseCharge(player, Math.random, state.axe.id);
+      }
       player
         .getSkillManager()
         .addExperiences(Skill.WOODCUTTING, xp);
@@ -1422,6 +1428,11 @@ function pauseWoodcutting(event) {
   pauseForLevelUp(event, activeSessionsRef, (player) => stopWoodcutting(activeSessionsRef, player, false));
 }
 
+/** Inventory actions clear the player interaction and end that player's chop. */
+function interruptForInteraction({ player }) {
+  stopWoodcutting(activeSessionsRef, player, false);
+}
+
 /** An accepted emote replaces chopping while keeping the new emote animation. */
 function interruptForEmote({ player }) {
   stopWoodcutting(activeSessionsRef, player, false);
@@ -1429,6 +1440,7 @@ function interruptForEmote({ player }) {
 
 module.exports = {
   name: "Woodcutting",
+  description: "Woodcutting: chopping trees with the Forestry despawn timer, stump respawns, the logs-chopped tracker, and bird's nest and ring drops.",
   register(api) {
     pluginApi = api;
     api.onCustomEvent("woodcutting:chop", requestedChop);
@@ -1454,6 +1466,7 @@ module.exports = {
     });
     api.onCustomEvent("level-up:popup-opened", pauseWoodcutting);
     api.onCustomEvent("player:emote", interruptForEmote);
+    api.onCustomEvent("player:interaction-cleared", interruptForInteraction);
     api.persistAttribute(LOGS_CHOPPED_ATTRIBUTE, 0);
     api.onPlayerLogin(sendLogsChopped);
     api.onCustomEvent("woodcutting:logs-chopped", answerLogsChopped);

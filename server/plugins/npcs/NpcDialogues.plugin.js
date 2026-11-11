@@ -22,6 +22,9 @@
 const fs = require("fs");
 const path = require("path");
 const { isDeepStrictEqual } = require("node:util");
+/** successor id -> the retired id whose transcript it plays until it has its own (data/retired-npcs.json). */
+const PREDECESSOR = new Map(Object.entries(require("./data/retired-npcs.json").successors)
+  .map(([retired, successor]) => [successor.id, Number(retired)]));
 const { GameConstants } = require("../../src/main/typescript/elvarg/game/GameConstants");
 const { Misc } = require("../../src/main/typescript/elvarg/util/Misc");
 const { PluginManager } = require("../../src/main/typescript/elvarg/plugins/PluginManager");
@@ -440,6 +443,16 @@ function nestOrphanConditions(steps) {
   });
 }
 
+/**
+ * The quest start warning ("Before starting this quest, be aware that your combat level is
+ * lower than the recommended level of N") sits under this exact wiki condition. Plugins that
+ * need other wording answer their own conditions first; this only settles the bare form.
+ */
+function combatLevelCondition(player, text) {
+  const match = /^If the player's combat level is lower than (\d+):$/.exec(String(text ?? ""));
+  return match ? player.getSkillManager().getCombatLevel() < Number(match[1]) : null;
+}
+
 /** First-true (else first-unknown, else none) pick for a run of sibling conditions. */
 function chooseCondition(run, resolveCondition) {
   const answers = run.map((condition) => resolveCondition(condition));
@@ -526,6 +539,14 @@ function flatten(steps, opts = {}) {
  * `step.shops` ("Ned's Handmade Rope (100% Wool) (Default)", "... (Fremennik Isles)");
  * "npc-dialogue:shop" lets a plugin pick one by game state, else the Default version opens.
  */
+/** Four 53-character lines a page: the layout before ChatTextLayout, for a core without it. */
+function characterPages(text) {
+  const lines = Misc.wrapText(text, 53);
+  const pages = [];
+  for (let start = 0; start < lines.length; start += 4) pages.push(lines.slice(start, start + 4).join(" "));
+  return pages;
+}
+
 function shopName(api, player, npcId, step) {
   if (!Array.isArray(step.shops)) return step.target;
   const request = { player, npcId, target: step.target, shops: step.shops, shop: null };
@@ -592,7 +613,7 @@ function startDialogue(api, event, steps, branches = {}, context = {}) {
     PluginManager.emitNpcDialogueCondition({
       player, npc: event.npc, npcId, definition, pages: context.pages,
       text: step.text, stepId: step.id,
-    });
+    }) ?? combatLevelCondition(player, step.text);
 
   // "shows other/previous/initial options" ({{tact|other}} etc.) replays a menu
   // that has already been shown. "previous2/3" walk further back, "initial" is
@@ -956,7 +977,8 @@ function startDialogue(api, event, steps, branches = {}, context = {}) {
           return;
         }
         playedAny = true;
-        const lines = Misc.wrapText(formatted, 53);
+        // Pages as the chatbox holds them: four lines of font 497 in 380 pixels (ChatTextLayout).
+        const pages = api.core?.ChatTextLayout?.pages(formatted) ?? characterPages(formatted);
         // A typed line spoken by someone other than the NPC being talked to (a
         // paired NPC talking to them, a cutscene actor) gets that speaker's head.
         // An item's own transcript has no NPC; a named speaker still gets their head.
@@ -986,8 +1008,7 @@ function startDialogue(api, event, steps, branches = {}, context = {}) {
           : undefined;
         if (hold) chain.add(hold);
         let held;
-        for (let start = 0; start < lines.length; start += 4) {
-          const text = lines.slice(start, start + 4).join(" ");
+        for (const text of pages) {
           const dialogue = isPlayer
             ? new PlayerDialogue(index++, text, expression)
             : new NpcDialogue(index++, speakerId, text, speakerName, expression, (request.side ?? step.side) === "right" ? 217 : 231);
@@ -1133,10 +1154,12 @@ function startDialogue(api, event, steps, branches = {}, context = {}) {
 
 module.exports = {
   name: "NpcDialogues",
+  description: "Plays Talk-to dialogue transcripts for NPCs from the generated dialogue data, with hooks so quests can alter lines, choices and conditions.",
   // Shared by quest transcript playback and dialogue regressions.
   pickVariant,
   aliasKeys,
   flatten,
+  combatLevelCondition,
   formatPlayerText,
   startDialogue,
   collectPageLines,
@@ -1200,8 +1223,10 @@ module.exports = {
     const resolveTranscript = (event) => {
       const { data, aliases, index, speakerIdByName } = load();
       const npcId = event.npcId;
-      // A transform the index doesn't know (Dr Harlow 16277) falls back to the spawned parent (3480).
-      const entries = [npcId, event.npc?.getId?.()].map((id) => index[String(id)]).find(Array.isArray) ?? [];
+      // A transform the index doesn't know (Dr Harlow 16277) falls back to the spawned parent (3480),
+      // and a successor of a retired NPC (Captain Harlan 16821) to the NPC it replaced (3216).
+      const entries = [npcId, event.npc?.getId?.(), PREDECESSOR.get(npcId)]
+        .map((id) => index[String(id)]).find(Array.isArray) ?? [];
       const pages = entries
         .map((entry) => ({ page: String(entry.page ?? "").replace(/^Transcript:/, ""), variants: Array.isArray(entry.variants) ? entry.variants : [] }))
         .filter((entry) => Object.hasOwn(data, entry.page));
