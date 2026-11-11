@@ -80,7 +80,8 @@ module.exports = function registerTravelTools(ctx, { areas }) {
       const definition = ObjectDefinition.forPlayer(object.getId(), p);
       const name = definition?.getName?.() ?? "";
       const option = definition?.getInteractions?.()?.find((value) => /^(open|release|pay-toll\(\d+gp\))$/i.test(value ?? ""));
-      if (/door|gate/i.test(name) && option) return { type: "map-door", menu: `${option} ${name}`, id: object.getId(), object: { x, y, z } };
+      // Doors.plugin.js opens curtains (Pollnivneach, Nardah) the same way as doors.
+      if (/door|gate|curtain/i.test(name) && option) return { type: "map-door", menu: `${option} ${name}`, id: object.getId(), object: { x, y, z } };
     }
     return null;
   };

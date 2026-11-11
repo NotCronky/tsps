@@ -1,0 +1,2579 @@
+{
+  "_doc": "What a generated account wears and carries (Gear.SppBots.js). Each slot lists items best first; an account gets the first it qualifies for. 'levels' are wield requirements, 'quest' a quest it needs done (by name), 'cost' rough gp a main pays, 'iron' what an ironman needs instead of buying it on the GE: Smithing for metal it smiths itself, or levels/combat to get the drop. No 'iron' means a shop sells it, so an ironman buys it too. 'obtain' is what everyone needs for a reward that can't be bought (a fire cape, a defender). Items are ItemIds keys (util/IdEnums).",
+  "melee": {
+    "WEAPON_SLOT": [
+      {
+        "item": "ABYSSAL_WHIP",
+        "levels": {
+          "attack": 70
+        },
+        "members": true,
+        "cost": 1500000,
+        "iron": {
+          "levels": {
+            "slayer": 85
+          }
+        }
+      },
+      {
+        "item": "DRAGON_SCIMITAR",
+        "levels": {
+          "attack": 60
+        },
+        "members": true,
+        "quest": "Monkey Madness I",
+        "cost": 60000
+      },
+      {
+        "item": "DRAGON_LONGSWORD",
+        "levels": {
+          "attack": 60
+        },
+        "members": true,
+        "quest": "Lost City",
+        "cost": 60000
+      },
+      {
+        "item": "RUNE_SCIMITAR",
+        "levels": {
+          "attack": 40
+        },
+        "cost": 15000,
+        "iron": {
+          "levels": {
+            "smithing": 90
+          }
+        }
+      },
+      {
+        "item": "ADAMANT_SCIMITAR",
+        "levels": {
+          "attack": 30
+        },
+        "cost": 2000,
+        "iron": {
+          "levels": {
+            "smithing": 75
+          }
+        }
+      },
+      {
+        "item": "MITHRIL_SCIMITAR",
+        "levels": {
+          "attack": 20
+        },
+        "cost": 600,
+        "iron": {
+          "levels": {
+            "smithing": 55
+          }
+        }
+      },
+      {
+        "item": "BLACK_SCIMITAR",
+        "levels": {
+          "attack": 10
+        },
+        "cost": 800,
+        "iron": {
+          "combat": 30
+        }
+      },
+      {
+        "item": "STEEL_SCIMITAR",
+        "levels": {
+          "attack": 5
+        },
+        "cost": 150,
+        "iron": {
+          "levels": {
+            "smithing": 35
+          }
+        }
+      },
+      {
+        "item": "IRON_SCIMITAR",
+        "levels": {
+          "attack": 1
+        },
+        "cost": 50,
+        "iron": {
+          "levels": {
+            "smithing": 20
+          }
+        }
+      },
+      {
+        "item": "BRONZE_SWORD",
+        "levels": {
+          "attack": 1
+        },
+        "cost": 0
+      }
+    ],
+    "HEAD_SLOT": [
+      {
+        "item": "HELM_OF_NEITIZNOT",
+        "levels": {
+          "defence": 55
+        },
+        "members": true,
+        "quest": "The Fremennik Isles",
+        "cost": 50000
+      },
+      {
+        "item": "RUNE_FULL_HELM",
+        "levels": {
+          "defence": 40
+        },
+        "cost": 20000,
+        "iron": {
+          "levels": {
+            "smithing": 94
+          }
+        }
+      },
+      {
+        "item": "ADAMANT_FULL_HELM",
+        "levels": {
+          "defence": 30
+        },
+        "cost": 3000,
+        "iron": {
+          "levels": {
+            "smithing": 79
+          }
+        }
+      },
+      {
+        "item": "MITHRIL_FULL_HELM",
+        "levels": {
+          "defence": 20
+        },
+        "cost": 1000,
+        "iron": {
+          "levels": {
+            "smithing": 59
+          }
+        }
+      },
+      {
+        "item": "STEEL_FULL_HELM",
+        "levels": {
+          "defence": 5
+        },
+        "cost": 300,
+        "iron": {
+          "levels": {
+            "smithing": 39
+          }
+        }
+      },
+      {
+        "item": "IRON_FULL_HELM",
+        "levels": {
+          "defence": 1
+        },
+        "cost": 100,
+        "iron": {
+          "levels": {
+            "smithing": 22
+          }
+        }
+      }
+    ],
+    "BODY_SLOT": [
+      {
+        "item": "BANDOS_CHESTPLATE",
+        "levels": {
+          "defence": 65
+        },
+        "members": true,
+        "cost": 15000000,
+        "iron": {
+          "combat": 115
+        }
+      },
+      {
+        "item": "FIGHTER_TORSO",
+        "levels": {
+          "defence": 40
+        },
+        "members": true,
+        "cost": 0,
+        "obtain": {
+          "combat": 70
+        }
+      },
+      {
+        "item": "RUNE_PLATEBODY",
+        "levels": {
+          "defence": 40
+        },
+        "quest": "Dragon Slayer I",
+        "cost": 38000,
+        "iron": {
+          "levels": {
+            "smithing": 99
+          }
+        }
+      },
+      {
+        "item": "RUNE_CHAINBODY",
+        "levels": {
+          "defence": 40
+        },
+        "cost": 30000,
+        "iron": {
+          "levels": {
+            "smithing": 96
+          }
+        }
+      },
+      {
+        "item": "ADAMANT_PLATEBODY",
+        "levels": {
+          "defence": 30
+        },
+        "cost": 10000,
+        "iron": {
+          "levels": {
+            "smithing": 88
+          }
+        }
+      },
+      {
+        "item": "MITHRIL_PLATEBODY",
+        "levels": {
+          "defence": 20
+        },
+        "cost": 3000,
+        "iron": {
+          "levels": {
+            "smithing": 68
+          }
+        }
+      },
+      {
+        "item": "STEEL_PLATEBODY",
+        "levels": {
+          "defence": 5
+        },
+        "cost": 1000,
+        "iron": {
+          "levels": {
+            "smithing": 48
+          }
+        }
+      },
+      {
+        "item": "IRON_CHAINBODY",
+        "levels": {
+          "defence": 1
+        },
+        "cost": 150,
+        "iron": {
+          "levels": {
+            "smithing": 26
+          }
+        }
+      },
+      {
+        "item": "LEATHER_BODY",
+        "levels": {
+          "defence": 1
+        },
+        "cost": 50,
+        "iron": {
+          "levels": {
+            "crafting": 14
+          }
+        }
+      }
+    ],
+    "LEG_SLOT": [
+      {
+        "item": "BANDOS_TASSETS",
+        "levels": {
+          "defence": 65
+        },
+        "members": true,
+        "cost": 20000000,
+        "iron": {
+          "combat": 115
+        }
+      },
+      {
+        "item": "RUNE_PLATELEGS",
+        "levels": {
+          "defence": 40
+        },
+        "cost": 38000,
+        "iron": {
+          "levels": {
+            "smithing": 99
+          }
+        }
+      },
+      {
+        "item": "ADAMANT_PLATELEGS",
+        "levels": {
+          "defence": 30
+        },
+        "cost": 3000,
+        "iron": {
+          "levels": {
+            "smithing": 86
+          }
+        }
+      },
+      {
+        "item": "MITHRIL_PLATELEGS",
+        "levels": {
+          "defence": 20
+        },
+        "cost": 1500,
+        "iron": {
+          "levels": {
+            "smithing": 66
+          }
+        }
+      },
+      {
+        "item": "STEEL_PLATELEGS",
+        "levels": {
+          "defence": 5
+        },
+        "cost": 500,
+        "iron": {
+          "levels": {
+            "smithing": 46
+          }
+        }
+      },
+      {
+        "item": "IRON_PLATELEGS",
+        "levels": {
+          "defence": 1
+        },
+        "cost": 150,
+        "iron": {
+          "levels": {
+            "smithing": 31
+          }
+        }
+      },
+      {
+        "item": "LEATHER_CHAPS",
+        "levels": {
+          "defence": 1
+        },
+        "cost": 50,
+        "iron": {
+          "levels": {
+            "crafting": 18
+          }
+        }
+      }
+    ],
+    "SHIELD_SLOT": [
+      {
+        "item": "DRAGON_DEFENDER",
+        "levels": {
+          "defence": 60
+        },
+        "members": true,
+        "cost": 0,
+        "obtain": {
+          "levels": {
+            "attack": 60
+          },
+          "attackPlusStrength": 130
+        }
+      },
+      {
+        "item": "RUNE_KITESHIELD",
+        "levels": {
+          "defence": 40
+        },
+        "cost": 32000,
+        "iron": {
+          "levels": {
+            "smithing": 97
+          }
+        }
+      },
+      {
+        "item": "ADAMANT_KITESHIELD",
+        "levels": {
+          "defence": 30
+        },
+        "cost": 4000,
+        "iron": {
+          "levels": {
+            "smithing": 87
+          }
+        }
+      },
+      {
+        "item": "MITHRIL_KITESHIELD",
+        "levels": {
+          "defence": 20
+        },
+        "cost": 1500,
+        "iron": {
+          "levels": {
+            "smithing": 67
+          }
+        }
+      },
+      {
+        "item": "STEEL_KITESHIELD",
+        "levels": {
+          "defence": 5
+        },
+        "cost": 500,
+        "iron": {
+          "levels": {
+            "smithing": 47
+          }
+        }
+      },
+      {
+        "item": "WOODEN_SHIELD",
+        "levels": {
+          "defence": 1
+        },
+        "cost": 0
+      }
+    ],
+    "CAPE_SLOT": [
+      {
+        "item": "FIRE_CAPE",
+        "members": true,
+        "cost": 0,
+        "obtain": {
+          "combat": 90
+        }
+      },
+      {
+        "item": "TEAM_1_CAPE",
+        "cost": 200
+      },
+      {
+        "item": "BLACK_CAPE",
+        "cost": 100
+      },
+      {
+        "item": "RED_CAPE",
+        "cost": 100
+      }
+    ],
+    "AMULET_SLOT": [
+      {
+        "item": "AMULET_OF_FURY",
+        "members": true,
+        "cost": 2500000,
+        "iron": {
+          "levels": {
+            "crafting": 90
+          }
+        }
+      },
+      {
+        "item": "AMULET_OF_GLORY",
+        "members": true,
+        "cost": 12000,
+        "iron": {
+          "levels": {
+            "crafting": 80
+          }
+        }
+      },
+      {
+        "item": "AMULET_OF_POWER",
+        "cost": 3000,
+        "iron": {
+          "levels": {
+            "crafting": 70,
+            "magic": 57
+          }
+        }
+      },
+      {
+        "item": "AMULET_OF_STRENGTH",
+        "cost": 1500,
+        "iron": {
+          "levels": {
+            "crafting": 50,
+            "magic": 49
+          }
+        }
+      }
+    ],
+    "HANDS_SLOT": [
+      {
+        "item": "COMBAT_BRACELET",
+        "members": true,
+        "cost": 12000,
+        "iron": {
+          "levels": {
+            "crafting": 74
+          }
+        }
+      },
+      {
+        "item": "LEATHER_GLOVES",
+        "cost": 50,
+        "iron": {
+          "levels": {
+            "crafting": 1
+          }
+        }
+      }
+    ],
+    "FEET_SLOT": [
+      {
+        "item": "DRAGON_BOOTS",
+        "levels": {
+          "defence": 60
+        },
+        "members": true,
+        "cost": 200000,
+        "iron": {
+          "levels": {
+            "slayer": 83
+          }
+        }
+      },
+      {
+        "item": "CLIMBING_BOOTS",
+        "members": true,
+        "quest": "Death Plateau",
+        "cost": 2000
+      },
+      {
+        "item": "LEATHER_BOOTS",
+        "cost": 50,
+        "iron": {
+          "levels": {
+            "crafting": 7
+          }
+        }
+      }
+    ]
+  },
+  "tools": {
+    "axe": [
+      {
+        "item": "DRAGON_AXE",
+        "levels": {
+          "woodcutting": 61
+        },
+        "members": true,
+        "cost": 2000000,
+        "iron": {
+          "combat": 80
+        }
+      },
+      {
+        "item": "RUNE_AXE",
+        "levels": {
+          "woodcutting": 41
+        },
+        "cost": 12000,
+        "iron": {
+          "levels": {
+            "smithing": 91
+          }
+        }
+      },
+      {
+        "item": "ADAMANT_AXE",
+        "levels": {
+          "woodcutting": 31
+        },
+        "cost": 1000,
+        "iron": {
+          "levels": {
+            "smithing": 71
+          }
+        }
+      },
+      {
+        "item": "MITHRIL_AXE",
+        "levels": {
+          "woodcutting": 21
+        },
+        "cost": 300,
+        "iron": {
+          "levels": {
+            "smithing": 51
+          }
+        }
+      },
+      {
+        "item": "STEEL_AXE",
+        "levels": {
+          "woodcutting": 6
+        },
+        "cost": 100,
+        "iron": {
+          "levels": {
+            "smithing": 31
+          }
+        }
+      },
+      {
+        "item": "IRON_AXE",
+        "levels": {
+          "woodcutting": 1
+        },
+        "cost": 50,
+        "iron": {
+          "levels": {
+            "smithing": 16
+          }
+        }
+      },
+      {
+        "item": "BRONZE_AXE",
+        "levels": {
+          "woodcutting": 1
+        },
+        "cost": 0
+      }
+    ],
+    "pickaxe": [
+      {
+        "item": "DRAGON_PICKAXE",
+        "levels": {
+          "mining": 61
+        },
+        "members": true,
+        "cost": 1500000,
+        "iron": {
+          "combat": 100
+        }
+      },
+      {
+        "item": "RUNE_PICKAXE",
+        "levels": {
+          "mining": 41
+        },
+        "cost": 12000,
+        "iron": {
+          "levels": {
+            "smithing": 90
+          }
+        }
+      },
+      {
+        "item": "ADAMANT_PICKAXE",
+        "levels": {
+          "mining": 31
+        },
+        "cost": 1500,
+        "iron": {
+          "levels": {
+            "smithing": 70
+          }
+        }
+      },
+      {
+        "item": "MITHRIL_PICKAXE",
+        "levels": {
+          "mining": 21
+        },
+        "cost": 500,
+        "iron": {
+          "levels": {
+            "smithing": 50
+          }
+        }
+      },
+      {
+        "item": "STEEL_PICKAXE",
+        "levels": {
+          "mining": 6
+        },
+        "cost": 200,
+        "iron": {
+          "levels": {
+            "smithing": 30
+          }
+        }
+      },
+      {
+        "item": "IRON_PICKAXE",
+        "levels": {
+          "mining": 1
+        },
+        "cost": 100,
+        "iron": {
+          "levels": {
+            "smithing": 16
+          }
+        }
+      },
+      {
+        "item": "BRONZE_PICKAXE",
+        "levels": {
+          "mining": 1
+        },
+        "cost": 0
+      }
+    ],
+    "fishing": [
+      {
+        "item": "HARPOON",
+        "levels": {
+          "fishing": 35
+        },
+        "cost": 50
+      },
+      {
+        "item": "LOBSTER_POT",
+        "levels": {
+          "fishing": 40
+        },
+        "cost": 50
+      },
+      {
+        "item": "FLY_FISHING_ROD",
+        "levels": {
+          "fishing": 20
+        },
+        "cost": 20,
+        "with": {
+          "FEATHER": 1000
+        }
+      },
+      {
+        "item": "SMALL_FISHING_NET",
+        "levels": {
+          "fishing": 1
+        },
+        "cost": 0
+      }
+    ]
+  },
+  "food": [
+    {
+      "item": "SHARK",
+      "levels": {
+        "cooking": 80,
+        "fishing": 76
+      },
+      "members": true,
+      "amount": [
+        50,
+        400
+      ],
+      "cost": 800
+    },
+    {
+      "item": "MONKFISH",
+      "levels": {
+        "cooking": 62,
+        "fishing": 62
+      },
+      "members": true,
+      "amount": [
+        50,
+        400
+      ],
+      "cost": 400
+    },
+    {
+      "item": "SWORDFISH",
+      "levels": {
+        "cooking": 45,
+        "fishing": 50
+      },
+      "amount": [
+        50,
+        300
+      ],
+      "cost": 400
+    },
+    {
+      "item": "LOBSTER",
+      "levels": {
+        "cooking": 40,
+        "fishing": 40
+      },
+      "amount": [
+        50,
+        300
+      ],
+      "cost": 200
+    },
+    {
+      "item": "SALMON",
+      "levels": {
+        "cooking": 25,
+        "fishing": 30
+      },
+      "amount": [
+        20,
+        200
+      ],
+      "cost": 80
+    },
+    {
+      "item": "TROUT",
+      "levels": {
+        "cooking": 15,
+        "fishing": 20
+      },
+      "amount": [
+        20,
+        200
+      ],
+      "cost": 50
+    },
+    {
+      "item": "SHRIMPS",
+      "levels": {
+        "cooking": 1,
+        "fishing": 1
+      },
+      "amount": [
+        5,
+        50
+      ],
+      "cost": 10
+    }
+  ],
+  "starterKit": {
+    "_source": "plugins/areas/tutorialisland/Leave.TutorialIsland.js giveStarterKit, as captured on arrival in Lumbridge",
+    "items": [
+      [
+        "BRONZE_AXE",
+        1
+      ],
+      [
+        "BRONZE_PICKAXE",
+        1
+      ],
+      [
+        "TINDERBOX",
+        1
+      ],
+      [
+        "SMALL_FISHING_NET",
+        1
+      ],
+      [
+        "SHRIMPS",
+        1
+      ],
+      [
+        "BRONZE_DAGGER",
+        1
+      ],
+      [
+        "BRONZE_SWORD",
+        1
+      ],
+      [
+        "WOODEN_SHIELD",
+        1
+      ],
+      [
+        "SHORTBOW",
+        1
+      ],
+      [
+        "BRONZE_ARROW",
+        25
+      ],
+      [
+        "AIR_RUNE",
+        25
+      ],
+      [
+        "MIND_RUNE",
+        15
+      ],
+      [
+        "BUCKET",
+        1
+      ],
+      [
+        "POT",
+        1
+      ],
+      [
+        "BREAD",
+        1
+      ],
+      [
+        "WATER_RUNE",
+        6
+      ],
+      [
+        "EARTH_RUNE",
+        4
+      ],
+      [
+        "BODY_RUNE",
+        2
+      ]
+    ],
+    "coins": 25
+  },
+  "travel": [
+    {
+      "_doc": "Travel kit (Travel/Teleports.SppBots.js): runes for teleport spells, tablets, charged jewellery. 'amount' a range, 'cost' gp each a main pays, 'chance' that an account of the level keeps any, 'iron' the levels an ironman needs to make its own (tablets at a lectern, enchanted jewellery). Stage 'new' accounts have none. 'kit' is the kit version an entry came in (default 1): bots generated earlier get entries newer than theirs once (grantTravelKit)."
+    },
+    {
+      "item": "LAW_RUNE",
+      "levels": {
+        "magic": 25
+      },
+      "amount": [
+        20,
+        400
+      ],
+      "cost": 150,
+      "chance": 0.8
+    },
+    {
+      "item": "AIR_RUNE",
+      "levels": {
+        "magic": 25
+      },
+      "amount": [
+        200,
+        3000
+      ],
+      "cost": 5,
+      "chance": 0.9
+    },
+    {
+      "item": "FIRE_RUNE",
+      "levels": {
+        "magic": 25
+      },
+      "amount": [
+        50,
+        500
+      ],
+      "cost": 5,
+      "chance": 0.7
+    },
+    {
+      "item": "EARTH_RUNE",
+      "levels": {
+        "magic": 31
+      },
+      "amount": [
+        50,
+        500
+      ],
+      "cost": 5,
+      "chance": 0.7
+    },
+    {
+      "item": "WATER_RUNE",
+      "levels": {
+        "magic": 37
+      },
+      "amount": [
+        50,
+        500
+      ],
+      "cost": 5,
+      "chance": 0.7
+    },
+    {
+      "item": "VARROCK_TELEPORT",
+      "amount": [
+        3,
+        30
+      ],
+      "cost": 700,
+      "chance": 0.5,
+      "iron": {
+        "levels": {
+          "construction": 40,
+          "magic": 25
+        }
+      }
+    },
+    {
+      "item": "LUMBRIDGE_TELEPORT",
+      "amount": [
+        3,
+        20
+      ],
+      "cost": 700,
+      "chance": 0.3,
+      "iron": {
+        "levels": {
+          "construction": 40,
+          "magic": 31
+        }
+      }
+    },
+    {
+      "item": "FALADOR_TELEPORT",
+      "amount": [
+        3,
+        20
+      ],
+      "cost": 700,
+      "chance": 0.4,
+      "iron": {
+        "levels": {
+          "construction": 40,
+          "magic": 37
+        }
+      }
+    },
+    {
+      "item": "CAMELOT_TELEPORT",
+      "members": true,
+      "amount": [
+        3,
+        20
+      ],
+      "cost": 700,
+      "chance": 0.4,
+      "iron": {
+        "levels": {
+          "construction": 40,
+          "magic": 45
+        }
+      }
+    },
+    {
+      "item": "ARDOUGNE_TELEPORT",
+      "members": true,
+      "quest": "Plague City",
+      "amount": [
+        3,
+        20
+      ],
+      "cost": 700,
+      "chance": 0.3,
+      "iron": {
+        "levels": {
+          "construction": 40,
+          "magic": 51
+        }
+      }
+    },
+    {
+      "item": "GAMES_NECKLACE_8_",
+      "members": true,
+      "amount": [
+        1,
+        4
+      ],
+      "cost": 1000,
+      "chance": 0.6,
+      "iron": {
+        "levels": {
+          "crafting": 27,
+          "magic": 27
+        }
+      }
+    },
+    {
+      "item": "RING_OF_DUELING_8_",
+      "members": true,
+      "amount": [
+        1,
+        4
+      ],
+      "cost": 800,
+      "chance": 0.6,
+      "iron": {
+        "levels": {
+          "crafting": 27,
+          "magic": 27
+        }
+      }
+    },
+    {
+      "item": "NECKLACE_OF_PASSAGE_5_",
+      "members": true,
+      "amount": [
+        1,
+        2
+      ],
+      "cost": 2500,
+      "chance": 0.3,
+      "iron": {
+        "levels": {
+          "crafting": 29,
+          "magic": 27
+        }
+      }
+    },
+    {
+      "item": "AMULET_OF_GLORY_4_",
+      "members": true,
+      "amount": [
+        1,
+        3
+      ],
+      "cost": 13000,
+      "chance": 0.5,
+      "iron": {
+        "levels": {
+          "crafting": 80,
+          "magic": 68
+        }
+      }
+    },
+    {
+      "item": "SKILLS_NECKLACE_4_",
+      "members": true,
+      "amount": [
+        1,
+        2
+      ],
+      "cost": 15000,
+      "chance": 0.25,
+      "iron": {
+        "levels": {
+          "crafting": 82,
+          "magic": 68
+        }
+      }
+    },
+    {
+      "item": "DRAMEN_STAFF",
+      "kit": 2,
+      "members": true,
+      "quest": "Lost City",
+      "amount": [
+        1,
+        2
+      ],
+      "cost": 0,
+      "chance": 0.9
+    },
+    {
+      "item": "TELEPORT_TO_HOUSE",
+      "kit": 3,
+      "members": true,
+      "levels": {
+        "construction": 50
+      },
+      "amount": [
+        5,
+        40
+      ],
+      "cost": 500,
+      "chance": 0.8,
+      "iron": {
+        "levels": {
+          "construction": 40,
+          "magic": 40
+        }
+      }
+    },
+    {
+      "item": "ZUL_ANDRA_TELEPORT",
+      "members": true,
+      "cost": 2000,
+      "obtain": {
+        "combat": 85
+      },
+      "iron": {
+        "combat": 85
+      },
+      "kit": 9,
+      "amount": [
+        5,
+        30
+      ],
+      "chance": 0.8,
+      "_why": "Zulrah (boss tasks): the walk to Zul-Andra is past the planner's cap from most places"
+    }
+  ],
+  "_doc_styles": "Ranged and magic sets (Gear.SppBots.js) as 'melee': a fighter wears the set of its main style (its highest of attack/strength, ranged, magic) and keeps the others it trained (20+) in the bank. 'arrowTier' is the best arrow a bow fires, 'ammo' a crossbow's bolts; 'element' a staff's rune, which picks the spell from 'spells'. 'supplies' is the combat kit in the bank (Supplies.SppBots.js uses it): 'chance' an account keeps any. 'kit' 4: bots generated earlier get these once at login (grantTravelKit); 'kit' 5 (ammo, and spell runes through SPELLS_KIT) again for those that got 4 without them (a stack is now bought as far as the money goes).",
+  "ranged": {
+    "WEAPON_SLOT": [
+      {
+        "item": "TWISTED_BOW",
+        "levels": {
+          "ranged": 75
+        },
+        "members": true,
+        "cost": 1200000000,
+        "iron": {
+          "combat": 120
+        },
+        "kit": 4,
+        "arrowTier": 8
+      },
+      {
+        "item": "ARMADYL_CROSSBOW",
+        "levels": {
+          "ranged": 70
+        },
+        "members": true,
+        "cost": 30000000,
+        "iron": {
+          "combat": 110
+        },
+        "kit": 4,
+        "ammo": "gem"
+      },
+      {
+        "item": "MAGIC_SHORTBOW_I_",
+        "levels": {
+          "ranged": 50
+        },
+        "members": true,
+        "cost": 1500000,
+        "iron": {
+          "combat": 90
+        },
+        "kit": 4,
+        "arrowTier": 7
+      },
+      {
+        "item": "RUNE_CROSSBOW",
+        "levels": {
+          "ranged": 61
+        },
+        "members": true,
+        "cost": 11000,
+        "iron": {
+          "levels": {
+            "fletching": 69,
+            "smithing": 91
+          }
+        },
+        "kit": 4,
+        "ammo": "runite"
+      },
+      {
+        "item": "MAGIC_SHORTBOW",
+        "levels": {
+          "ranged": 50
+        },
+        "members": true,
+        "cost": 1300,
+        "iron": {
+          "levels": {
+            "fletching": 80
+          }
+        },
+        "kit": 4,
+        "arrowTier": 7
+      },
+      {
+        "item": "YEW_SHORTBOW",
+        "levels": {
+          "ranged": 40
+        },
+        "members": true,
+        "cost": 300,
+        "iron": {
+          "levels": {
+            "fletching": 65
+          }
+        },
+        "kit": 4,
+        "arrowTier": 6
+      },
+      {
+        "item": "MAPLE_SHORTBOW",
+        "levels": {
+          "ranged": 30
+        },
+        "cost": 50,
+        "iron": {
+          "levels": {
+            "fletching": 50
+          }
+        },
+        "kit": 4,
+        "arrowTier": 5
+      },
+      {
+        "item": "WILLOW_SHORTBOW",
+        "levels": {
+          "ranged": 20
+        },
+        "cost": 40,
+        "iron": {
+          "levels": {
+            "fletching": 35
+          }
+        },
+        "kit": 4,
+        "arrowTier": 4
+      },
+      {
+        "item": "OAK_SHORTBOW",
+        "levels": {
+          "ranged": 5
+        },
+        "cost": 30,
+        "kit": 4,
+        "arrowTier": 3
+      },
+      {
+        "item": "SHORTBOW",
+        "cost": 20,
+        "kit": 4,
+        "arrowTier": 2
+      }
+    ],
+    "HEAD_SLOT": [
+      {
+        "item": "ARMADYL_HELMET",
+        "levels": {
+          "ranged": 70,
+          "defence": 40
+        },
+        "members": true,
+        "cost": 8000000,
+        "iron": {
+          "combat": 110
+        },
+        "kit": 4
+      },
+      {
+        "item": "COIF",
+        "levels": {
+          "ranged": 20
+        },
+        "cost": 200,
+        "kit": 4
+      },
+      {
+        "item": "LEATHER_COWL",
+        "cost": 20,
+        "kit": 4
+      }
+    ],
+    "BODY_SLOT": [
+      {
+        "item": "ARMADYL_CHESTPLATE",
+        "levels": {
+          "ranged": 70,
+          "defence": 40
+        },
+        "members": true,
+        "cost": 30000000,
+        "iron": {
+          "combat": 110
+        },
+        "kit": 4
+      },
+      {
+        "item": "BLACK_DHIDE_BODY",
+        "levels": {
+          "ranged": 70,
+          "defence": 40
+        },
+        "members": true,
+        "cost": 8000,
+        "iron": {
+          "levels": {
+            "crafting": 84
+          }
+        },
+        "kit": 4
+      },
+      {
+        "item": "RED_DHIDE_BODY",
+        "levels": {
+          "ranged": 60,
+          "defence": 40
+        },
+        "members": true,
+        "cost": 6000,
+        "iron": {
+          "levels": {
+            "crafting": 77
+          }
+        },
+        "kit": 4
+      },
+      {
+        "item": "BLUE_DHIDE_BODY",
+        "levels": {
+          "ranged": 50,
+          "defence": 40
+        },
+        "members": true,
+        "cost": 5000,
+        "iron": {
+          "levels": {
+            "crafting": 71
+          }
+        },
+        "kit": 4
+      },
+      {
+        "item": "GREEN_DHIDE_BODY",
+        "levels": {
+          "ranged": 40,
+          "defence": 40
+        },
+        "cost": 4000,
+        "iron": {
+          "levels": {
+            "crafting": 63
+          }
+        },
+        "kit": 4
+      },
+      {
+        "item": "STUDDED_BODY",
+        "levels": {
+          "ranged": 20,
+          "defence": 20
+        },
+        "members": true,
+        "cost": 800,
+        "kit": 4
+      },
+      {
+        "item": "LEATHER_BODY",
+        "levels": {
+          "defence": 10
+        },
+        "cost": 50,
+        "kit": 4
+      }
+    ],
+    "LEG_SLOT": [
+      {
+        "item": "ARMADYL_CHAINSKIRT",
+        "levels": {
+          "ranged": 70,
+          "defence": 40
+        },
+        "members": true,
+        "cost": 28000000,
+        "iron": {
+          "combat": 110
+        },
+        "kit": 4
+      },
+      {
+        "item": "BLACK_DHIDE_CHAPS",
+        "levels": {
+          "ranged": 70
+        },
+        "members": true,
+        "cost": 5000,
+        "iron": {
+          "levels": {
+            "crafting": 82
+          }
+        },
+        "kit": 4
+      },
+      {
+        "item": "RED_DHIDE_CHAPS",
+        "levels": {
+          "ranged": 60
+        },
+        "members": true,
+        "cost": 3500,
+        "iron": {
+          "levels": {
+            "crafting": 75
+          }
+        },
+        "kit": 4
+      },
+      {
+        "item": "BLUE_DHIDE_CHAPS",
+        "levels": {
+          "ranged": 50
+        },
+        "members": true,
+        "cost": 2500,
+        "iron": {
+          "levels": {
+            "crafting": 68
+          }
+        },
+        "kit": 4
+      },
+      {
+        "item": "GREEN_DHIDE_CHAPS",
+        "levels": {
+          "ranged": 40
+        },
+        "cost": 2000,
+        "iron": {
+          "levels": {
+            "crafting": 60
+          }
+        },
+        "kit": 4
+      },
+      {
+        "item": "STUDDED_CHAPS",
+        "levels": {
+          "ranged": 20
+        },
+        "members": true,
+        "cost": 600,
+        "kit": 4
+      },
+      {
+        "item": "LEATHER_CHAPS",
+        "cost": 30,
+        "kit": 4
+      }
+    ],
+    "HANDS_SLOT": [
+      {
+        "item": "BLACK_DHIDE_VAMBRACES",
+        "levels": {
+          "ranged": 70
+        },
+        "members": true,
+        "cost": 3000,
+        "iron": {
+          "levels": {
+            "crafting": 79
+          }
+        },
+        "kit": 4
+      },
+      {
+        "item": "RED_DHIDE_VAMBRACES",
+        "levels": {
+          "ranged": 60
+        },
+        "members": true,
+        "cost": 2000,
+        "iron": {
+          "levels": {
+            "crafting": 73
+          }
+        },
+        "kit": 4
+      },
+      {
+        "item": "BLUE_DHIDE_VAMBRACES",
+        "levels": {
+          "ranged": 50
+        },
+        "members": true,
+        "cost": 1500,
+        "iron": {
+          "levels": {
+            "crafting": 66
+          }
+        },
+        "kit": 4
+      },
+      {
+        "item": "GREEN_DHIDE_VAMBRACES",
+        "levels": {
+          "ranged": 40
+        },
+        "cost": 1000,
+        "iron": {
+          "levels": {
+            "crafting": 57
+          }
+        },
+        "kit": 4
+      },
+      {
+        "item": "LEATHER_VAMBRACES",
+        "cost": 20,
+        "kit": 4
+      }
+    ],
+    "FEET_SLOT": [
+      {
+        "item": "SNAKESKIN_BOOTS",
+        "levels": {
+          "ranged": 30,
+          "defence": 30
+        },
+        "members": true,
+        "cost": 300,
+        "kit": 4
+      }
+    ],
+    "CAPE_SLOT": [
+      {
+        "item": "AVAS_ACCUMULATOR",
+        "levels": {
+          "ranged": 50
+        },
+        "members": true,
+        "quest": "Animal Magnetism",
+        "cost": 0,
+        "kit": 4
+      },
+      {
+        "item": "AVAS_ATTRACTOR",
+        "levels": {
+          "ranged": 30
+        },
+        "members": true,
+        "quest": "Animal Magnetism",
+        "cost": 0,
+        "kit": 4
+      }
+    ],
+    "AMULET_SLOT": [
+      {
+        "item": "AMULET_OF_GLORY",
+        "members": true,
+        "cost": 12000,
+        "iron": {
+          "levels": {
+            "crafting": 80,
+            "magic": 68
+          }
+        },
+        "kit": 4
+      },
+      {
+        "item": "AMULET_OF_POWER",
+        "cost": 2000,
+        "iron": {
+          "levels": {
+            "crafting": 70,
+            "magic": 57
+          }
+        },
+        "kit": 4
+      }
+    ]
+  },
+  "arrows": [
+    {
+      "item": "DRAGON_ARROW",
+      "levels": {
+        "ranged": 60
+      },
+      "members": true,
+      "cost": 1500,
+      "iron": {
+        "levels": {
+          "fletching": 90
+        }
+      },
+      "kit": 5,
+      "tier": 8,
+      "amount": [
+        100,
+        800
+      ]
+    },
+    {
+      "item": "AMETHYST_ARROW",
+      "levels": {
+        "ranged": 50
+      },
+      "members": true,
+      "cost": 500,
+      "iron": {
+        "levels": {
+          "fletching": 82,
+          "mining": 92
+        }
+      },
+      "kit": 5,
+      "tier": 7,
+      "amount": [
+        200,
+        1500
+      ]
+    },
+    {
+      "item": "RUNE_ARROW",
+      "levels": {
+        "ranged": 40
+      },
+      "cost": 150,
+      "iron": {
+        "levels": {
+          "fletching": 75,
+          "smithing": 90
+        }
+      },
+      "kit": 5,
+      "tier": 6,
+      "amount": [
+        300,
+        2000
+      ]
+    },
+    {
+      "item": "ADAMANT_ARROW",
+      "levels": {
+        "ranged": 30
+      },
+      "cost": 60,
+      "iron": {
+        "levels": {
+          "fletching": 60,
+          "smithing": 75
+        }
+      },
+      "kit": 5,
+      "tier": 5,
+      "amount": [
+        300,
+        2000
+      ]
+    },
+    {
+      "item": "MITHRIL_ARROW",
+      "levels": {
+        "ranged": 20
+      },
+      "cost": 25,
+      "kit": 5,
+      "tier": 4,
+      "amount": [
+        300,
+        2000
+      ]
+    },
+    {
+      "item": "STEEL_ARROW",
+      "levels": {
+        "ranged": 5
+      },
+      "cost": 15,
+      "kit": 5,
+      "tier": 3,
+      "amount": [
+        300,
+        2000
+      ]
+    },
+    {
+      "item": "IRON_ARROW",
+      "cost": 8,
+      "kit": 5,
+      "tier": 2,
+      "amount": [
+        300,
+        2000
+      ]
+    },
+    {
+      "item": "BRONZE_ARROW",
+      "cost": 4,
+      "kit": 5,
+      "tier": 1,
+      "amount": [
+        300,
+        2000
+      ]
+    }
+  ],
+  "bolts": {
+    "gem": [
+      {
+        "item": "DIAMOND_BOLTS_E_",
+        "levels": {
+          "ranged": 65
+        },
+        "members": true,
+        "cost": 1200,
+        "iron": {
+          "levels": {
+            "fletching": 65,
+            "crafting": 43,
+            "magic": 57
+          }
+        },
+        "kit": 5,
+        "amount": [
+          200,
+          1500
+        ]
+      },
+      {
+        "item": "RUBY_BOLTS_E_",
+        "levels": {
+          "ranged": 64
+        },
+        "members": true,
+        "cost": 1000,
+        "iron": {
+          "levels": {
+            "fletching": 63,
+            "crafting": 63,
+            "magic": 49
+          }
+        },
+        "kit": 5,
+        "amount": [
+          200,
+          1500
+        ]
+      },
+      {
+        "item": "RUNITE_BOLTS",
+        "levels": {
+          "ranged": 61
+        },
+        "members": true,
+        "cost": 250,
+        "kit": 5,
+        "amount": [
+          300,
+          2000
+        ]
+      }
+    ],
+    "runite": [
+      {
+        "item": "RUNITE_BOLTS",
+        "levels": {
+          "ranged": 61
+        },
+        "members": true,
+        "cost": 250,
+        "kit": 5,
+        "amount": [
+          300,
+          2000
+        ]
+      },
+      {
+        "item": "ADAMANT_BOLTS",
+        "levels": {
+          "ranged": 46
+        },
+        "members": true,
+        "cost": 80,
+        "kit": 5,
+        "amount": [
+          300,
+          2000
+        ]
+      }
+    ]
+  },
+  "magic": {
+    "WEAPON_SLOT": [
+      {
+        "item": "KODAI_WAND",
+        "levels": {
+          "magic": 75
+        },
+        "members": true,
+        "cost": 80000000,
+        "iron": {
+          "combat": 120
+        },
+        "kit": 4,
+        "element": "water"
+      },
+      {
+        "item": "MYSTIC_FIRE_STAFF",
+        "levels": {
+          "magic": 40,
+          "attack": 40
+        },
+        "members": true,
+        "cost": 40000,
+        "iron": {
+          "levels": {
+            "crafting": 66,
+            "magic": 66
+          }
+        },
+        "kit": 4,
+        "element": "fire"
+      },
+      {
+        "item": "FIRE_BATTLESTAFF",
+        "levels": {
+          "magic": 30,
+          "attack": 30
+        },
+        "members": true,
+        "cost": 9000,
+        "iron": {
+          "levels": {
+            "crafting": 62,
+            "magic": 62
+          }
+        },
+        "kit": 4,
+        "element": "fire"
+      },
+      {
+        "item": "STAFF_OF_FIRE",
+        "cost": 1500,
+        "kit": 4,
+        "element": "fire"
+      },
+      {
+        "item": "STAFF_OF_AIR",
+        "cost": 1500,
+        "kit": 4,
+        "element": "air"
+      }
+    ],
+    "HEAD_SLOT": [
+      {
+        "item": "AHRIMS_HOOD",
+        "levels": {
+          "magic": 70,
+          "defence": 70
+        },
+        "members": true,
+        "cost": 1000000,
+        "iron": {
+          "combat": 100
+        },
+        "kit": 4
+      },
+      {
+        "item": "INFINITY_HAT",
+        "levels": {
+          "magic": 50,
+          "defence": 25
+        },
+        "members": true,
+        "cost": 1500000,
+        "iron": {
+          "combat": 95
+        },
+        "kit": 4
+      },
+      {
+        "item": "MYSTIC_HAT",
+        "levels": {
+          "magic": 40,
+          "defence": 20
+        },
+        "members": true,
+        "cost": 20000,
+        "kit": 4
+      },
+      {
+        "item": "BLUE_WIZARD_HAT",
+        "cost": 10,
+        "kit": 4
+      }
+    ],
+    "BODY_SLOT": [
+      {
+        "item": "AHRIMS_ROBETOP",
+        "levels": {
+          "magic": 70,
+          "defence": 70
+        },
+        "members": true,
+        "cost": 4000000,
+        "iron": {
+          "combat": 100
+        },
+        "kit": 4
+      },
+      {
+        "item": "MYSTIC_ROBE_TOP",
+        "levels": {
+          "magic": 40,
+          "defence": 20
+        },
+        "members": true,
+        "cost": 70000,
+        "kit": 4
+      },
+      {
+        "item": "ZAMORAK_MONK_TOP",
+        "cost": 100,
+        "kit": 4
+      },
+      {
+        "item": "BLUE_WIZARD_ROBE",
+        "cost": 20,
+        "kit": 4
+      }
+    ],
+    "LEG_SLOT": [
+      {
+        "item": "AHRIMS_ROBESKIRT",
+        "levels": {
+          "magic": 70,
+          "defence": 70
+        },
+        "members": true,
+        "cost": 4000000,
+        "iron": {
+          "combat": 100
+        },
+        "kit": 4
+      },
+      {
+        "item": "MYSTIC_ROBE_BOTTOM",
+        "levels": {
+          "magic": 40,
+          "defence": 20
+        },
+        "members": true,
+        "cost": 50000,
+        "kit": 4
+      },
+      {
+        "item": "ZAMORAK_MONK_BOTTOM",
+        "cost": 100,
+        "kit": 4
+      },
+      {
+        "item": "BLUE_SKIRT",
+        "cost": 20,
+        "kit": 4
+      }
+    ],
+    "HANDS_SLOT": [
+      {
+        "item": "MYSTIC_GLOVES",
+        "levels": {
+          "magic": 40,
+          "defence": 20
+        },
+        "members": true,
+        "cost": 6000,
+        "kit": 4
+      }
+    ],
+    "FEET_SLOT": [
+      {
+        "item": "INFINITY_BOOTS",
+        "levels": {
+          "magic": 50,
+          "defence": 25
+        },
+        "members": true,
+        "cost": 1500000,
+        "iron": {
+          "combat": 95
+        },
+        "kit": 4
+      },
+      {
+        "item": "MYSTIC_BOOTS",
+        "levels": {
+          "magic": 40,
+          "defence": 20
+        },
+        "members": true,
+        "cost": 6000,
+        "kit": 4
+      }
+    ],
+    "AMULET_SLOT": [
+      {
+        "item": "OCCULT_NECKLACE",
+        "levels": {
+          "magic": 70
+        },
+        "members": true,
+        "cost": 1000000,
+        "iron": {
+          "combat": 95
+        },
+        "kit": 4
+      },
+      {
+        "item": "AMULET_OF_GLORY",
+        "members": true,
+        "cost": 12000,
+        "iron": {
+          "levels": {
+            "crafting": 80,
+            "magic": 68
+          }
+        },
+        "kit": 4
+      },
+      {
+        "item": "AMULET_OF_MAGIC",
+        "cost": 700,
+        "kit": 4
+      }
+    ],
+    "CAPE_SLOT": [
+      {
+        "item": "SARADOMIN_CAPE",
+        "levels": {
+          "magic": 60
+        },
+        "members": true,
+        "cost": 0,
+        "kit": 4,
+        "obtain": {
+          "levels": {
+            "magic": 60
+          }
+        }
+      }
+    ]
+  },
+  "spells": {
+    "fire": [
+      {
+        "spell": "Fire Wave",
+        "levels": {
+          "magic": 75
+        },
+        "members": true,
+        "runes": {
+          "BLOOD_RUNE": 1,
+          "AIR_RUNE": 5
+        }
+      },
+      {
+        "spell": "Fire Blast",
+        "levels": {
+          "magic": 59
+        },
+        "runes": {
+          "DEATH_RUNE": 1,
+          "AIR_RUNE": 4
+        }
+      },
+      {
+        "spell": "Fire Bolt",
+        "levels": {
+          "magic": 35
+        },
+        "runes": {
+          "CHAOS_RUNE": 1,
+          "AIR_RUNE": 3
+        }
+      },
+      {
+        "spell": "Fire Strike",
+        "levels": {
+          "magic": 13
+        },
+        "runes": {
+          "MIND_RUNE": 1,
+          "AIR_RUNE": 2
+        }
+      },
+      {
+        "spell": "Wind Strike",
+        "levels": {
+          "magic": 1
+        },
+        "runes": {
+          "MIND_RUNE": 1,
+          "AIR_RUNE": 1
+        }
+      }
+    ],
+    "water": [
+      {
+        "spell": "Water Wave",
+        "levels": {
+          "magic": 65
+        },
+        "members": true,
+        "runes": {
+          "BLOOD_RUNE": 1,
+          "AIR_RUNE": 5
+        }
+      },
+      {
+        "spell": "Water Blast",
+        "levels": {
+          "magic": 47
+        },
+        "runes": {
+          "DEATH_RUNE": 1,
+          "AIR_RUNE": 3
+        }
+      },
+      {
+        "spell": "Water Bolt",
+        "levels": {
+          "magic": 23
+        },
+        "runes": {
+          "CHAOS_RUNE": 1,
+          "AIR_RUNE": 2
+        }
+      },
+      {
+        "spell": "Water Strike",
+        "levels": {
+          "magic": 5
+        },
+        "runes": {
+          "MIND_RUNE": 1,
+          "AIR_RUNE": 1
+        }
+      }
+    ],
+    "air": [
+      {
+        "spell": "Wind Blast",
+        "levels": {
+          "magic": 41
+        },
+        "runes": {
+          "DEATH_RUNE": 1
+        }
+      },
+      {
+        "spell": "Wind Bolt",
+        "levels": {
+          "magic": 17
+        },
+        "runes": {
+          "CHAOS_RUNE": 1
+        }
+      },
+      {
+        "spell": "Wind Strike",
+        "levels": {
+          "magic": 1
+        },
+        "runes": {
+          "MIND_RUNE": 1
+        }
+      }
+    ],
+    "casts": [
+      300,
+      1500
+    ],
+    "runeCosts": {
+      "AIR_RUNE": 5,
+      "MIND_RUNE": 4,
+      "CHAOS_RUNE": 80,
+      "DEATH_RUNE": 200,
+      "BLOOD_RUNE": 350,
+      "WRATH_RUNE": 400
+    }
+  },
+  "supplies": [
+    {
+      "item": "COOKED_KARAMBWAN",
+      "levels": {
+        "cooking": 30
+      },
+      "members": true,
+      "cost": 600,
+      "iron": {
+        "levels": {
+          "cooking": 30,
+          "fishing": 65
+        }
+      },
+      "kit": 4,
+      "amount": [
+        50,
+        500
+      ],
+      "chance": 0.8
+    },
+    {
+      "item": "PRAYER_POTION_4_",
+      "levels": {
+        "prayer": 37
+      },
+      "members": true,
+      "cost": 9000,
+      "iron": {
+        "levels": {
+          "herblore": 38
+        }
+      },
+      "kit": 4,
+      "amount": [
+        20,
+        200
+      ],
+      "chance": 0.8
+    },
+    {
+      "item": "SUPER_RESTORE_4_",
+      "levels": {
+        "prayer": 43
+      },
+      "members": true,
+      "cost": 10000,
+      "iron": {
+        "levels": {
+          "herblore": 63
+        }
+      },
+      "kit": 4,
+      "amount": [
+        10,
+        150
+      ],
+      "chance": 0.7
+    },
+    {
+      "item": "SARADOMIN_BREW_4_",
+      "levels": {
+        "hitpoints": 70
+      },
+      "members": true,
+      "cost": 6000,
+      "iron": {
+        "levels": {
+          "herblore": 81
+        }
+      },
+      "kit": 4,
+      "amount": [
+        10,
+        100
+      ],
+      "chance": 0.6
+    },
+    {
+      "item": "SUPER_COMBAT_POTION_4_",
+      "levels": {
+        "attack": 70,
+        "strength": 70,
+        "defence": 70
+      },
+      "members": true,
+      "cost": 12000,
+      "iron": {
+        "levels": {
+          "herblore": 90
+        }
+      },
+      "kit": 4,
+      "amount": [
+        5,
+        40
+      ],
+      "chance": 0.6
+    },
+    {
+      "item": "RANGING_POTION_4_",
+      "levels": {
+        "ranged": 60
+      },
+      "members": true,
+      "cost": 1000,
+      "iron": {
+        "levels": {
+          "herblore": 72
+        }
+      },
+      "kit": 4,
+      "amount": [
+        5,
+        40
+      ],
+      "chance": 0.6
+    },
+    {
+      "item": "MAGIC_POTION_4_",
+      "levels": {
+        "magic": 60
+      },
+      "members": true,
+      "cost": 1000,
+      "iron": {
+        "levels": {
+          "herblore": 76
+        }
+      },
+      "kit": 4,
+      "amount": [
+        5,
+        40
+      ],
+      "chance": 0.5
+    },
+    {
+      "item": "STAMINA_POTION_4_",
+      "members": true,
+      "cost": 9000,
+      "iron": {
+        "levels": {
+          "herblore": 77
+        }
+      },
+      "kit": 4,
+      "amount": [
+        5,
+        50
+      ],
+      "chance": 0.6
+    },
+    {
+      "item": "ENERGY_POTION_4_",
+      "cost": 500,
+      "iron": {
+        "levels": {
+          "herblore": 26
+        }
+      },
+      "kit": 4,
+      "amount": [
+        5,
+        30
+      ],
+      "chance": 0.4
+    },
+    {
+      "item": "BIG_BONES",
+      "cost": 300,
+      "kit": 7,
+      "amount": [
+        50,
+        600
+      ],
+      "chance": 0.5,
+      "_why": "Prayer at a host's altar (HousePrayer.SppBots.js); an ironman's are from its own kills"
+    },
+    {
+      "item": "DRAGON_BONES",
+      "members": true,
+      "cost": 2500,
+      "kit": 7,
+      "amount": [
+        20,
+        400
+      ],
+      "chance": 0.35,
+      "iron": {
+        "combat": 85
+      }
+    },
+    {
+      "item": "ANTI_VENOM_4_",
+      "members": true,
+      "cost": 7000,
+      "obtain": {
+        "combat": 85
+      },
+      "iron": {
+        "levels": {
+          "herblore": 87
+        }
+      },
+      "kit": 8,
+      "amount": [
+        10,
+        80
+      ],
+      "chance": 0.7,
+      "_why": "Zulrah's venom (boss tasks)"
+    }
+  ],
+  "specials": {
+    "_doc": "A special attack weapon for the main style, kept in the bank and switched to in a fight (Tactics.SppBots.js); best first.",
+    "melee": [
+      {
+        "item": "DRAGON_CLAWS",
+        "levels": {
+          "attack": 60
+        },
+        "members": true,
+        "cost": 60000000,
+        "iron": {
+          "combat": 110
+        },
+        "kit": 6
+      },
+      {
+        "item": "BANDOS_GODSWORD",
+        "levels": {
+          "attack": 75
+        },
+        "members": true,
+        "cost": 10000000,
+        "iron": {
+          "combat": 110
+        },
+        "kit": 6
+      },
+      {
+        "item": "DRAGON_WARHAMMER",
+        "levels": {
+          "strength": 60
+        },
+        "members": true,
+        "cost": 25000000,
+        "iron": {
+          "combat": 100
+        },
+        "kit": 6
+      },
+      {
+        "item": "GRANITE_MAUL",
+        "levels": {
+          "attack": 50,
+          "strength": 50
+        },
+        "members": true,
+        "cost": 40000,
+        "iron": {
+          "levels": {
+            "slayer": 75
+          }
+        },
+        "kit": 6
+      },
+      {
+        "item": "DRAGON_DAGGER_P_PLUS_PLUS_",
+        "levels": {
+          "attack": 60
+        },
+        "members": true,
+        "quest": "Lost City",
+        "cost": 30000,
+        "iron": {
+          "levels": {
+            "herblore": 70
+          }
+        },
+        "kit": 6
+      },
+      {
+        "item": "DRAGON_DAGGER",
+        "levels": {
+          "attack": 60
+        },
+        "members": true,
+        "quest": "Lost City",
+        "cost": 20000,
+        "kit": 6
+      }
+    ],
+    "ranged": [
+      {
+        "item": "DARK_BOW",
+        "levels": {
+          "ranged": 60
+        },
+        "members": true,
+        "cost": 1000000,
+        "iron": {
+          "levels": {
+            "slayer": 90
+          }
+        },
+        "kit": 6
+      }
+    ],
+    "magic": []
+  }
+}

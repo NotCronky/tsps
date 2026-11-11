@@ -1045,7 +1045,8 @@ function createPestControl(api) {
     }
     const state = stateByBoat.get(boat.key);
     moveBetweenAreas(player, state.area, boat.waitingLocation.clone());
-    if (player.isPlayerBot?.() !== true) {
+    // Lander bot fill: world config "PestControl:seedBots" (default on); off, a lander waits for players.
+    if (player.isPlayerBot?.() !== true && api.getPluginConfig?.("PestControl:seedBots", true) !== false) {
       const pendingBots = World.getAddPlayerQueue().filter((queued) =>
         queued.isPlayerBot?.() === true && boat.waitingBounds.inside(queued.getLocation())
       ).length;

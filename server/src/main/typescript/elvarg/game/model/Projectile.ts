@@ -181,8 +181,46 @@ export class Projectile {
         };
     }
 
+    /**
+     * Listeners told of every projectile fired at a tile rather than at someone (a falling
+     * boulder, a cloud being spat): what any client in view sees land. For players without a
+     * client (bots) that dodge, as a player would step off the tile.
+     */
+    private static groundListeners: Array<(shot: { projectileId: number; end: Location; privateArea: PrivateArea; landsInTicks: number }) => void> = [];
+
+    public static onGroundTarget(listener: (shot: { projectileId: number; end: Location; privateArea: PrivateArea; landsInTicks: number }) => void): void {
+        Projectile.groundListeners.push(listener);
+    }
+
+    /** Listeners told of every projectile fired at a player: what that player's client sees coming. */
+    private static playerListeners: Array<(shot: { projectileId: number; target: Mobile; landsInTicks: number }) => void> = [];
+
+    public static onFiredAtPlayer(listener: (shot: { projectileId: number; target: Mobile; landsInTicks: number }) => void): void {
+        Projectile.playerListeners.push(listener);
+    }
+
     public sendProjectile(): void {
         const timing = this.getTiming();
+        if (this.lockon && Projectile.playerListeners.length && (this.lockon as any).isPlayer?.()) {
+            const shot = { projectileId: this.projectileId, target: this.lockon, landsInTicks: Projectile.ticksToLand(timing.endCycleOffset) };
+            for (const listener of Projectile.playerListeners) {
+                try {
+                    listener(shot);
+                } catch (error) {
+                    console.error("[projectile] player listener", error);
+                }
+            }
+        }
+        if (!this.lockon && this.end && Projectile.groundListeners.length) {
+            const shot = { projectileId: this.projectileId, end: this.end, privateArea: this.privateArea, landsInTicks: Projectile.ticksToLand(timing.endCycleOffset) };
+            for (const listener of Projectile.groundListeners) {
+                try {
+                    listener(shot);
+                } catch (error) {
+                    console.error("[projectile] ground listener", error);
+                }
+            }
+        }
         const resolvedDelay = timing.startCycleOffset;
         const resolvedSpeed = timing.endCycleOffset;
 

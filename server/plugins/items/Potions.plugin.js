@@ -1844,8 +1844,9 @@ module.exports = {
     api.onInterfaceActionButton(componentIds(api, HEALTH_ORB_CURE_COMPONENTS), cureFromHealthOrb);
     api.onCustomEvent("skills:current-level-changed", noteDivineDrain);
 
+    // Bots that play as players (spp-bots) drink and so need their effects to wear off too.
     api.onPlayerProcess(({ player }) => {
-      if (player?.isPlayerBot?.()) {
+      if (player?.isPlayerBot?.() && player.playsAsPlayer?.() !== true) {
         return;
       }
       processStamina(player);
@@ -1856,7 +1857,7 @@ module.exports = {
       processPrayerEnhance(player);
       processBoostDecay(player);
       processDragonfireProtection(player);
-    });
+    }, { bots: true });
 
     api.log("registered", {
       potionEntries: POTION_BY_ITEM_ID.size,

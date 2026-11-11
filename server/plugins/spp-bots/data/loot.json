@@ -1,0 +1,15 @@
+{
+  "_doc": "What a bot picks up after a kill (Loot.SppBots.js): rules in order, the first that matches decides ('take' true or false); nothing matched is left. 'match' (all given must hold): 'items' ItemIds keys, 'names' patterns on the item's name (case-insensitive), 'kinds' (coins, runes, ammo = the ammo the bot wears, clue, stackable, noted), 'minValue' gp for the whole stack at the Grand Exchange price (store value for untradeables), 'maxValue'. 'when': 'freeSlots' the pack needs (a stack the bot already carries needs none). A framework to grow: add rules above the catch-alls; a task may bring its own rules first (Loot.decide's extra).",
+  "radius": 6,
+  "rules": [
+    { "_why": "Never junk, whatever it's worth to the GE", "take": false, "match": { "names": ["^bones$", "^ashes$", "^vial$", "^jug$"] } },
+    { "_why": "Clues are always worth a slot", "take": true, "match": { "kinds": ["clue"] } },
+    { "_why": "Coins stack and weigh nothing", "take": true, "match": { "kinds": ["coins"] } },
+    { "_why": "Runes stack", "take": true, "match": { "kinds": ["runes"] } },
+    { "_why": "The bot's own arrows or bolts back", "take": true, "match": { "kinds": ["ammo"] } },
+    { "_why": "A valuable stack, even when the pack is nearly full", "take": true, "match": { "minValue": 5000 }, "when": { "freeSlots": 1 } },
+    { "_why": "A decent item while there's room for supplies", "take": true, "match": { "minValue": 1000 }, "when": { "freeSlots": 4 } },
+    { "_why": "Noted drops (herbs, hides, ores) stack in one slot", "take": true, "match": { "kinds": ["noted"], "minValue": 300 }, "when": { "freeSlots": 1 } },
+    { "_why": "Everything else stays", "take": false, "match": {} }
+  ]
+}

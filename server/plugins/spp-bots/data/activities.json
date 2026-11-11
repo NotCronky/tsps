@@ -1,0 +1,16 @@
+{
+  "_doc": "What spp-bots can do live (Activities.SppBots.js). Each activity trains a skill from a level with a tool the bot must own: the bot fetches it from its bank, gathers until its inventory is full, then banks or drops what it got. 'tool' names a list in data/gear.json's tools; 'catalog'/'tier' pick trees and rocks from upstream's object catalog; 'spot' is a fishing spot's tool option. training.json's 'live' fields point here.",
+  "activities": {
+    "chop_normal":     { "skill": "woodcutting", "level": 1,  "tool": "axe", "catalog": "tree", "tier": "normal", "option": "Chop down", "products": ["LOGS"] },
+    "chop_oak":        { "skill": "woodcutting", "level": 15, "tool": "axe", "catalog": "tree", "tier": "oak", "option": "Chop down", "products": ["OAK_LOGS"] },
+    "chop_willow":     { "skill": "woodcutting", "level": 30, "tool": "axe", "catalog": "tree", "tier": "willow", "option": "Chop down", "products": ["WILLOW_LOGS"] },
+    "chop_yew":        { "skill": "woodcutting", "level": 60, "tool": "axe", "catalog": "tree", "tier": "yew", "option": "Chop down", "products": ["YEW_LOGS"] },
+    "mine_copper_tin": { "skill": "mining", "level": 1,  "tool": "pickaxe", "catalog": "rock", "tier": ["copper", "tin"], "option": "Mine", "products": ["COPPER_ORE", "TIN_ORE"] },
+    "mine_iron":       { "skill": "mining", "level": 15, "tool": "pickaxe", "catalog": "rock", "tier": "iron", "option": "Mine", "products": ["IRON_ORE"] },
+    "mine_coal":       { "skill": "mining", "level": 30, "tool": "pickaxe", "catalog": "rock", "tier": "coal", "option": "Mine", "products": ["COAL"] },
+    "mine_mithril":    { "skill": "mining", "level": 55, "tool": "pickaxe", "catalog": "rock", "tier": "mithril", "option": "Mine", "products": ["MITHRIL_ORE"] },
+    "fish_net":        { "skill": "fishing", "level": 1,  "fishingTool": "SMALL_FISHING_NET", "spot": "NET", "products": ["RAW_SHRIMPS", "RAW_ANCHOVIES"] },
+    "fish_fly":        { "skill": "fishing", "level": 20, "fishingTool": "FLY_FISHING_ROD", "bait": "FEATHER", "spot": "FLY_FISHING_ROD", "products": ["RAW_TROUT", "RAW_SALMON"] },
+    "fish_lobster":    { "skill": "fishing", "level": 40, "fishingTool": "LOBSTER_POT", "spot": "LOBSTER_POT", "products": ["RAW_LOBSTER"] }
+  }
+}

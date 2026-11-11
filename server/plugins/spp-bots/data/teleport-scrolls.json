@@ -1,0 +1,10 @@
+{
+  "_doc": "Teleport scrolls whose content plugin handles them (so combat/data/teleport-tablets.json doesn't list them), by item name: where they land (Teleports.SppBots.js). The server's own handler does the teleport.",
+  "scrolls": {
+    "zul-andra teleport": [
+      2196,
+      3056,
+      0
+    ]
+  }
+}

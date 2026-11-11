@@ -150,6 +150,8 @@ class HunllefFight {
     this.style = "ranged";
     this.attacks = 0;
     this.offPrayerHits = 0;
+    // The player's hits that landed, blocked or not (for a player counting theirs, as the 5:1 method does).
+    this.hitsLanded = 0;
     // For the Combat Achievements: damage taken off prayer, from tornadoes, the floor and the
     // stomp, and the player's hits with a style it protects against.
     this.taken = { offPrayer: 0, avoidable: 0 };
@@ -403,6 +405,7 @@ class HunllefFight {
 
   /** Hits it protects against do nothing; every 6th other hit changes what it protects against. */
   onHit(hit) {
+    this.hitsLanded++;
     const style = styleOf(hit.getCombatType?.());
     if (style === this.protecting) {
       this.wrongStyleHits++;

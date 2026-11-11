@@ -59,8 +59,11 @@ function furnished(roomKey) {
   return furniture;
 }
 
-/** Lays out the rooms; doorway masks come from the house style's room templates. */
-function layout(save) {
+/**
+ * Lays out the rooms; doorway masks come from the house style's room templates. `ground` and
+ * `basement` (room keys, in the order they're grown from the garden) default to every room.
+ */
+function layout(save, { ground = GROUND_ROOMS, basement = BASEMENT_ROOMS } = {}) {
   const doorsOf = (roomKey) => Instance.PlayerHouseInstance.prototype.templateDoorMask.call({ save }, roomKey);
   const rooms = Array.from({ length: 3 }, () => Array.from({ length: GRID }, () => Array(GRID).fill(null)));
   const put = (plane, x, y, roomKey, rotation) => { rooms[plane][x][y] = { roomKey, rotation, furniture: furnished(roomKey) }; };
@@ -85,7 +88,7 @@ function layout(save) {
   };
   put(GROUND, 4, 4, "GARDEN", 0);
   const placed = {};
-  for (const roomKey of GROUND_ROOMS) placed[roomKey] = grow(GROUND, roomKey);
+  for (const roomKey of ground) placed[roomKey] = grow(GROUND, roomKey);
   for (const [below, above] of [["SKILL_HALL_UP", "SKILL_HALL_DOWN"], ["QUEST_HALL_UP", "QUEST_HALL_DOWN"]]) {
     const at = placed[below];
     if (at) put(UPPER, at.x, at.y, above, at.rotation);
@@ -93,7 +96,7 @@ function layout(save) {
   const hall = placed.SKILL_HALL_UP, throne = placed.THRONE_ROOM;
   if (hall) put(BASEMENT, hall.x, hall.y, "DUNGEON_STAIRS", hall.rotation);
   if (throne) put(BASEMENT, throne.x, throne.y, "OUBLIETTE", throne.rotation);
-  for (const roomKey of BASEMENT_ROOMS) grow(BASEMENT, roomKey);
+  for (const roomKey of basement) grow(BASEMENT, roomKey);
   return rooms;
 }
 
@@ -128,12 +131,16 @@ function setUp(player, house) {
   house.save.prize = PRIZE;
 }
 
-function maxHouse({ player }) {
+/**
+ * `rooms` ({ ground, basement } room keys, optional): a smaller house of just those rooms, each
+ * furnished the same way (a host's garden, chapel and nexus); every room without it.
+ */
+function maxHouse({ player, rooms = undefined }) {
   const current = House.houseStateFor(player);
   if (!player.getAttribute(BACKUP_ATTRIBUTE)) player.setAttribute(BACKUP_ATTRIBUTE, JSON.parse(JSON.stringify(current)));
   House.releaseHouse(player, false);
   const save = { ...JSON.parse(JSON.stringify(current)), owned: true, locked: false };
-  save.rooms = layout(save);
+  save.rooms = layout(save, rooms);
   delete save.prize;
   delete save.treasure;
   player.setAttribute(HOUSE_ATTRIBUTE, save);

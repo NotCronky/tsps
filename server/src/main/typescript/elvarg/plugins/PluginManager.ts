@@ -251,7 +251,7 @@ export class PluginManager {
   private static serverShutdownHooks: PluginHook<PluginServerLifecycleEvent>[] = [];
   private static friendAddHooks: PluginHook<PluginFriendEvent>[] = [];
   private static friendRemoveHooks: PluginHook<PluginFriendEvent>[] = [];
-  private static playerProcessHooks: PluginHook<PluginPlayerProcessEvent>[] = [];
+  private static playerProcessHooks: (PluginHook<PluginPlayerProcessEvent> & { bots?: boolean })[] = [];
   private static playerLevelUpHooks: PluginHook<PluginPlayerLevelUpEvent>[] = [];
   private static experienceGainedHooks: PluginHook<PluginExperienceGainedEvent>[] = [];
   private static customEventHooks = new Map<
@@ -840,6 +840,17 @@ export class PluginManager {
       return;
     }
     for (const hook of PluginManager.playerProcessHooks) {
+      PluginManager.executeHook(hook, event, "player_process", "player_process");
+    }
+  }
+
+  /**
+   * A bot that plays as a player, once a tick: only the onPlayerProcess listeners that asked for
+   * bots ({ bots: true }), the gameplay ones; client-only ones (timers, HUDs) would do nothing.
+   */
+  public static emitBotPlayerProcess(event: PluginPlayerProcessEvent): void {
+    for (const hook of PluginManager.playerProcessHooks) {
+      if (hook.bots !== true) continue;
       PluginManager.executeHook(hook, event, "player_process", "player_process");
     }
   }
@@ -2413,6 +2424,11 @@ export class PluginManager {
       PrayerHandler: require("../game/content/PrayerHandler").PrayerHandler,
       PrayerData: require("../game/content/PrayerHandler").PrayerData,
       ItemActionPacketListener: require("../net/packet/impl/ItemActionPacketListener").ItemActionPacketListener,
+      // A world click run for a player without a client (a bot): the same code a client's packet runs.
+      ObjectActionPacketListener: require("../net/packet/impl/ObjectActionPacketListener").ObjectActionPacketListener,
+      NPCOptionPacketListener: require("../net/packet/impl/NPCOptionPacketListener").NPCOptionPacketListener,
+      PickupItemPacketListener: require("../net/packet/impl/PickupItemPacketListener").PickupItemPacketListener,
+      UseItemPacketListener: require("../net/packet/impl/UseItemPacketListener").UseItemPacketListener,
       castAlchemy: (player, spellId, itemId, slot, source) => {
         const { MagicOnItemPacketListener } = require("../net/packet/impl/MagicOnItemPacketListener");
         const listener = new MagicOnItemPacketListener();
@@ -3051,12 +3067,14 @@ export class PluginManager {
           },
         });
       },
-      onPlayerProcess: (handler) => {
+      onPlayerProcess: (handler, options) => {
         if (typeof handler !== "function") {
           return;
         }
         PluginManager.playerProcessHooks.push({
           ...hookProfile(handler),
+          // Also run for bots that play as players (Player.playsAsPlayer): gameplay listeners opt in.
+          bots: options?.bots === true,
           handler: (event) => {
             if (!event || !event.player) {
               return;

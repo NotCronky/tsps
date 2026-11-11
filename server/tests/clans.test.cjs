@@ -255,6 +255,11 @@ beforeEach(() => {
           this.bounds = bounds;
         }
       },
+      Area: class {
+        constructor(boundaries) {
+          this.boundaries = boundaries;
+        }
+      },
       Location: class {
         constructor(x, y, z) {
           Object.assign(this, { x, y, z });
@@ -344,6 +349,7 @@ beforeEach(() => {
         handler(event);
       });
     },
+    registerArea: (area) => (hooks.areas ??= []).push(area),
     onPlayerLogout: (handler) => (hooks.logout = handler),
     onSocialPacket: (handler) => (hooks.social = hooks.social ?? []).push(handler),
     onInterfaceActionClick: (handler) => hooks.clicks.push(handler),
@@ -710,6 +716,30 @@ test('Recruit leaves the duel\'s Forfeit alone: slot 6 is neither taken nor writ
   assert.equal(forfeit.handled, undefined);
   assert.deepEqual(owner.messages, []);
   assert.deepEqual(owner.option, [5, 'Recruit'], 'the only option clans ever sends');
+});
+
+test('Recruit is on the menu only in the Clan Hub or with a vexillum worn, and is sent only when that changes', () => {
+  const owner = player('Owner');
+  const [hub] = hooks.areas;
+  const mobile = { isPlayer: () => true, getAsPlayer: () => owner };
+  owner.location = { getX: () => 3200, getY: () => 3200, getZ: () => 0 };
+  login(owner);
+  assert.deepEqual(owner.option, [5, ''], 'outside the hub with no vexillum');
+  owner.option = null;
+  login(owner);
+  assert.equal(owner.option, null, 'unchanged, so not sent again');
+  owner.location = { getX: () => 3181, getY: () => 3471, getZ: () => 0 };
+  hub.postEnter(mobile);
+  assert.deepEqual(owner.option, [5, 'Recruit'], 'walked into the hub');
+  hub.postLeave(mobile, false);
+  assert.deepEqual(owner.option, [5, ''], 'left the hub, judged by leaving rather than the tile');
+  owner.location = { getX: () => 3200, getY: () => 3200, getZ: () => 0 };
+  owner.equipment = [25721];
+  hooks.custom.get('equipment:changed')({ player: owner });
+  assert.deepEqual(owner.option, [5, 'Recruit'], 'vexillum worn');
+  owner.equipment = [];
+  hooks.custom.get('equipment:changed')({ player: owner });
+  assert.deepEqual(owner.option, [5, ''], 'vexillum taken off');
 });
 
 test('Recruit leaves bots to the bots plugin', () => {

@@ -32,6 +32,12 @@ const DIAGONAL = [
   { dx: -1, dy: -1, corner: WALL_NORTH_EAST | WALL_NORTH | WALL_EAST, x: WALL_EAST, y: WALL_NORTH },
 ];
 
+// The eight tiles around one.
+const NEIGHBOURS = [[0, 1], [1, 1], [1, 0], [1, -1], [0, -1], [-1, -1], [-1, 0], [-1, 1]];
+
+// Underground areas (dungeons) are drawn this far north of the surface above them.
+const UNDERGROUND_Y = 6400;
+
 // Tiles searched per plan: bounds the cost of proving a goal unreachable.
 const MAX_EXPANSIONS = 600000;
 // A door costs a few steps more than walking past it, so open ways are preferred.
@@ -117,21 +123,66 @@ function indexTransports(data) {
  *   { menu, id, object }, or null; used where no transport row crosses the wall
  * @param usable (transport) => true when the route may take it
  * @param goalReach how close to `to` counts as there (0: the exact tile)
+ * @param isGoal (x, y, z) => true on a tile that counts as there, in place of `to`/`goalReach`:
+ *   without `to` the search finds the nearest such tile (createTravelSearch only)
+ * @param heuristicWeight 1 for the shortest route; more trades length for a faster search
+ * @param shortcuts [{ x, y, cost }]: tiles from which the goal is at least `cost` away by some
+ *   shortcut (a teleport network's hop); the heuristic takes the smaller of the straight distance
+ *   and the distance to a shortcut plus its cost, so a goal one hop away doesn't look thousands
+ *   of tiles off. Empty (the default): the straight distance alone
  * @returns {{ steps: {x, y, z, via?}[], cost, expansions } | null} where `via` is the transport
  *   that reached that step (walks have none)
  */
-function planTravel({ from, to, getFlag, transportsAt, doorAt = () => null, usable = () => true, goalReach = GOAL_REACH, maxExpansions = MAX_EXPANSIONS }) {
+function planTravel(options) {
+  const search = createTravelSearch(options);
+  search.run();
+  return search.result;
+}
+
+/**
+ * planTravel as a search that can stop and carry on later: `run(limit)` expands at most `limit`
+ * more tiles and returns true once the search is over, with `result` as planTravel returns it.
+ * A caller on the game thread can spread a long search over several ticks.
+ */
+function createTravelSearch({ from, to = null, isGoal = null, getFlag, transportsAt, doorAt = () => null, usable = () => true, goalReach = GOAL_REACH, maxExpansions = MAX_EXPANSIONS, heuristicWeight = 1, shortcuts = [] }) {
   const g = new Map();
   const parent = new Map();
   const via = new Map();
   const closed = new Set();
   const open = new Heap();
   const start = key(from.x, from.y, from.z);
-  const heuristic = (x, y) => Math.max(Math.abs(x - to.x), Math.abs(y - to.y));
+  // With `isGoal` and no `to` (the nearest of many places, a bank), it's Dijkstra: no heuristic.
+  // Dungeons lie 6400 tiles north of the ground above them, so a tile on the surface looks
+  // thousands of tiles from an underground goal it's close to by its ladder: the smaller of the
+  // straight distance and the distance between the two places' surface spots (never more than the
+  // real one, so the search still finds the shortest route).
+  const surfaceY = (y) => (y >= UNDERGROUND_Y ? y - UNDERGROUND_Y : y);
+  const distance = (x, y, tx, ty) => Math.min(
+    Math.max(Math.abs(x - tx), Math.abs(y - ty)),
+    Math.max(Math.abs(x - tx), Math.abs(surfaceY(y) - surfaceY(ty))),
+  );
+  const heuristic = !to
+    ? () => 0
+    : shortcuts.length === 0
+      ? (x, y) => distance(x, y, to.x, to.y)
+      : (x, y) => {
+        let best = distance(x, y, to.x, to.y);
+        for (const shortcut of shortcuts) {
+          const by = distance(x, y, shortcut.x, shortcut.y) + shortcut.cost;
+          if (by < best) best = by;
+        }
+        return best;
+      };
+  // Arrival by the real distance (the heuristic maps dungeons onto the surface).
+  const reached = isGoal ?? ((x, y, z) => z === to.z && Math.max(Math.abs(x - to.x), Math.abs(y - to.y)) <= goalReach);
   g.set(start, 0);
-  open.push(start, heuristic(from.x, from.y));
+  // Above 1 the search heads for the goal more greedily: far fewer tiles on a long trip, for a
+  // route at most that many times the shortest.
+  open.push(start, heuristicWeight * heuristic(from.x, from.y));
   let expansions = 0;
   let found = null;
+  let done = false;
+  let result = null;
 
   const relax = (current, next, cost, transport) => {
     if (closed.has(next)) return;
@@ -143,19 +194,11 @@ function planTravel({ from, to, getFlag, transportsAt, doorAt = () => null, usab
     if (transport) via.set(next, transport);
     else via.delete(next);
     const at = unkey(next);
-    open.push(next, tentative + heuristic(at.x, at.y));
+    open.push(next, tentative + heuristicWeight * heuristic(at.x, at.y));
   };
 
-  while (open.size > 0 && expansions < maxExpansions) {
-    const current = open.pop();
-    if (closed.has(current)) continue;
-    closed.add(current);
-    expansions += 1;
+  const expand = (current) => {
     const { x, y, z } = unkey(current);
-    if (z === to.z && heuristic(x, y) <= goalReach) {
-      found = current;
-      break;
-    }
     for (const move of STRAIGHT) {
       const nx = x + move.dx;
       const ny = y + move.dy;
@@ -185,14 +228,63 @@ function planTravel({ from, to, getFlag, transportsAt, doorAt = () => null, usab
       const span = chebyshev({ x, y }, { x: tx, y: ty });
       relax(current, key(tx, ty, tz), Math.max(1, transport.ticks ?? span, span <= 1 ? DOOR_COST : 0), transport);
     }
-  }
-  if (found === null) return null;
-  const steps = [];
-  for (let at = found; at !== undefined; at = parent.get(at)) {
-    steps.push({ ...unkey(at), ...(via.has(at) ? { via: via.get(at) } : {}) });
-  }
-  steps.reverse();
-  return { steps, cost: g.get(found), expansions };
+    // A transport whose origin is a blocked tile (a ladder or staircase standing on it in this
+    // server's collision) is clicked from next to it, as a player does.
+    for (const [dx, dy] of NEIGHBOURS) {
+      const ox = x + dx;
+      const oy = y + dy;
+      if (!(getFlag(ox, oy, z) & BLOCKED)) continue;
+      for (const transport of transportsAt(ox, oy, z)) {
+        if (!usable(transport)) continue;
+        const [tx, ty, tz] = transport.to;
+        const span = chebyshev({ x: ox, y: oy }, { x: tx, y: ty });
+        relax(current, key(tx, ty, tz), Math.max(1, transport.ticks ?? span, span <= 1 ? DOOR_COST : 0) + 1, transport);
+      }
+    }
+  };
+
+  const finish = () => {
+    done = true;
+    if (found === null) return;
+    const steps = [];
+    for (let at = found; at !== undefined; at = parent.get(at)) {
+      steps.push({ ...unkey(at), ...(via.has(at) ? { via: via.get(at) } : {}) });
+    }
+    steps.reverse();
+    result = { steps, cost: g.get(found), expansions };
+  };
+
+  const run = (limit = Infinity) => {
+    let left = limit;
+    while (!done && left > 0) {
+      if (open.size === 0 || expansions >= maxExpansions) {
+        finish();
+        break;
+      }
+      const current = open.pop();
+      if (closed.has(current)) continue;
+      closed.add(current);
+      expansions += 1;
+      left -= 1;
+      const { x, y, z } = unkey(current);
+      if (reached(x, y, z)) {
+        found = current;
+        finish();
+        break;
+      }
+      expand(current);
+    }
+    return done;
+  };
+
+  return {
+    run,
+    get done() { return done; },
+    get result() { return result; },
+    get expansions() { return expansions; },
+    /** Stopped at maxExpansions rather than running out of ground: the goal may still be reachable. */
+    get capped() { return done && found === null && expansions >= maxExpansions; },
+  };
 }
 
 /**
@@ -292,4 +384,4 @@ function skipPlan(tiles, { areaAt, unsafe = () => false, margin = SKIP_MARGIN, m
   return steps;
 }
 
-module.exports = { planTravel, toLegs, indexTransports, unmetRequirements, skipPlan, key, BLOCKED };
+module.exports = { createTravelSearch, planTravel, toLegs, indexTransports, unmetRequirements, skipPlan, key, BLOCKED };

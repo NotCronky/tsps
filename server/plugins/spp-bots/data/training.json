@@ -1,0 +1,134 @@
+{
+  "_doc": "Training methods by skill for the account simulator (Simulator.SppBots.js) and the live brain. Each method: level it starts at, xp per hour and gp per hour for a reasonably efficient player (the simulator scales these by each bot's efficiency), members, side xp ('also': skill -> share of the main xp) and 'live': the live activity that trains it, when there is one. Rates are first estimates in the range of the OSRS Wiki's training guides (Pay-to-play/Free-to-play <Skill> training); refine them against those pages.",
+  "skills": {
+    "attack": { "methods": [
+      { "level": 1,  "xp": 8000,   "gp": 500,   "also": { "hitpoints": 0.333 }, "live": "melee_training", "note": "chickens, cows, goblins" },
+      { "level": 20, "xp": 20000,  "gp": 2000,  "also": { "hitpoints": 0.333 }, "live": "melee_training", "note": "hill giants, flesh crawlers" },
+      { "level": 40, "xp": 35000,  "gp": 5000,  "also": { "hitpoints": 0.333 }, "note": "moss giants, ogresses" },
+      { "level": 60, "xp": 60000,  "gp": 20000, "members": true, "also": { "hitpoints": 0.333 }, "note": "sand crabs, ammonite crabs" },
+      { "level": 75, "xp": 90000,  "gp": 30000, "members": true, "also": { "hitpoints": 0.333 }, "note": "nightmare zone, slayer" }
+    ]},
+    "strength": { "methods": [
+      { "level": 1,  "xp": 8000,   "gp": 500,   "also": { "hitpoints": 0.333 }, "live": "melee_training" },
+      { "level": 20, "xp": 20000,  "gp": 2000,  "also": { "hitpoints": 0.333 }, "live": "melee_training" },
+      { "level": 40, "xp": 35000,  "gp": 5000,  "also": { "hitpoints": 0.333 } },
+      { "level": 60, "xp": 65000,  "gp": 20000, "members": true, "also": { "hitpoints": 0.333 } },
+      { "level": 75, "xp": 100000, "gp": 30000, "members": true, "also": { "hitpoints": 0.333 } }
+    ]},
+    "defence": { "methods": [
+      { "level": 1,  "xp": 8000,   "gp": 500,   "also": { "hitpoints": 0.333 }, "live": "melee_training" },
+      { "level": 20, "xp": 20000,  "gp": 2000,  "also": { "hitpoints": 0.333 }, "live": "melee_training" },
+      { "level": 40, "xp": 35000,  "gp": 5000,  "also": { "hitpoints": 0.333 } },
+      { "level": 60, "xp": 60000,  "gp": 20000, "members": true, "also": { "hitpoints": 0.333 } },
+      { "level": 75, "xp": 90000,  "gp": 30000, "members": true, "also": { "hitpoints": 0.333 } }
+    ]},
+    "hitpoints": { "methods": [] },
+    "ranged": { "methods": [
+      { "level": 1,  "xp": 10000,  "gp": -1000,  "also": { "hitpoints": 0.333 }, "note": "chickens, cows with a shortbow" },
+      { "level": 30, "xp": 30000,  "gp": -5000,  "also": { "hitpoints": 0.333 }, "note": "moss giants" },
+      { "level": 50, "xp": 60000,  "gp": -20000, "members": true, "also": { "hitpoints": 0.333 }, "note": "crabs" },
+      { "level": 70, "xp": 120000, "gp": -60000, "members": true, "also": { "hitpoints": 0.333 }, "note": "chinchompas" }
+    ]},
+    "magic": { "methods": [
+      { "level": 1,  "xp": 8000,   "gp": -5000,   "note": "strike spells" },
+      { "level": 25, "xp": 25000,  "gp": -10000,  "note": "Varrock teleport" },
+      { "level": 55, "xp": 70000,  "gp": -30000,  "note": "high alchemy" },
+      { "level": 70, "xp": 100000, "gp": -150000, "members": true, "note": "splashing, bursting" }
+    ]},
+    "prayer": { "methods": [
+      { "level": 1,  "xp": 4000,   "gp": -10000,  "note": "burying bones" },
+      { "level": 30, "xp": 40000,  "gp": -150000, "members": true, "note": "big bones on an altar" },
+      { "level": 45, "xp": 250000, "gp": -900000, "members": true, "note": "dragon bones on a gilded altar" }
+    ]},
+    "cooking": { "methods": [
+      { "level": 1,  "xp": 25000,  "gp": 5000,  "note": "shrimps, trout" },
+      { "level": 40, "xp": 90000,  "gp": 20000, "note": "lobsters" },
+      { "level": 62, "xp": 150000, "gp": 40000, "members": true, "note": "monkfish, sharks" }
+    ]},
+    "woodcutting": { "methods": [
+      { "level": 1,  "xp": 8000,   "gp": 2000,  "live": "chop_normal" },
+      { "level": 15, "xp": 18000,  "gp": 4000,  "live": "chop_oak" },
+      { "level": 30, "xp": 35000,  "gp": 2000,  "live": "chop_willow" },
+      { "level": 60, "xp": 45000,  "gp": 30000, "live": "chop_yew" },
+      { "level": 75, "xp": 60000,  "gp": 50000, "members": true, "note": "magic trees, teaks" }
+    ]},
+    "fishing": { "methods": [
+      { "level": 1,  "xp": 8000,   "gp": 1000,  "live": "fish_net" },
+      { "level": 20, "xp": 30000,  "gp": 5000,  "live": "fish_fly" },
+      { "level": 40, "xp": 30000,  "gp": 25000, "live": "fish_lobster" },
+      { "level": 58, "xp": 55000,  "gp": 5000,  "members": true, "note": "barbarian fishing" },
+      { "level": 76, "xp": 40000,  "gp": 70000, "members": true, "note": "sharks" }
+    ]},
+    "firemaking": { "methods": [
+      { "level": 1,  "xp": 30000,  "gp": -3000 },
+      { "level": 15, "xp": 50000,  "gp": -5000 },
+      { "level": 30, "xp": 90000,  "gp": -10000 },
+      { "level": 45, "xp": 150000, "gp": -20000 },
+      { "level": 50, "xp": 200000, "gp": 30000,  "members": true, "note": "Wintertodt" }
+    ]},
+    "crafting": { "methods": [
+      { "level": 1,  "xp": 20000,  "gp": -5000,  "note": "leather" },
+      { "level": 20, "xp": 60000,  "gp": -10000, "note": "gold jewellery" },
+      { "level": 54, "xp": 150000, "gp": -50000, "members": true, "note": "glassblowing, d'hide" }
+    ]},
+    "smithing": { "methods": [
+      { "level": 1,  "xp": 15000,  "gp": -5000 },
+      { "level": 30, "xp": 35000,  "gp": -10000 },
+      { "level": 40, "xp": 150000, "gp": -40000, "members": true, "note": "gold bars with goldsmith gauntlets" }
+    ]},
+    "mining": { "methods": [
+      { "level": 1,  "xp": 8000,   "gp": 2000,  "live": "mine_copper_tin" },
+      { "level": 15, "xp": 25000,  "gp": 5000,  "live": "mine_iron" },
+      { "level": 30, "xp": 20000,  "gp": 20000, "live": "mine_coal" },
+      { "level": 55, "xp": 25000,  "gp": 40000, "live": "mine_mithril" },
+      { "level": 60, "xp": 50000,  "gp": 30000, "members": true, "note": "motherlode mine, shooting stars" }
+    ]},
+    "fletching": { "methods": [
+      { "level": 1,  "xp": 20000,  "gp": -2000, "members": true },
+      { "level": 10, "xp": 60000,  "gp": -5000, "members": true },
+      { "level": 55, "xp": 200000, "gp": -30000, "members": true }
+    ]},
+    "herblore": { "methods": [
+      { "level": 3,  "xp": 30000,  "gp": -50000,  "members": true },
+      { "level": 38, "xp": 150000, "gp": -150000, "members": true },
+      { "level": 70, "xp": 300000, "gp": -300000, "members": true }
+    ]},
+    "agility": { "methods": [
+      { "level": 1,  "xp": 6000,   "gp": 0, "members": true },
+      { "level": 30, "xp": 25000,  "gp": 0, "members": true },
+      { "level": 60, "xp": 50000,  "gp": 0, "members": true },
+      { "level": 80, "xp": 60000,  "gp": 0, "members": true }
+    ]},
+    "thieving": { "methods": [
+      { "level": 1,  "xp": 10000,  "gp": 5000,   "members": true },
+      { "level": 25, "xp": 50000,  "gp": 10000,  "members": true },
+      { "level": 55, "xp": 120000, "gp": 30000,  "members": true },
+      { "level": 82, "xp": 220000, "gp": 100000, "members": true }
+    ]},
+    "slayer": { "methods": [
+      { "level": 1,  "xp": 5000,   "gp": 5000,   "members": true, "also": { "strength": 3, "hitpoints": 1 } },
+      { "level": 50, "xp": 25000,  "gp": 100000, "members": true, "also": { "strength": 3, "hitpoints": 1 } },
+      { "level": 80, "xp": 45000,  "gp": 300000, "members": true, "also": { "strength": 3, "hitpoints": 1 } }
+    ]},
+    "farming": { "methods": [
+      { "level": 1,  "xp": 15000,  "gp": -5000,  "members": true },
+      { "level": 30, "xp": 50000,  "gp": -20000, "members": true },
+      { "level": 60, "xp": 100000, "gp": 50000,  "members": true }
+    ]},
+    "runecrafting": { "methods": [
+      { "level": 1,  "xp": 8000,   "gp": 5000 },
+      { "level": 44, "xp": 30000,  "gp": 150000, "members": true, "note": "natures" },
+      { "level": 77, "xp": 55000,  "gp": 50000,  "members": true }
+    ]},
+    "construction": { "methods": [
+      { "level": 1,  "xp": 30000,  "gp": -100000, "members": true },
+      { "level": 33, "xp": 150000, "gp": -500000, "members": true },
+      { "level": 52, "xp": 300000, "gp": -800000, "members": true }
+    ]},
+    "hunter": { "methods": [
+      { "level": 1,  "xp": 10000,  "gp": 2000,   "members": true },
+      { "level": 27, "xp": 40000,  "gp": 5000,   "members": true },
+      { "level": 63, "xp": 90000,  "gp": 150000, "members": true }
+    ]}
+  }
+}

@@ -151,6 +151,11 @@ export class Player extends Mobile {
     private multiIcon: number;
     private isRunning = true;
     private playerBot = false;
+    /** A bot that plays by a player's rules where a player could tell (see playsAsPlayer). */
+    private botPlaysAsPlayer = false;
+    /** The cycle run energy last recovered on (bots that skip unwatched ticks catch up). */
+    private lastRecoveryCycle: number | null = null;
+    private static readonly BOT_RECOVERY_TICKS_MAX = 8;
     private botAreaProcessTick = 0;
     /** Run energy in OSRS units (0-10,000; 100 units = 1%). */
     private runEnergy = GameConstants.RUN_ENERGY_MAX_UNITS;
@@ -495,7 +500,8 @@ export class Player extends Mobile {
         timed("walk_to_interaction", () => TaskManager.processWalkTo(this.getIndex()));
 
         // Process aggression
-        if (!isBot) {
+        // Bots that play as players are attacked by aggressive NPCs as a player is.
+        if (!this.takesBotShortcuts()) {
             this.aggressionTolerance.update(this.getLocation());
             timed("npc_aggression", () => NpcAggression.process(this));
         }
@@ -514,10 +520,16 @@ export class Player extends Mobile {
 
         this.processSkullTimer();
 
-        // Increase run energy every tick not spent running (Wiki: Recovery).
-        if (!isBot && this.runEnergy < GameConstants.RUN_ENERGY_MAX_UNITS
+        // Increase run energy every tick not spent running (Wiki: Recovery). A bot that plays as a
+        // player recovers too; it may skip ticks while nobody watches it, so it gets each one.
+        const cycle = World.getProcessCycle();
+        const recoveryTicks = this.playsAsPlayer()
+            ? Math.max(1, Math.min(Player.BOT_RECOVERY_TICKS_MAX, cycle - (this.lastRecoveryCycle ?? cycle - 1)))
+            : 1;
+        this.lastRecoveryCycle = cycle;
+        if (!this.takesBotShortcuts() && this.runEnergy < GameConstants.RUN_ENERGY_MAX_UNITS
             && !this.getMovementQueue().didRunThisCycle()) {
-            const restored = MovementQueue.runEnergyRestoreUnits(this);
+            const restored = MovementQueue.runEnergyRestoreUnits(this) * recoveryTicks;
             if (restored > 0) {
                 this.addRunEnergyUnits(restored);
                 this.getPacketSender().sendRunEnergy();
@@ -590,7 +602,7 @@ export class Player extends Mobile {
             skills.increaseCurrentLevel(Skill.HITPOINTS, this.hitpointsRegen.amount, max);
         } else if (elapsed < Player.STAT_RESTORE_TICKS) {
             return;
-        } else if (current > max && !this.isPlayerBot()) {
+        } else if (current > max && !this.takesBotShortcuts()) {
             skills.decreaseCurrentLevel(Skill.HITPOINTS, 1, max);
         }
         this.restartHitpointsTimer(cycle);
@@ -1434,6 +1446,24 @@ export class Player extends Mobile {
      */
     public isUnwatchedBot(): boolean {
         return this.playerBot && this.getSession?.()?.hasNetworkClient?.() !== true;
+    }
+
+    /**
+     * A bot that must be indistinguishable from a player where a player could see the difference
+     * (run energy, hitpoints decay). Core's bot shortcuts that a player can notice apply only to
+     * bots without it; the invisible ones (no client packets) apply to every bot.
+     */
+    public playsAsPlayer(): boolean {
+        return this.playerBot && this.botPlaysAsPlayer;
+    }
+
+    public setPlaysAsPlayer(value: boolean): void {
+        this.botPlaysAsPlayer = value;
+    }
+
+    /** A bot that takes core's visible shortcuts: a bot, and not one that plays as a player. */
+    public takesBotShortcuts(): boolean {
+        return this.playerBot && !this.botPlaysAsPlayer;
     }
 
     public setPlayerBot(playerBot: boolean): void {

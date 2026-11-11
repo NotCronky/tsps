@@ -33,12 +33,14 @@ const BUTTON_TIMEOUT_TICKS = 5;
 const CLAN_INFO_PIN_FEATURE = "clan-info"; // bank-pin.json's title for it
 /**
  * Every other slot belongs to something: 1-3 Attack, Trade, Follow; 4 and 6 the duel's; 7 the house
- * kick; 8 Report. Slot 5 is already "Recruit" on every player, for the bots (RegisterBotStatusInteractions),
- * so this is the same option on a real player. The hub's extent is ours: the Wiki only places it at the
+ * kick; 8 Report. Slot 5 is Recruit, shown only where the Wiki (Clan) says it works: in the Clan Hub
+ * (founding a clan) or with a clan vexillum worn. The hub's extent is ours: the Wiki only places it at the
  * Grand Exchange's south-east corner, and the Clerk stands at its middle.
  */
 const RECRUIT_OPTION_SLOT = 5;
 const CLAN_HUB = { minX: 3170, maxX: 3192, minY: 3460, maxY: 3482 };
+/** Whether each player's Recruit option is currently shown, so it's only sent when that changes. */
+const recruitShown = new WeakMap();
 
 let core = null;
 let emit = null;
@@ -286,9 +288,35 @@ function inClanHub(player) {
     && location.getY() >= CLAN_HUB.minY && location.getY() <= CLAN_HUB.maxY;
 }
 
-/** Always shown, as the bots' is on the same slot; recruitClanMember says where it works. */
-function showRecruitOption(player) {
-  if (player.isPlayerBot?.() !== true) player.getPacketSender().sendPlayerOption(RECRUIT_OPTION_SLOT, "Recruit", false);
+/** Recruit is on the menu in the Clan Hub or with a vexillum worn; recruitClanMember says what it does there. */
+function showRecruitOption(player, inHub = inClanHub(player)) {
+  if (player.isPlayerBot?.() === true) return;
+  const shown = inHub || wearsVexillum(player);
+  if (recruitShown.get(player) === shown) return;
+  recruitShown.set(player, shown);
+  player.getPacketSender().sendPlayerOption(RECRUIT_OPTION_SLOT, shown ? "Recruit" : "", false);
+}
+
+function equipmentChanged({ player }) {
+  if (player) showRecruitOption(player);
+}
+
+/** The Clan Hub, so Recruit appears and goes as players walk in and out. */
+function createClanHubArea(api) {
+  return new (class extends api.core.Area {
+    constructor() {
+      super([new api.core.Boundary(CLAN_HUB.minX, CLAN_HUB.maxX, CLAN_HUB.minY, CLAN_HUB.maxY, 0)]);
+    }
+
+    postEnter(mobile) {
+      if (mobile.isPlayer()) showRecruitOption(mobile.getAsPlayer(), true);
+    }
+
+    // Judged by having left, not by the tile: an instance can claim a player before moving them.
+    postLeave(mobile, logout) {
+      if (mobile.isPlayer() && !logout) showRecruitOption(mobile.getAsPlayer(), false);
+    }
+  })();
 }
 
 function wearsVexillum(player) {
@@ -442,6 +470,8 @@ module.exports = {
   register(api) {
     attachUnits(api);
     api.onCustomEvent("player:bootstrap-complete", login);
+    api.registerArea(createClanHubArea(api));
+    api.onCustomEvent("equipment:changed", equipmentChanged);
     api.onPlayerLogout(logout);
     api.onCustomEvent("clans:release-guest", releaseGuest);
     api.onSocialPacket(chat);

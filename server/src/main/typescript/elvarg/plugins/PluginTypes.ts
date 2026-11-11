@@ -994,7 +994,8 @@ export interface PluginApi {
   onServerShutdown(handler: (event: PluginServerLifecycleEvent) => void): void;
   onFriendAdd(handler: (event: PluginFriendEvent) => void): void;
   onFriendRemove(handler: (event: PluginFriendEvent) => void): void;
-  onPlayerProcess(handler: (event: PluginPlayerProcessEvent) => void): void;
+  /** Every tick for each player; `{ bots: true }` also for bots that play as players. */
+  onPlayerProcess(handler: (event: PluginPlayerProcessEvent) => void, options?: { bots?: boolean }): void;
   /** Fires when a player enters a rectangular zone (levels omitted = all planes). */
   onZoneEnter(zone: PluginZone, handler: (event: PluginZoneEvent) => void): void;
   /** Fires when a player leaves a rectangular zone. */
@@ -1549,6 +1550,14 @@ export interface PluginCoreApi {
   PrayerHandler: any;
   PrayerData: any;
   ItemActionPacketListener: any;
+  /** `new ObjectActionPacketListener().executeAction(player, id, x, y, clickType, action)`: an object click. */
+  ObjectActionPacketListener: any;
+  /** `new NPCOptionPacketListener().executeOption(player, npcIndex, clickType)`: an NPC click. */
+  NPCOptionPacketListener: any;
+  /** `PickupItemPacketListener.pickup(player, itemId, x, y)`: a ground item's Take, as a client's click. */
+  PickupItemPacketListener: any;
+  /** `UseItemPacketListener.itemOnNpc / itemOnObject(...)`: Use an item on an NPC or object, as a client's click. */
+  UseItemPacketListener: any;
   /** Run shared item alchemy; plugins authorize opaque alternate payment sources via magic:alchemy-payment. */
   castAlchemy: (player: any, spellId: number | string, itemId: number, slot: number, source?: unknown) => boolean;
   ChatType: any;

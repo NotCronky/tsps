@@ -789,7 +789,8 @@ export class MovementQueue {
 
     private drainRunEnergy(stepsMoved: number) {
         const player = (this.character as Player);
-        if (player.isPlayerBot?.() === true) {
+        // Bots keep full energy, unless they play as players (they tire and walk like one).
+        if ((player.takesBotShortcuts?.() ?? player.isPlayerBot?.()) === true) {
             if (player.getRunEnergyUnits() !== GameConstants.RUN_ENERGY_MAX_UNITS) {
                 player.setRunEnergyUnits(GameConstants.RUN_ENERGY_MAX_UNITS);
             }

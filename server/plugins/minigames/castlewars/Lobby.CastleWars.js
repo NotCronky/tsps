@@ -93,6 +93,14 @@ function seedCastleWarsBots(teamId) {
   spawnCastleWarsBot(opposingTeam, "flag");
 }
 
+/**
+ * The empty-lobby prompt offering bots (world config "CastleWars:emptyLobbyBots", default on). Off,
+ * a player joining an empty lobby simply waits, as in live OSRS.
+ */
+function offersBots(registry = api) {
+  return registry.getPluginConfig("CastleWars:emptyLobbyBots", true) !== false;
+}
+
 /** Dev-only bot seeding: off unless world.json turns it on, so production lobbies are players only. */
 function seedsBots(registry = api) {
   return registry.getPluginConfig(SEED_BOTS_CONFIG_KEY, false) === true;
@@ -159,7 +167,7 @@ function joinWaitingRoom(player, requestedTeam, botTier = undefined, portalGod =
   // The empty-lobby prompt replaces the dev seeding path, and returning after it means the
   // config seeding below can never double up on bots. The chosen tier sets the spawned
   // bots' combat level band and gear; None leaves the game player-only.
-  if (!isBot && lobbyEmpty && !seedsBots()) {
+  if (!isBot && lobbyEmpty && !seedsBots() && offersBots()) {
     if (botTier !== undefined) {
       if (botTier !== null) populateCastleWarsBots(teamId, botTier, maxed);
       game.prepareWaitingForm?.(player, portalGod);

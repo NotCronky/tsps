@@ -16,7 +16,11 @@ export class NpcAggression {
             return;
         }
 
-        NpcAggression.runAggression(player, player.getLocalNpcs());
+        // A bot nobody watches has no client view, so no local NPC list: the NPCs around it.
+        const npcs = player.isUnwatchedBot?.() === true
+            ? require("../../../World").World.getNearbyNpcsForUpdate(player)
+            : player.getLocalNpcs();
+        NpcAggression.runAggression(player, npcs);
 
         if (player.getArea() instanceof PrivateArea) {
             NpcAggression.runAggression(player, (player.getArea() as PrivateArea).getNpcs());

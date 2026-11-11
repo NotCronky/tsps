@@ -1356,6 +1356,8 @@ export class World {
                     ShopManager.processPlayer(player);
                     if (player.isPlayerBot?.() !== true) {
                         PluginManager.emitPlayerProcess({ player });
+                    } else if (player.playsAsPlayer?.() === true) {
+                        PluginManager.emitBotPlayerProcess({ player });
                     }
                 } catch (e) {
                     console.error(e);

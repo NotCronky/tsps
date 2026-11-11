@@ -1,0 +1,405 @@
+{
+  "_doc": "How bots train each skill (Training.SppBots.js), from the OSRS Wiki's training guides (Free-to-play/Pay-to-play Melee, Ranged and Magic training; Prayer training). Per skill: 'kind' (combat: a combat task with a level goal; more kinds come with the non-combat skills), 'style' (the gear set: melee, ranged, magic), 'xpStyle' (the weapon style that trains it: attack = Accurate, strength = Aggressive, defence = Defensive, shared = Controlled, ranged = Rapid/Accurate), and 'methods': a level band [from, to), the monster (its name in npc-spawns.json), 'near' a spot whose spawns to prefer (the guide's location; else the nearest the bot can reach), 'members', 'items' it needs (a key), 'quests', 'food' to bring. The bot takes the first method for its level it qualifies for and can reach; a method ends at its 'to' level and the next one starts. 'bury': take and bury bones (Prayer). Areas come from the NPC spawns, not coordinates typed here.",
+  "melee": [
+    {
+      "from": 1,
+      "to": 10,
+      "monster": "Chicken",
+      "near": [
+        3233,
+        3297
+      ],
+      "food": 0
+    },
+    {
+      "from": 1,
+      "to": 15,
+      "monster": "Cow",
+      "near": [
+        3257,
+        3266
+      ],
+      "food": 2
+    },
+    {
+      "from": 5,
+      "to": 20,
+      "monster": "Goblin",
+      "near": [
+        3250,
+        3235
+      ],
+      "food": 4
+    },
+    {
+      "from": 10,
+      "to": 25,
+      "monster": "Giant rat",
+      "near": [
+        3197,
+        3180
+      ],
+      "food": 6
+    },
+    {
+      "from": 20,
+      "to": 30,
+      "monster": "Al-Kharid warrior",
+      "near": [
+        3293,
+        3173
+      ],
+      "food": 8
+    },
+    {
+      "from": 20,
+      "to": 30,
+      "monster": "Barbarian",
+      "near": [
+        3080,
+        3420
+      ],
+      "food": 8
+    },
+    {
+      "from": 20,
+      "to": 40,
+      "monster": "Giant frog",
+      "near": [
+        3200,
+        3180
+      ],
+      "food": 10
+    },
+    {
+      "from": 30,
+      "to": 50,
+      "monster": "Hill Giant",
+      "near": [
+        3117,
+        9844
+      ],
+      "items": [
+        "BRASS_KEY"
+      ],
+      "food": 12
+    },
+    {
+      "from": 30,
+      "to": 50,
+      "monster": "Hobgoblin",
+      "near": [
+        2910,
+        3290
+      ],
+      "food": 12
+    },
+    {
+      "from": 40,
+      "to": 60,
+      "monster": "Moss giant",
+      "near": [
+        3165,
+        9880
+      ],
+      "food": 14
+    },
+    {
+      "from": 50,
+      "to": 99,
+      "monster": "Ice giant",
+      "near": [
+        3052,
+        9577
+      ],
+      "food": 16
+    },
+    {
+      "from": 50,
+      "to": 99,
+      "monster": "Ice warrior",
+      "near": [
+        3052,
+        9577
+      ],
+      "food": 16
+    },
+    {
+      "from": 60,
+      "to": 99,
+      "monster": "Ogress Warrior",
+      "near": [
+        1970,
+        9020
+      ],
+      "food": 18
+    },
+    {
+      "from": 65,
+      "to": 99,
+      "monster": "Lesser demon",
+      "near": [
+        2838,
+        9559
+      ],
+      "food": 18
+    }
+  ],
+  "skills": {
+    "attack": {
+      "kind": "combat",
+      "style": "melee",
+      "xpStyle": "attack",
+      "methods": "melee"
+    },
+    "strength": {
+      "kind": "combat",
+      "style": "melee",
+      "xpStyle": "strength",
+      "methods": "melee"
+    },
+    "defence": {
+      "kind": "combat",
+      "style": "melee",
+      "xpStyle": "defence",
+      "methods": "melee"
+    },
+    "hitpoints": {
+      "kind": "combat",
+      "style": "melee",
+      "xpStyle": "shared",
+      "methods": "melee"
+    },
+    "ranged": {
+      "kind": "combat",
+      "style": "ranged",
+      "xpStyle": "ranged",
+      "methods": [
+        {
+          "from": 1,
+          "to": 20,
+          "monster": "Seagull",
+          "near": [
+            3027,
+            3220
+          ],
+          "food": 0
+        },
+        {
+          "from": 1,
+          "to": 15,
+          "monster": "Cow",
+          "near": [
+            3257,
+            3266
+          ],
+          "food": 2
+        },
+        {
+          "from": 9,
+          "to": 30,
+          "monster": "Wizard",
+          "near": [
+            3109,
+            3162
+          ],
+          "food": 4
+        },
+        {
+          "from": 21,
+          "to": 26,
+          "monster": "Barbarian",
+          "near": [
+            3080,
+            3420
+          ],
+          "food": 6
+        },
+        {
+          "from": 26,
+          "to": 57,
+          "monster": "Giant frog",
+          "near": [
+            3200,
+            3180
+          ],
+          "food": 8
+        },
+        {
+          "from": 40,
+          "to": 70,
+          "monster": "Hill Giant",
+          "near": [
+            3117,
+            9844
+          ],
+          "items": [
+            "BRASS_KEY"
+          ],
+          "food": 10
+        },
+        {
+          "from": 57,
+          "to": 99,
+          "monster": "Moss giant",
+          "near": [
+            3165,
+            9880
+          ],
+          "food": 12
+        },
+        {
+          "from": 60,
+          "to": 99,
+          "monster": "Ogress Warrior",
+          "near": [
+            1970,
+            9020
+          ],
+          "food": 14
+        },
+        {
+          "from": 65,
+          "to": 99,
+          "monster": "Lesser demon",
+          "near": [
+            2838,
+            9559
+          ],
+          "food": 14
+        }
+      ]
+    },
+    "magic": {
+      "kind": "combat",
+      "style": "magic",
+      "xpStyle": null,
+      "methods": [
+        {
+          "from": 1,
+          "to": 17,
+          "monster": "Cow",
+          "near": [
+            3257,
+            3266
+          ],
+          "food": 2
+        },
+        {
+          "from": 1,
+          "to": 17,
+          "monster": "Chicken",
+          "near": [
+            3233,
+            3297
+          ],
+          "food": 0
+        },
+        {
+          "from": 17,
+          "to": 40,
+          "monster": "Hobgoblin",
+          "near": [
+            2910,
+            3290
+          ],
+          "food": 6
+        },
+        {
+          "from": 17,
+          "to": 40,
+          "monster": "Al-Kharid warrior",
+          "near": [
+            3293,
+            3173
+          ],
+          "food": 6
+        },
+        {
+          "from": 40,
+          "to": 59,
+          "monster": "Moss giant",
+          "near": [
+            3165,
+            9880
+          ],
+          "food": 8
+        },
+        {
+          "from": 59,
+          "to": 99,
+          "monster": "Ice giant",
+          "near": [
+            3052,
+            9577
+          ],
+          "food": 10
+        },
+        {
+          "from": 59,
+          "to": 99,
+          "monster": "Ice warrior",
+          "near": [
+            3052,
+            9577
+          ],
+          "food": 10
+        }
+      ]
+    },
+    "prayer": {
+      "kind": "combat",
+      "style": "auto",
+      "xpStyle": null,
+      "bury": true,
+      "_note": "Killing and burying bones, the free method. The better one is a house host's gilded altar (Prayer hosts, docs/playerbots.md): it comes first once it exists.",
+      "methods": [
+        {
+          "from": 1,
+          "to": 30,
+          "monster": "Cow",
+          "near": [
+            3257,
+            3266
+          ],
+          "food": 2
+        },
+        {
+          "from": 1,
+          "to": 30,
+          "monster": "Chicken",
+          "near": [
+            3233,
+            3297
+          ],
+          "food": 0
+        },
+        {
+          "from": 20,
+          "to": 99,
+          "monster": "Hill Giant",
+          "near": [
+            3117,
+            9844
+          ],
+          "items": [
+            "BRASS_KEY"
+          ],
+          "food": 12,
+          "_note": "big bones"
+        },
+        {
+          "from": 30,
+          "to": 99,
+          "monster": "Moss giant",
+          "near": [
+            3165,
+            9880
+          ],
+          "food": 14,
+          "_note": "big bones"
+        }
+      ]
+    }
+  }
+}

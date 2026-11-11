@@ -1,0 +1,38 @@
+{
+  "_doc": "How generated accounts are spread (docs/playerbots.md, Phase 2). Weights are relative. Hours are time played; efficiency is how much of a method's listed rate a player of that kind gets.",
+  "stages": {
+    "new":     { "weight": 15, "hours": [0.5, 5] },
+    "early":   { "weight": 30, "hours": [5, 100] },
+    "mid":     { "weight": 30, "hours": [100, 600] },
+    "late":    { "weight": 18, "hours": [600, 2000] },
+    "endgame": { "weight": 7,  "hours": [2000, 5000] }
+  },
+  "ironmanChance": 0.2,
+  "ironmanGpFactor": 0.3,
+  "efficiency": [0.35, 0.8],
+  "sessionHours": [0.5, 2.5],
+  "tastes": { "favourites": 3, "favouriteWeight": 3, "disliked": 3, "dislikedWeight": 0.3 },
+  "archetypes": {
+    "main": {
+      "weight": 75,
+      "questChance": 0.35,
+      "skillWeights": { "attack": 1.4, "strength": 1.4, "defence": 1.3, "ranged": 1.2, "magic": 1.1, "prayer": 0.8 },
+      "caps": {}
+    },
+    "skiller": {
+      "weight": 10,
+      "questChance": 0.15,
+      "skillWeights": { "attack": 0, "strength": 0, "defence": 0, "hitpoints": 0, "ranged": 0, "magic": 0, "prayer": 0, "slayer": 0 },
+      "caps": { "attack": 1, "strength": 1, "defence": 1, "hitpoints": 10, "ranged": 1, "magic": 1, "prayer": 1, "slayer": 1 }
+    },
+    "pure": {
+      "weight": 15,
+      "questChance": 0.15,
+      "skillWeights": { "attack": 1.5, "strength": 2.5, "defence": 0, "ranged": 1.8, "magic": 1.2, "prayer": 0.4, "slayer": 0.3 },
+      "caps": { "defence": 1, "prayer": 52 },
+      "otherSkillWeight": 0.3
+    }
+  },
+  "_questHours": "Hours a quest takes, by the cache quest table's length column: 0 very short (Cook's Assistant) to 4 very long (Song of the Elves).",
+  "questHoursByLength": [0.25, 0.75, 1.5, 3, 6]
+}

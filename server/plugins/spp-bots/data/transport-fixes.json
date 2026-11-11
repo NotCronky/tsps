@@ -1,0 +1,11 @@
+{
+  "_doc": "Corrections to transports.json (imported from Shortest Path, not edited here) where this server differs, applied when the transport index is built (Transports.SppBots.js). 'landings': a row (matched by menu and from) lands somewhere else than the table says. Add one when a bot is seen stuck after a transport; say what was seen.",
+  "landings": [
+    {
+      "menu": "Cross Gangplank",
+      "from": [2589, 2851, 0],
+      "to": [2592, 2851, 1],
+      "why": "Corsair Cove ship: the table lands on the gangplank's own (blocked) tile 2591,2851,1, and the planner walked west from it over open floor 1; the game puts the player on the deck at 2592. Bots stood on the deck for whole sessions (2026-11-09)."
+    }
+  ]
+}

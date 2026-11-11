@@ -1,0 +1,194 @@
+{
+  "_doc": "Combat tasks (CombatTask.SppBots.js): go to 'area' (x, y, z and a radius the monsters are in) with the gear for 'style' (melee, ranged, magic, or auto: the one that does most damage to the monster, of the sets the bot owns) and kill 'kills' of 'monster' (its name). 'switch' styles to carry in the pack as well, for monsters that pray or change form (data/monsters.json). 'food' how many of its food to bring (the rest of the pack stays free for loot). 'loot' extra rules ahead of data/loot.json. 'items' ItemIds keys the trip needs (a key to get in): taken from the bank, and without them the task fails at once. Picking a task for a bot is the goals planner's job (docs/playerbots.md, Phase 4); until then ::sppbots task <bot> <task>. 'generated': rules for the tasks TaskGen.SppBots.js makes from the NPC spawns: 'areas' (near [x, y], within 'radius') adds 'items' a generated task there needs, or 'skip': true leaves it out. Boss tasks add: 'requires' (levels {skill: level}, combat, quests [quest keys], unlocks [Imports UNLOCKS keys]), 'supplies' [[ItemIds key, amount]] taken first, 'travelTo' [x, y, z] when the way in isn't the area (Zulrah's pier), 'enter' {object (name pattern), option} clicked there and its dialogue answered until the bot is in the instance, 'leave' {object, option} to get out once the kills are done, 'instanced' (spawned by the fight: no spawns to check). 'via' [x, y, z]: a tile beside the way into a place far off in map coordinates, travelled to first.",
+  "tasks": {
+    "cows": {
+      "monster": "Cow",
+      "area": {
+        "x": 3257,
+        "y": 3266,
+        "z": 0,
+        "radius": 10
+      },
+      "style": "auto",
+      "kills": 15,
+      "food": 4
+    },
+    "hill_giants": {
+      "monster": "Hill Giant",
+      "area": {
+        "x": 3117,
+        "y": 9844,
+        "z": 0,
+        "radius": 12
+      },
+      "style": "auto",
+      "kills": 15,
+      "food": 12,
+      "items": [
+        "BRASS_KEY"
+      ]
+    },
+    "ice_warriors": {
+      "monster": "Ice warrior",
+      "area": {
+        "x": 3052,
+        "y": 9577,
+        "z": 0,
+        "radius": 12
+      },
+      "style": "auto",
+      "kills": 15,
+      "food": 14
+    },
+    "ice_warriors_switch": {
+      "monster": "Ice warrior",
+      "area": {
+        "x": 3052,
+        "y": 9577,
+        "z": 0,
+        "radius": 12
+      },
+      "style": "melee",
+      "switch": [
+        "ranged"
+      ],
+      "kills": 10,
+      "food": 12
+    },
+    "lesser_demons": {
+      "monster": "Lesser demon",
+      "area": {
+        "x": 2838,
+        "y": 9559,
+        "z": 0,
+        "radius": 10
+      },
+      "style": "auto",
+      "kills": 15,
+      "food": 16
+    },
+    "green_dragons": {
+      "monster": "Green dragon",
+      "area": {
+        "x": 3335,
+        "y": 3700,
+        "z": 0,
+        "radius": 12
+      },
+      "style": "ranged",
+      "kills": 10,
+      "food": 16
+    },
+    "demonic_gorillas": {
+      "monster": "Demonic gorilla",
+      "area": {
+        "x": 2105,
+        "y": 5659,
+        "z": 0,
+        "radius": 30
+      },
+      "style": "melee",
+      "switch": [
+        "ranged"
+      ],
+      "kills": 8,
+      "food": 20,
+      "requires": {
+        "combat": 100,
+        "levels": {
+          "prayer": 43,
+          "attack": 75,
+          "ranged": 75
+        },
+        "quests": [
+          "monkey_madness_ii"
+        ]
+      },
+      "supplies": [
+        [
+          "PRAYER_POTION_4_",
+          4
+        ]
+      ],
+      "boss": true,
+      "_why": "Crash Site Cavern. They pray against the style that hurt them most (a melee set and a ranged switch, Tactics' overhead switch), change attack style (prayer by their combat method), and drop boulders (Hazards: off the tile).",
+      "via": [
+        2435,
+        3518,
+        0
+      ]
+    },
+    "zulrah": {
+      "monster": "Zulrah",
+      "area": {
+        "x": 2266,
+        "y": 3070,
+        "z": 0,
+        "radius": 16
+      },
+      "travelTo": [
+        2213,
+        3056,
+        0
+      ],
+      "enter": {
+        "object": "^sacrificial boat$",
+        "option": "quick-board"
+      },
+      "leave": {
+        "object": "teleport"
+      },
+      "instanced": true,
+      "play": "zulrah",
+      "reclaim": {
+        "npc": "^priestess zul-gwenwynig$",
+        "option": "collect",
+        "button": "gravestone_retrieval:button"
+      },
+      "style": "ranged",
+      "switch": [
+        "magic"
+      ],
+      "kills": 1,
+      "food": 18,
+      "requires": {
+        "combat": 85,
+        "levels": {
+          "prayer": 43,
+          "magic": 75,
+          "ranged": 75
+        },
+        "unlocks": [
+          "zulrah"
+        ]
+      },
+      "supplies": [
+        [
+          "ANTI_VENOM_4_",
+          2
+        ],
+        [
+          "PRAYER_POTION_4_",
+          4
+        ]
+      ],
+      "boss": true,
+      "_why": "From the Zul-Andra pier by the boat's Quick-Board; one kill a trip, out by the teleport scroll it leaves (and back in on the boat while kills are left). The fight is ZulrahPlay.SppBots.js (`play`): the Wiki's stand spot for each phase of each rotation (the rotation told from the phases seen), the tail-safe tile in the red form, prayers by form (the Jad phase alternating), magic at the green and red forms and ranged at the blue (the sets it has), snakelings first. Ranged main with a magic switch (the set most bots own)."
+    }
+  },
+  "generated": {
+    "areas": [
+      {
+        "near": [
+          3115,
+          9845
+        ],
+        "radius": 20,
+        "items": [
+          "BRASS_KEY"
+        ],
+        "why": "Edgeville Dungeon hill giants, behind the brass key door"
+      }
+    ]
+  }
+}

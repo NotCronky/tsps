@@ -1,0 +1,107 @@
+{
+  "_doc": "Monsters a bot fights differently (Tactics.SppBots.js). A monster that prays against the bot's style (its overhead icon) is always switched away from, with whatever other set the bot carries; these rules add the rest. 'switch': 'form' re-picks the style whenever the monster changes form (its NPC id), by the damage estimate; 'protection' only marks a monster known to pray (tasks for it should carry a 'switch' set). 'prefer' styles best first when the estimate is close. 'forms' (by NPC id): 'protect' the style to pray against in that form (for monsters whose attacks are scripted, so the game's combat method doesn't say), 'standAt' tiles to fight from (the Wiki's safespots). 'hazards' (Hazards.SppBots.js), by the id of a projectile fired at a tile: 'radius' it hits around its tile (1 = 3x3) and 'lastsTicks' it stays after landing. 'protectBy': 'projectile' prays against the style of the last projectile the monster threw at the bot ('projectiles': id -> style), 'firstStyle' before any has been thrown. 'npcHazards' (NPC id -> radius) and 'objectHazards' (object ids) are tiles to stay off while they're there.",
+  "rules": [
+    {
+      "names": [
+        "Demonic gorilla"
+      ],
+      "switch": "protection"
+    },
+    {
+      "names": [
+        "Tormented Demon"
+      ],
+      "switch": "protection"
+    },
+    {
+      "names": [
+        "Corrupted Hunllef",
+        "Crystalline Hunllef"
+      ],
+      "switch": "protection",
+      "protectBy": "projectile",
+      "firstStyle": "ranged"
+    },
+    {
+      "names": [
+        "Kalphite Queen"
+      ],
+      "switch": "form",
+      "prefer": [
+        "melee",
+        "magic"
+      ]
+    },
+    {
+      "names": [
+        "Zulrah"
+      ],
+      "switch": "form",
+      "prefer": [
+        "magic",
+        "ranged"
+      ],
+      "forms": {
+        "2042": {
+          "protect": "ranged"
+        },
+        "2044": {
+          "protect": "magic"
+        },
+        "2043": {
+          "standAt": [
+            [
+              2273,
+              3072
+            ],
+            [
+              2272,
+              3072
+            ],
+            [
+              2264,
+              3072
+            ],
+            [
+              2263,
+              3072
+            ]
+          ],
+          "why": "the red form's tail can't reach beside the pillars (Wiki)"
+        }
+      }
+    }
+  ],
+  "hazards": {
+    "1045": {
+      "radius": 1,
+      "lastsTicks": 30,
+      "what": "Zulrah's venom cloud (3x3, 30 ticks)"
+    },
+    "856": {
+      "radius": 0,
+      "lastsTicks": 1,
+      "what": "a demonic gorilla's boulder"
+    }
+  },
+  "projectiles": {
+    "1044": "ranged",
+    "1046": "magic",
+    "1711": "ranged",
+    "1707": "magic",
+    "1713": "magic",
+    "1712": "ranged",
+    "1708": "magic",
+    "1714": "magic"
+  },
+  "npcHazards": {
+    "9025": 1,
+    "9039": 1
+  },
+  "objectHazards": [
+    36150,
+    36151,
+    36047,
+    36048
+  ]
+}

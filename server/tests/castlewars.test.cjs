@@ -212,6 +212,15 @@ test('the bot seeding gate is off unless the world config turns it on', () => {
   assert.equal(seeded.filter((bot) => game.getTeamId(bot) === game.opposingTeam(game.getTeamId(second))).length, 2);
 });
 
+test('with "CastleWars:emptyLobbyBots" off an empty lobby offers no bots: the player just waits', () => {
+  PluginManager.pluginConfigCache = { 'CastleWars:emptyLobbyBots': false };
+  const player = fakePlayer();
+  enterPortal(player, core.ObjectIdentifiers.SARADOMIN_PORTAL);
+  assert.equal(prompt, null, 'no bot prompt');
+  assert.equal(game.getTeamId(player), TEAM.SARADOMIN, 'straight into the waiting room');
+  assert.equal(World.getAddPlayerQueue().length, 0, 'no bots');
+});
+
 test('seeded bots log out once no real player is left', () => {
   const real = fakePlayer();
   const bot = fakePlayer({ bot: true });

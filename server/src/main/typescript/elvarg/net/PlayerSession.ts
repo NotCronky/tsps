@@ -610,7 +610,9 @@ export class PlayerSession {
         },
         player.getDisplayName(),
         player.getSkillManager().getCombatLevel(),
-        player.getSkillManager().getTotalLevel(),
+        // Skill level: the official client's player menu shows "(skill-N)" instead of
+        // "(level-N)" whenever this is non-zero. Live OSRS sends 0 in ordinary play.
+        0,
         animations
       );
       this.appearanceCache.set(player.getIndex(), { player, payload });
