@@ -36,6 +36,7 @@ before(async () => {
   await CachePipeline.initialize(path.resolve(__dirname, ".."));
   core = PluginManager.getCoreApi();
   Herblore.register(api);
+  require("../plugins/minigames/impetuousimpulses/Supplies.ImpetuousImpulses")(api);
   Zahur.register(api);
   Potions.register(api);
   AmuletOfChemistry.register(api);
@@ -64,6 +65,7 @@ function inventory(contents) {
     full() { return self; },
     getItems: () => slots.map((item) => item ?? new core.Item(-1, 0)),
     getCopiedItems: () => self.getItems().map((item) => item.clone()),
+    contains: (id) => slots.some(item => item?.getId() === id),
     getAmount: (id) => slots.filter((item) => item?.getId() === id).reduce((sum, item) => sum + item.getAmount(), 0),
     setItem(slot, item) { slots[slot] = item; return self; },
     refreshItems() { return self; },
@@ -96,7 +98,7 @@ function inventory(contents) {
   return self;
 }
 
-function player(contents, level = 99, { amulet = null, attributes = {} } = {}) {
+function player(contents, level = 99, { amulet = null, attributes = {}, baseLevel = level } = {}) {
   const sent = { messages: [], spam: [], sounds: [], animations: [], xp: 0 };
   const worn = new Map(amulet ? [[core.Equipment.AMULET_SLOT, new core.Item(obj(amulet), 1)]] : []);
   const attrs = new Map(Object.entries(attributes));
@@ -114,6 +116,7 @@ function player(contents, level = 99, { amulet = null, attributes = {} } = {}) {
     getPacketSender: () => sender,
     getSkillManager: () => ({
       getCurrentLevel: () => level,
+      getMaxLevel: () => baseLevel,
       addExperiences(skill, xp) { assert.equal(skill, core.Skill.HERBLORE); sent.xp += xp; },
     }),
     sendMessage(text) { sent.messages.push(text); },
@@ -507,6 +510,50 @@ test("a pestle and mortar grinds at once, two ticks later, then every three", ()
   assert.equal(who.sent.xp, 0);
 });
 
+test("eight anchovy paste on a vial uses the sieve and preserves it", () => {
+  const who = player([["ii_anchovy_paste", 8], ["vial_empty"], ["mourning_sieve"]]);
+  const pair = (first, second, actor = who) => {
+    const items = actor.inv.getItems();
+    const usedItemSlot = items.findIndex(item => item.getId() === obj(first));
+    const usedWithItemSlot = items.findIndex(item => item.getId() === obj(second));
+    const event = { player: actor, usedItem: items[usedItemSlot], usedWithItem: items[usedWithItemSlot],
+      usedItemId: obj(first), usedWithItemId: obj(second), usedItemSlot, usedWithItemSlot, handled: false };
+    for (const handler of hooks.itemOnItem) { handler(event); if (event.handled) break; }
+    return event;
+  };
+  assert.equal(pair("vial_empty", "ii_anchovy_paste").handled, false, "direction matters");
+  assert.equal(pair("ii_anchovy_paste", "vial_empty").handled, true);
+  assert.equal(who.inv.count("ii_anchovy_paste"), 0);
+  assert.equal(who.inv.count("ii_anchovy_oil"), 1);
+  assert.equal(who.inv.count("mourning_sieve"), 1);
+  const short = player([["ii_anchovy_paste", 7], ["vial_empty"], ["mourning_sieve"]]);
+  pair("ii_anchovy_paste", "vial_empty", short);
+  assert.equal(short.inv.count("ii_anchovy_paste"), 7);
+  assert.equal(short.inv.count("vial_empty"), 1);
+  const noSieve = player([["ii_anchovy_paste", 8], ["vial_empty"]]);
+  pair("ii_anchovy_paste", "vial_empty", noSieve);
+  assert.equal(noSieve.inv.count("ii_anchovy_paste"), 8);
+  assert.equal(noSieve.inv.count("vial_empty"), 1);
+});
+
+test("anchovies grind into paste and every supported flower makes imp repellent", () => {
+  const ground = player([["anchovies"], ["pestle_and_mortar"]]);
+  assert.equal(use(ground, "pestle_and_mortar", "anchovies"), true);
+  assert.equal(ground.inv.count("ii_anchovy_paste"), 1);
+  assert.equal(ground.inv.count("pestle_and_mortar"), 1);
+  for (const flower of ["marigold", "nasturtium", "rosemary", "flowers_waterfall_quest", "flowers_waterfall_quest_black", "flowers_waterfall_quest_blue", "flowers_waterfall_quest_mixed", "flowers_waterfall_quest_orange", "flowers_waterfall_quest_purple", "flowers_waterfall_quest_red", "flowers_waterfall_quest_white", "flowers_waterfall_quest_yellow"]) {
+    const who = player([["ii_anchovy_oil"], [flower]], 3);
+    assert.equal(use(who, "ii_anchovy_oil", flower), true, flower);
+    assert.equal(who.inv.count("ii_imp_repellent"), 1, flower);
+    assert.equal(who.sent.xp, 5, flower);
+  }
+  const low = player([["ii_anchovy_oil"], ["marigold"]], 5, { baseLevel: 2 });
+  assert.equal(use(low, "ii_anchovy_oil", "marigold"), true);
+  assert.equal(low.inv.count("ii_anchovy_oil"), 1);
+  assert.equal(low.inv.count("marigold"), 1);
+  assert.equal(low.sent.xp, 0);
+});
+
 test("lava scales grind into 3 to 6 shards, half as many again with the hard Wilderness Diary", () => {
   const who = player([["pestle_and_mortar"], ["lava_scale"]]);
   use(who, "lava_scale", "pestle_and_mortar");
@@ -696,6 +743,19 @@ test("the amulet leaves unfinished potions and 4-dose potions alone, and extends
     use(who, "amylase", "4dose2energy");
     assert.equal(who.inv.count("4dosestamina"), 1);
     assert.equal(who.getAttribute(CHARGES), undefined, "a 4-dose product uses no charge");
+  });
+});
+
+// Wiki Amulet_of_chemistry: "Despite not being a potion, the amulet also affects Haemostatic dressing,
+// creating 4 'doses' instead of 3."
+test("the amulet gives a haemostatic dressing its fourth dose too", () => {
+  assert.equal(AmuletOfChemistry._test.withExtraDose(obj("3dosehaemostaticdressing")), obj("4dosehaemostaticdressing"));
+  rolling(true, () => {
+    const who = player([["haemostatic_poultice"], ["cotton_yarn"]], 56, { amulet: "amulet_of_chemistry" });
+    use(who, "cotton_yarn", "haemostatic_poultice");
+    assert.equal(who.inv.count("4dosehaemostaticdressing"), 1);
+    assert.equal(who.inv.count("3dosehaemostaticdressing"), 0);
+    assert.equal(who.getAttribute(CHARGES), 4);
   });
 });
 

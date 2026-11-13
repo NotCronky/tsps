@@ -221,10 +221,10 @@ test("a hunter loses interest outside the aggression range and walks home", (t) 
 });
 
 test("an engaged ranged NPC does not retreat from a reachable player on another floor", (t) => {
-  const previous = Object.fromEntries(["CROSS_FLOOR_VISIBILITY", "CROSS_FLOOR_COMBAT"].map(key => [key, process.env[key]]));
-  t.after(() => { for (const [key, value] of Object.entries(previous)) { if (value === undefined) delete process.env[key]; else process.env[key] = value; } });
-  process.env.CROSS_FLOOR_VISIBILITY = "1";
-  process.env.CROSS_FLOOR_COMBAT = "1";
+  const { CrossFloor } = require('../dist/game/CrossFloor');
+  t.mock.method(CrossFloor, "includesOtherPlanes", () => true);
+  let crossFloorCombat = true;
+  t.mock.method(CrossFloor, "combatEnabled", () => crossFloorCombat);
   const s = scene(t, {
     spawn: new core.Location(FIELD.x, FIELD.y, 0),
     npcAt: new core.Location(FIELD.x, FIELD.y, 0),
@@ -239,9 +239,9 @@ test("an engaged ranged NPC does not retreat from a reachable player on another 
   assert.equal(core.CombatRange.footprintDistance(s.spawn, 1, s.player.getLocation(), true), 2,
     "the ranged retreat check uses horizontal footprint distance");
 
-  process.env.CROSS_FLOOR_COMBAT = "0";
+  crossFloorCombat = false;
   assert.equal(combat.shouldRetreat(ranged), true, "disabling cross-floor combat restores the old leash behavior");
-  process.env.CROSS_FLOOR_COMBAT = "1";
+  crossFloorCombat = true;
   const melee = { type: () => core.CombatType.MELEE, attackDistance: () => 1 };
   assert.equal(combat.shouldRetreat(melee), true, "melee cannot use the cross-floor range exception");
 });
@@ -579,6 +579,23 @@ test("in single-combat, an always-multi hunter still engages after a single-comb
   assert.equal(s.npc.getCombat().getTarget(), s.player);
   assert.equal(minion.getCombat().getTarget(), s.player, "the always-multi hunter is not cut off by list order");
   assert.equal(third.getCombat().getTarget(), null, "a second single-combat hunter still waits");
+});
+
+test("in single-combat, the PrivateArea pass does not engage a second hunter in the same tick", (t) => {
+  // Review of #3861: the flag was local to each runAggression call, so an instance NPC could
+  // take the player on the tick a local NPC already had.
+  const at = (dx, dy) => new core.Location(FIELD.x + dx, FIELD.y + dy, 0);
+  const s = scene(t, { spawn: at(0, 2) });
+  const second = secondHunter(t, MUGGER, at(2, 0));
+  const instance = new core.PrivateArea([new core.Boundary(FIELD.x - 10, FIELD.x + 10, FIELD.y - 10, FIELD.y + 10, 0)]);
+  for (const entity of [s.player, s.npc, second]) instance.add(entity);
+  s.player.getLocalNpcs = () => [s.npc];
+  instance.getNpcs = () => [second];
+  assert.equal(AreaManager.inMulti(s.player), false, "the field is single-combat");
+
+  NpcAggression.process(s.player);
+  assert.equal(s.npc.getCombat().getTarget(), s.player);
+  assert.equal(second.getCombat().getTarget(), null, "the instance hunter leaves the player to the first");
 });
 
 test("a hunter on a single tile does not join one that engaged under multi rules", (t) => {

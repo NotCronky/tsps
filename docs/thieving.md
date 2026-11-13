@@ -124,6 +124,16 @@ Every line below is a spam message (rsprox captures 335, 338, 339, 691, 2601, 30
 - **Dodgy necklace:** a 25% chance to avoid the stun and damage. It has 10 charges, stored on the player; the last one crumbles it.
 - **Coin pouches:** Open-all says "You open all of the pouches and receive a total of N coins." as a spam message with synth 2115, even for a single pouch (2601, 3059 and others). Open (one pouch) isn't captured and keeps "You open the pouch and find N coins.". A stack of 28 of one kind blocks pickpocketing until the pouches are opened; the Ardougne Diary raises that to 56 (Medium), 84 (Hard) and 140 (Elite), see [diary-rewards.md](diary-rewards.md#ardougne-pickpocketing). With a full inventory, a coins-only target can still be pickpocketed while its pouch stack has room.
 
+## Digsite workman success timing
+
+Rsprox recording **3228**, decoded against revision **232**, shows the workman attempt at tick **1988** and its successful outcome at **1991**, three tick intervals later. Success animation 881 and the specimen-brush line accompany the outcome. The decoder emitted ByteBuf leak diagnostics. This observation covers a successful attempt; it does not establish failure timing, the minimum repeat cadence or relic-specific repeats.
+
+Successful workman rewards now resolve on the third task tick. Other targets retain their ordinary outcome delay. A delayed completion only clears or repeats the interaction it owns, so an older workman task cannot clear a newer accepted interaction. The existing click cooldown and failure timing are unchanged.
+
+At revision `679a09dac94fc863c620be90657e479e0424c730` with cache `osrs-242_2026-11-03`, the native build/cache run passed **35/35** `thieving-pickpocket.test.cjs` tests and **1/1** `thieving-workman-timing-native.test.cjs` test. From a built server with that cache installed, run `node --test --test-concurrency=1 tests/thieving-pickpocket.test.cjs` and `node --test --test-concurrency=1 tests/thieving-workman-timing-native.test.cjs`. The native fixture uses registered NPC handlers, seeded adjacent actors, deterministic randomness and manual task ticks. It checks no reward on ticks one/two, one reward and 10.4 XP on tick three, no duplicate reward, level refusal and the next ordinary Man pickpocket. It does not test natural walking, a rendered client, workman message-versus-inventory order, failure timing or relic repeat cadence. Overlapping-interaction and unavailable-actor controls are mocked unit tests.
+
+The earlier cache-241 comparison used the same native fixture: baseline `42bdbf131bb5f5321cfed8a5414cfbd2e1c3ba17` failed at the first-tick no-XP assertion; later assertions were unreached. Fixed `22f0c8a3e67ed5a6b21255948fea4f13cae684d5` passed the then-current 30 unit tests and one native test. That comparison is causal timing evidence on cache 241; the later 679a run establishes the scoped cache-242 integration result.
+
 ## Requirements
 
 Quest requirements are checked with the `quest:is-complete` event, falling back to the quest's stage attribute. A quest that isn't in the game yet counts as not completed, so its targets stay locked until it's added:
@@ -149,13 +159,65 @@ Sources: [Blackjack](https://oldschool.runescape.wiki/w/Blackjack?action=raw), [
 - Awake bandits give coin pouches (40/50 coins); thugs give 60. The Wiki has no awake Pollnivnian success chart, so those two targets follow this module's established estimated-chart policy using the awake thug's 50/160 chart. Their stun damage is also estimated from the thug. These awake-only values need an OSRS capture before claiming exact parity.
 - The Wiki guarantees two pickpockets but gives no exact knockout/failure/lure tick counts. The six-tick unconscious window and ten-tick lure window are implementation timings needing a capture; no other RSPS was used. The capture shows the failed swing's strike landing as a stun (`stunned_thieving`) with 4 damage; its length isn't captured, so the target attacks normally instead.
 
+## Dorgesh-Kaan rich chests
+
+`plugins/skills/thieving/DorgeshKaanRichChest.Thieving.js`; tests in `server/tests/thieving-dorgesh-rich-chest.test.cjs`.
+
+From the Wiki ([Chest (Dorgesh-Kaan Rich)](https://oldschool.runescape.wiki/w/Chest_(Dorgesh-Kaan_Rich))): 78 Thieving and a
+lockpick (or a hair clip), 650 experience a loot, the loot back after 300 seconds, one roll of 15 equal rows (uncut sapphire,
+emerald, ruby, diamond, opal, jade and red topaz, bullseye lantern, mining helmet, frog-leather chaps and body, iron bar, cave
+goblin wire, light orb, empty light orb), two cave goblin wire with the elite Lumbridge & Draynor Diary. A loot completes the
+elite task "Steal from a Dorgesh-Kaan rich chest."
+
+From the rsprox.net captures, ticks from the player's arrival beside the chest (recording 1843, rev 227, Leagues V, ticks
+4870-4877; recording 3197, rev 232, two other players' loots):
+
+| Tick | Response |
+| ---: | --- |
+| 0 | face the chest, sound 2419, "You attempt to pick the lock." and "You manage to pick the lock." (spam) |
+| 1 | varbit `busy` 1 |
+| 2 | "You open the chest." (spam), sound 52 |
+| 4 | `human_lockedchest`, "You find treasure inside!" (spam), the chest open (`dorgesh_rich_chest_open`) for everyone, the loot, the XP (10,400 at Leagues' 16x), the diary task |
+| 7 | the chest closed and empty (`dorgesh_rich_chest_closed_empty`), `busy` 0 |
+| 506 | the chest full again (499 ticks after it emptied, both chests in 3197) |
+
+Ours: the level, lockpick and full-inventory refusals; an attempt cut short (moving, dying, the chest emptied by someone else
+before tick 4) gives nothing; with one free slot, the second of the elite pair of wire lands under the player. Open, and Pick-lock on an empty chest, aren't captured and aren't answered. The average chests
+(52 Thieving, three loot tables) aren't implemented.
+
+## Isle of Souls Dungeon chest
+
+`plugins/skills/thieving/SoulChest.Thieving.js`; tests in `server/tests/thieving-soul-chest.test.cjs`.
+
+From the Wiki ([Chest (Isle of Souls Dungeon)](https://oldschool.runescape.wiki/w/Chest_(Isle_of_Souls_Dungeon))): 28 Thieving,
+150 experience per loot, the unlock roll -23/153 out of 256 (+26 to both with a lockpick, Mod Ash), a 1 in 6 trap on a
+failed roll, and the 20-row loot table (out of 200, the dark key 1/200, a medium clue 2/200).
+
+From the rsprox.net captures (recordings 91, 92, 95 and 1842, rev 227, Leagues V: 476 attempts: 173 unlocks, 303 fails, 55 traps), ticks from
+the click on an adjacent chest:
+
+| Tick | Unlocked | Failed | Trapped |
+| ---: | --- | --- | --- |
+| 0 | `human_lockedchest`, sound 1243, "You attempt to picklock the chest." | same | same |
+| 1 | varbit `busy` 1 | same | same |
+| 2 | `human_openchest` and sound 52 (delay 10), "You manage to unlock the chest." | sound 2402, "You fail to picklock the chest.", `busy` 0 | as failed (no `busy` 0), plus `human_castteleport`, `teleport_casting` (height 92), area sound 200 |
+| 3 | "You steal some loot from the chest.", the loot, the XP, the chest open | | |
+| 4 | sound 51 (delay 15) | | "You have activated a trap on the chest." |
+| 5 | the chest closed, `busy` 0 | | `busy` 0, teleport to a random walkable tile of 2321-2327, 2930-2936 (the 55 landings, on 33 tiles, all fall in it; 2321,2930 and 2321,2931 are blocked) |
+
+The Thieving XP on the loot tick is 2,400, which is 150 at Leagues' 16x. Another player's loot can open the chest during
+an attempt without stopping it (91, 95). Every line is spam.
+
+Ours: a loot that does not fit is not given, though the XP is (the Wiki only says nothing comes with one free slot and
+two unstackable items); a medium clue the player cannot hold gives nothing; the level refusal is the stalls' line. The
+Dark Chest the dark key opens is not implemented.
+
 ## Not modelled
 
 - **Villagers after The Feud:** the quest retains its own tutorial lure and knockout; generic post-quest villagers are not implemented.
 - **Wealthy citizen:** the street urchin distraction, which lets them be pickpocketed repeatedly with one click.
 - **The Ardougne diary:** no diary system exists yet. Its effects would be +10% success (medium: in Ardougne; hard: everywhere), the gloves of silence becoming ineffective, and coin pouch limits of 56, 84 and 140.
 - **Location- or quest-only loot:** the Pirate's medallion fragment (The Onyx Crest only), the Pirate's very rare medium clue (no rate given), and the H.A.M. robe table during Death to the Dorgeshuun.
-- **The Digsite workman** being twice as slow to pickpocket as other NPCs.
 - **The H.A.M. camp's failures:** "You feel slightly concussed from the blow.", "Your agility helps you partially avoid the blow." and "You're beaten unconscious and bundled out of the HAM Camp." (1723, Leagues V, and the Wiki). A failure here is the ordinary stun.
 - **The in-game loot tracker:** OSRS adds each pickpocket's loot to it (client script 7192, `loottracker_lootadd`).
 

@@ -107,8 +107,9 @@ function actor(t, kind, { rescued = false, full = false } = {}) {
   p.moveTo(new core.Location(2542, 3096, 0)); p.setNeedsPlacement(false);
   const portal = new GameObject(yanillePortal, portalAt, 10, 2, null);
   const definition = ObjectDefinition.forPlayer(yanillePortal, p) ?? ObjectDefinition.forId(yanillePortal);
-  assert.equal(PM.emitObjectInteraction({ player: p, object: portal, objectId: yanillePortal, definition, clickType: 1,
+  assert.equal(PM.emitObjectInteraction({ player: p, object: portal, objectId: yanillePortal, definition, clickType: 2,
     location: { x: 2542, y: 3097, z: 0 }, sourceLocation: { x: 2542, y: 3096, z: 0 }, handled: false }), true);
+  for (let tick = 0; tick < 3; tick++) core.TaskManager.process(); // Home loads two ticks later
   const house = House.houseFor(p);
   ownedHouse = house;
   assert.ok(house instanceof Instance.PlayerHouseInstance); assert.equal(house.owner, p);
@@ -450,7 +451,12 @@ test('nexus: Remove warns, then discards the paid destinations', async t => {
 test('nexus: removing its room discards the paid destinations', async t => {
   const f = actor(t, 'nexus', { rescued: true }); seedExisting(f, 'nexus');
   f.house.buildingMode = true;
+  const warnings = [], send = core.StatementDialogue.send;
+  t.mock.method(core.StatementDialogue, 'send', (player, text, ...rest) => { warnings.push(text); return send(player, text, ...rest); });
   House.removeRoomPrompt(f.p, f.house, { plane: 1, x: 4, y: 6 });
+  assert.deepEqual(warnings, [Nexus.ROOM_REMOVAL_WARNING], 'removing the room warns first');
+  await f.conn.dispatch([{ type: 'dialogue_continue', widgetId: (229 << 16) | 4, childIndex: -1 }]);
+  f.conn.processTurnPackets();
   await prompt(f, /remove the/i, /^yes$/i);
   assert.equal(f.house.getRoom({ plane: 1, x: 4, y: 6 }), null);
   assert.deepEqual(f.p.getAttribute('construction:nexus'), { slots: [], left: 0 });

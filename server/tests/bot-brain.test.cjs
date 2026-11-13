@@ -133,7 +133,7 @@ test('a bot without a rotation returns to its own activity, never a random one (
 
 test('cooking: food goes on a fire nearby; with no range or fire about, the bot lights one', () => {
   const Cooking = require('../plugins/skills/Cooking.plugin');
-  Cooking._test.setApi({ core: require('../dist/plugins/PluginManager').PluginManager.getCoreApi() });
+  Cooking._test.setApi({ core: require('../dist/plugins/PluginManager').PluginManager.getCoreApi(), emitCustomEvent() {} });
   const Firemaking = require('../plugins/skills/Firemaking.plugin');
   const { createCookAction } = require('../plugins/bots/brain/actions/Cook.PlayerBots');
   const { Skill } = require('../dist/game/model/Skill');
@@ -183,6 +183,48 @@ test('cooking: food goes on a fire nearby; with no range or fire about, the bot 
   } finally {
     Object.assign(Cooking, { isCookingActive: real.cooking });
     Object.assign(Firemaking, { isFiremakingActive: real.firemaking, startBotInventoryFiremaking: real.light, canPlayerBurnLog: real.canBurn, LIGHTABLE_LOGS: real.logs });
+  }
+});
+
+test("cooking: a bot leaves Hunter meat its Hunters' Rumours do not unlock", () => {
+  const Cooking = require('../plugins/skills/Cooking.plugin');
+  const core = require('../dist/plugins/PluginManager').PluginManager.getCoreApi();
+  let rumours = 0;
+  const api = { core, emitCustomEvent: (name, request) => { if (name === 'hunter:rumours-completed') request.completed = rumours; } };
+  Cooking._test.setApi(api);
+  const { createCookAction } = require('../plugins/bots/brain/actions/Cook.PlayerBots');
+  const { Skill } = require('../dist/game/model/Skill');
+  const { Location: Loc } = require('../dist/game/model/Location');
+  const { WorldDefinition } = core;
+  const KYATT = core.CacheDefinitions.getObjId('hunting_kyatt_meat');
+  assert.equal(Cooking.COOKABLE_BY_RAW.get(KYATT)?.rumours, 25, "Wiki (Hunters' Rumours): kyatt cooks after 25 rumours");
+  const real = { cooking: Cooking.isCookingActive, members: WorldDefinition.isMembersWorld };
+  const used = [];
+  const fire = { getId: () => 26185, getLocation: () => new Loc(3230, 3220, 0), getDefinition: () => ({ getName: () => 'Fire' }) };
+  try {
+    Cooking.isCookingActive = () => false;
+    WorldDefinition.isMembersWorld = () => true;
+    const world = {
+      core: { Skill, World: { getObjects: () => [fire] } },
+      objectSearch: { findCandidatesByIds: () => [] },
+      emitItemOnObject: (event) => used.push(event.itemId),
+    };
+    const a = createCookAction({}, world);
+    const player = {
+      ...fakePlayer('hunter-cook', 3225, 3220),
+      getSkillManager: () => ({ getCurrentLevel: () => 99 }),
+      getInventory: () => ({ getItems: () => [{ getId: () => KYATT }], getAmount: (id) => (id === KYATT ? 1 : 0) }),
+      getMovementQueue: () => ({ size: () => 0, walkToObject: (object, { execute }) => execute() }),
+    };
+    assert.equal(a.update({ player, nowMs: 1000 }), 'success', 'no rumours: nothing it may cook');
+    assert.deepEqual(used, []);
+    rumours = 25;
+    a.update({ player, nowMs: 5000 });
+    assert.deepEqual(used, [KYATT], '25 rumours: the kyatt goes on the fire');
+  } finally {
+    Cooking.isCookingActive = real.cooking;
+    WorldDefinition.isMembersWorld = real.members;
+    Cooking._test.setApi({ core, emitCustomEvent() {} });
   }
 });
 
@@ -3234,6 +3276,98 @@ test('::botstatsme requires the active character to be an administrator and copi
 
   command('::botstatsme missing');
   assert.match(messages.at(-1), /Usage: ::botstatsme/);
+});
+
+test('::botgearme requires the active character to be an administrator and copies worn gear', (t) => {
+  const { registerBotControlCommands } = require('../plugins/bots/runtime/Control.PlayerBots');
+  const { PluginManager } = require('../dist/plugins/PluginManager');
+  const { CommandPacketListener } = require('../dist/net/packet/impl/CommandPacketListener');
+  const { ClientConnection } = require('../dist/net/NetworkBuilder');
+  const { HeadlessBinaryChannel } = require('../dist/net/BinaryChannel');
+  const { BotPlayerSession } = require('../dist/net/BotPlayerSession');
+  const api = PluginManager.createApi('BotGearMeTest');
+  const { Equipment, Flag, Item, ItemIdentifiers, PlayerRights, Skill, World } = api.core;
+  const admin = nativeFollowCombatPlayer(t, 'gear-admin', new Location(3200, 3200));
+  admin.setPlayerBot(false);
+  admin.setRights(PlayerRights.ADMINISTRATOR);
+  const bot = nativeFollowCombatPlayer(t, 'devbot2', new Location(3200, 3200));
+  bot.setDisplayName('Dev Bot2');
+  bot.setSession(new BotPlayerSession());
+  const connection = new ClientConnection(new HeadlessBinaryChannel());
+  t.mock.method(connection, 'sendPlayerBootstrap', () => {});
+  t.mock.method(World, 'refreshActiveRegions', () => {});
+  connection.bindControlledPlayer(admin);
+  admin.setNeedsPlacement(false);
+  t.after(() => {
+    if (connection.player === bot) connection.releasePlayerControl();
+  });
+
+  const messages = [];
+  t.mock.method(admin, 'sendMessage', (message) => messages.push(message));
+  t.mock.method(bot, 'sendMessage', (message) => messages.push(message));
+  let containerRefreshes = 0;
+  const sender = new Proxy({
+    sendItemContainer() { containerRefreshes++; },
+  }, { get: (target, key) => target[key] ?? (() => sender) });
+  t.mock.method(bot, 'getPacketSender', () => sender);
+
+  registerBotControlCommands({
+    api,
+    runtime: {
+      entriesByUsername: new Map([[bot.getUsername(), { player: bot }]]),
+      playerBotUsernames: new Set([bot.getUsername()]),
+    },
+    resetMovementState() {},
+  });
+  const command = (raw) => CommandPacketListener.execute(connection.player, raw);
+  const copy = '::botgearme dev_bot2';
+  const denied = 'You do not have permission to use this command.';
+
+  admin.setRights(PlayerRights.NONE);
+  command(copy);
+  assert.equal(messages.at(-1), denied, 'a nonadministrator cannot copy gear');
+  admin.setRights(PlayerRights.ADMINISTRATOR);
+  command('::botcontrol dev_bot2');
+  assert.equal(connection.player, bot);
+  command(copy);
+  assert.equal(messages.at(-1), denied, 'the driven bot cannot use its parked owner’s rights');
+  command('::botback');
+  assert.equal(connection.player, admin);
+
+  const whip = new Item(ItemIdentifiers.ABYSSAL_WHIP);
+  const body = new Item(ItemIdentifiers.RUNE_PLATEBODY);
+  const glory = new Item(ItemIdentifiers.AMULET_OF_GLORY);
+  admin.getEquipment().set(Equipment.WEAPON_SLOT, whip);
+  admin.getEquipment().set(Equipment.BODY_SLOT, body);
+  admin.getEquipment().set(Equipment.AMULET_SLOT, glory);
+  const scimitar = new Item(ItemIdentifiers.RUNE_SCIMITAR);
+  bot.getEquipment().set(Equipment.WEAPON_SLOT, scimitar);
+  bot.getSkillManager().setMaxLevel(Skill.ATTACK, 1);
+  command(copy);
+  assert.match(messages.at(-1), /cannot wear Abyssal whip/i);
+  assert.equal(bot.getEquipment().getItems()[Equipment.WEAPON_SLOT], scimitar, 'a rejection leaves the bot’s gear intact');
+  assert.equal(containerRefreshes, 0, 'denied and rejected copies do not refresh the worn items');
+
+  bot.getSkillManager().setMaxLevel(Skill.ATTACK, 99);
+  bot.getUpdateFlag().reset();
+  command('::botgearme Dev Bot2');
+  const worn = bot.getEquipment().getItems();
+  const source = admin.getEquipment().getItems();
+  for (let slot = 0; slot < bot.getEquipment().capacity(); slot++) {
+    assert.equal(worn[slot].getId(), source[slot].getId(), `slot ${slot} id`);
+    assert.equal(worn[slot].getAmount(), source[slot].getAmount(), `slot ${slot} amount`);
+    assert.notEqual(worn[slot], source[slot], `slot ${slot} is a copy, not a shared item`);
+  }
+  assert.equal(containerRefreshes, 1, 'one worn-item refresh');
+  assert.ok(bot.getUpdateFlag().flagged(Flag.APPEARANCE), 'the visible gear is refreshed');
+  assert.equal(bot.getWeapon(), whip.getDefinition().getWeaponInterface());
+  const slashBonus = source.reduce((total, item) =>
+    item.getId() > 0 ? total + item.getDefinition().getBonuses()[1] : total, 0);
+  assert.equal(bot.getBonusManager().getAttackBonus()[1], slashBonus, 'bonuses cover the whole copied gear');
+  assert.equal(messages.at(-1), 'Copied your gear to Dev Bot2.');
+
+  command('::botgearme missing');
+  assert.match(messages.at(-1), /Usage: ::botgearme/);
 });
 
 // Review fixes (#3676): a bot an administrator drives has a real client, so it gets what a player gets.

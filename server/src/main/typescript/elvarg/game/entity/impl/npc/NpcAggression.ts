@@ -20,17 +20,19 @@ export class NpcAggression {
         const npcs = player.isUnwatchedBot?.() === true
             ? require("../../../World").World.getNearbyNpcsForUpdate(player)
             : player.getLocalNpcs();
-        NpcAggression.runAggression(player, npcs);
+        // Both passes share one tick, so a single-combat hunter taken in the first blocks the second's.
+        const engaged = NpcAggression.runAggression(player, npcs);
 
         if (player.getArea() instanceof PrivateArea) {
-            NpcAggression.runAggression(player, (player.getArea() as PrivateArea).getNpcs());
+            NpcAggression.runAggression(player, (player.getArea() as PrivateArea).getNpcs(), engaged);
         }
     }
 
-    private static runAggression(player: Player, npcs: NPC[]) {
+    /** Returns whether a single-combat hunter has taken the player this tick (`engaged`: by an earlier pass). */
+    private static runAggression(player: Player, npcs: NPC[], engaged = false): boolean {
         const area = player.getArea();
         // Set once a single-combat hunter has taken the player this tick.
-        let singleCombatEngaged = false;
+        let singleCombatEngaged = engaged;
         for (let npc of npcs) {
             if (npc == null) {
                 continue;
@@ -111,5 +113,6 @@ export class NpcAggression {
                 }
             }
         }
+        return singleCombatEngaged;
     }
 }

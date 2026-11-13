@@ -6,7 +6,7 @@ const KBD_LAIR_LEVER_OBJECT_ID = 1817;
 const KING_BLACK_DRAGON_LAIR = [2271, 4680, 0];
 const KING_BLACK_DRAGON_LADDER = [3017, 3850, 0];
 
-const { DragonfireProtectionTier, getDragonfireProtectionTier } = require("../combat/DragonfireProtection");
+const { DragonfireProtectionTier, emitDragonfireBreath, getDragonfireProtectionTier, sendDragonfireMessages } = require("../combat/DragonfireProtection");
 
 const Breath = {
   DRAGON: 0,
@@ -51,7 +51,8 @@ const SPECIAL_BREATH_MAX = Object.freeze({
 
 /** Wiki: shock drains two levels from every stat, poison starts at 8, ice freezes 10 ticks. */
 const SHOCK_DRAIN = 2;
-const POISON_SEVERITY = 8;
+/** Severity, which poisonEntity takes: hit x 5 (the first hit is 8). */
+const POISON_SEVERITY = 40;
 const ICE_FREEZE_TICKS = 10;
 /** Wiki (Mod Ash): 1/2 unprotected, 1/8 with a shield and/or Protect from Magic. */
 const EFFECT_DENOMINATOR_PROTECTED = 7;
@@ -209,6 +210,8 @@ function combatClass(pluginApi) {
       const damage = Misc.randomInclusive(0, breathMax(special, { shield, prayer, tier }));
       hit.setTotalDamage(damage);
       sendBreathMessages(player, { shield, prayer, tier });
+      // Wiki (Dragonfire shield): each adult dragon's dragonfire attack charges a worn shield.
+      sendDragonfireMessages(player, emitDragonfireBreath(character, player, []));
 
       // Wiki: a special breath has a 1/2 chance of its effect unprotected, 1/8 with a
       // shield and/or Protect from Magic, and only on a hit that dealt damage.

@@ -5,6 +5,13 @@ let pluginApi;
 
 const HOUSE_TABLET = "teleport to house";
 const HOUSE_TABLET_OPTIONS = new Set(["break", "inside", "outside"]);
+/**
+ * The house tablet's Group option goes to a Group Ironman teammate's house (Wiki). This server has
+ * no Ironman groups, so every player gets live's refusal: the line on the click tick, the tablet
+ * kept and no teleport (rsprox.net capture 2919, tick 2179).
+ */
+const HOUSE_TABLET_GROUP = "group";
+const NOT_IN_GROUP = "You are not in an Ironman Group.";
 /** A redirected house tablet (scroll of redirection) that finishes the Desert Diary's Pollnivneach task. */
 const POLLNIVNEACH_REDIRECT = "pollnivneach teleport";
 const POLLNIVNEACH_REDIRECT_TASK = "teleport-to-pollnivneach-with-a-redirected-telep";
@@ -227,6 +234,7 @@ function useTablet(event) {
     return;
   }
   if (option === "revert" && TABLETS.redirects[name]) return revertTablet(event);
+  if (name === HOUSE_TABLET && option === HOUSE_TABLET_GROUP) return refuseGroupHouse(event);
   const alternate = ALTERNATES.get(name);
   if (alternate && option === "toggle") return toggleDestination(event, alternate);
   const target = tabletDestination(event, name, option);
@@ -243,11 +251,18 @@ function useTablet(event) {
   if (!usable()) return;
   // OSRS uses the tablet up two ticks in, as it is absorbed (docs/teleport-tablets.md).
   const useUp = () => player.getInventory().deleteNumber(event.itemId, 1);
-  const breakTablet = () => core.TeleportHandler.teleport(player, target.destination, core.TeleportType.TELE_TAB, false, target.onArrival, useUp);
+  // The Wilderness warning asks first, then any other (the boat-at-sea warning).
+  const breakTablet = () => core.TeleportHandler.confirm(player, target.destination,
+    () => core.TeleportHandler.teleport(player, target.destination, core.TeleportType.TELE_TAB, false, target.onArrival, useUp), 20, { item: event.itemId });
   const warning = TABLET_WARNINGS.get(name);
   if (!warning || !warningOn(player, warning)) return breakTablet();
   const [title, yes, no] = tabletWarning(warning);
   pluginApi.sendMultiChatboxPrompt(player, title, yes, () => usable() && breakTablet(), no, () => {});
+}
+
+function refuseGroupHouse(event) {
+  event.handled = true;
+  event.player.sendMessage(NOT_IN_GROUP);
 }
 
 /** A teleport scroll is used up on the click (docs/teleport-tablets.md). */
@@ -255,8 +270,10 @@ function readScroll(event, destination) {
   const { player } = event;
   event.handled = true;
   if (!player.getInventory().contains(event.itemId) || !core.TeleportHandler.checkReqs(player, destination)) return;
-  player.getInventory().deleteNumber(event.itemId, 1);
-  core.TeleportHandler.teleport(player, destination, core.TeleportType.TELE_SCROLL, false);
+  core.TeleportHandler.confirm(player, destination, () => {
+    player.getInventory().deleteNumber(event.itemId, 1);
+    core.TeleportHandler.teleport(player, destination, core.TeleportType.TELE_SCROLL, false);
+  }, 20, { item: event.itemId });
 }
 
 function syncAlternates({ player }) {
@@ -450,6 +467,17 @@ function castSpell(event) {
   }
 }
 
+/**
+ * "spell:landing-tile" { name, alternate?, tile }: where a teleport that goes where the spell `name` goes lands (the
+ * house portals and nexus). `tile` becomes a tile of the spell's landing square, or of its alternate's
+ * (`alternate: true`); it is left as it was for a spell that lands on its own tile.
+ */
+function landingTile(request) {
+  const alternate = request.alternate ? ALTERNATES.get(request.name) : null;
+  const centre = alternate ? tile(alternate.tile) : standardCentre(request.name);
+  if (centre) request.tile = landing(centre);
+}
+
 module.exports = {
   name: "SpellTeleports",
   description: "Teleport tablets and spell teleports, including house tablets and redirected scrolls, from the teleport-tablets data file.",
@@ -465,6 +493,7 @@ module.exports = {
     api.onSpellCast(castAlternate);
     api.onInterfaceActionClick(castSpell);
     api.onCustomEvent("magic:teleport-quest-lock", teleportQuestLock);
+    api.onCustomEvent("spell:landing-tile", landingTile);
     api.onCustomEvent("spell:teleport-confirm", confirmSpell);
     api.onCustomEvent("settings:setting-clicked", setAllWarnings);
   },

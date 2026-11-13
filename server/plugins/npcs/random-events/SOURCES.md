@@ -383,7 +383,7 @@ takes five exercises in both recordings (1846, 1852), though the Wiki says four.
 
 Not settled by any recording, so Wiki text or nothing is used:
 
-- Wrong answers and failures: Quiz, Capt' Arnav, Pillory keys, Drill exercises, Pinball posts,
+- Wrong answers and failures: Capt' Arnav, Pillory keys, Drill exercises, Pinball posts,
   Certers, Surprise Exam, Beekeeper builds. Their sounds are unknown and not played.
 - Mime: whether a mistake resets the count, and the odds between outfit pieces and emotes.
 - Kiss the frog: the touch, polite and Frogland routes and the Thessalia exchange.
@@ -405,3 +405,22 @@ Known differences from live, needing engine work:
 Checked on a live server through the agent MCP: all 24 events spawn and talk, every teleporting
 event reaches its captured arrival tile, relogging returns the player, Freaky Forester start to
 finish, decline and dismiss. Not checked in a real client: rendering of any interface.
+
+### Quiz Master wrong answer
+
+A user rsprox capture of a whole quiz (one right, one wrong, then four right) shows the wrong
+reply on the click tick: sound 2277 (a right one sends 2309), the host's head on `chatsad3` (612)
+where right answers use `chathap3` (569), and "WRONG!<br>That's just WRONG!<br>Okay, next
+question!" on three lines with align height 20. The next question opens three ticks later, as
+after a right answer, and the streak starts over: the win came on the fourth right answer after
+the wrong one. The other wrong lines come from the Wiki transcript with our line breaks.
+
+### Dismiss
+
+RSProx Dismiss clicks on 21 event NPC families (revisions 223-237: the Genie, Sandwich lady,
+Drunken Dwarf, certers, Count Check, Mysterious Old Man, Evil Bob, the Frog crier, Strange plant
+and every invitation NPC) all make the owner play one of No (856), Wave (863), Yawn (2111),
+Angry (859) or Ya boo sucks (2110), with delay 10, on the click tick; each emote is about as
+common as the others. The Wiki pages don't mention the emote. In Kiss the Frog the crier (5429)
+and the other frogs (5430) carry Dismiss and the crowned frog (5431) does not; live's Dismiss
+on the crier ends the whole event. Dismiss on 5430 has no capture and is ours by the same rule.

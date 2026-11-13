@@ -40,9 +40,9 @@ before(() => {
   const real = PluginManager.createApi("BarracudaTrialsTest");
   api = { ...real, persistAttribute() {}, sendMultiChatboxPrompt: (player, title, ...pairs) => { player.prompt = { title, pairs }; return true; } };
   scoreboard.setFile(path.join(fs.mkdtempSync(path.join(os.tmpdir(), "bt-")), "barracuda-trials.json"));
-  require("../plugins/skills/sailing/Sailing.plugin").register(api);
-  require("../plugins/skills/sailing/Helm.plugin").register({ ...api, onObjectInteraction() {}, onObjectRoute() {} });
-  require("../plugins/skills/sailing/BarracudaTrials.plugin").register(api);
+  require("../plugins/skills/sailing/Panel.Sailing").register(api);
+  require("../plugins/skills/sailing/Helm.Sailing").register({ ...api, onObjectInteraction() {}, onObjectRoute() {} });
+  require("../plugins/skills/sailing/BarracudaTrials.Sailing").register(api);
 });
 
 let nextIndex = 700;
@@ -136,7 +136,7 @@ function atTheHelm(player, parts = {}) {
   return boat;
 }
 
-const helm = require("../plugins/skills/sailing/Helm.plugin");
+const helm = require("../plugins/skills/sailing/Helm.Sailing");
 
 /** A run under way: started, the HUD up (T+2), and the sails set by the player, which starts the timer. */
 function begin(player, trial, rank) {
@@ -621,6 +621,29 @@ test("Gwenith Glide: the crystallised helm hurts its holder, up to 5, and takes 
 });
 
 
+test("Gwenith Glide: the crystallised helm's headbar NPC stands on the deck's level and leaves the deck with the crystals", () => {
+  const player = captain();
+  const boat = atTheHelm(player);
+  BoatManager.teleport(boat, GWENITH().start);
+  try {
+    resonance.crystallise(player, boat);
+    const { npc } = resonance.helmOf(boat);
+    assert.ok(npc, "the headbar NPC");
+    const helm = BoatManager.getSpec(boat).locs.find((loc) => loc.id === 59597);
+    assert.equal(helm.level, 1, "the helm loc sits on the template's deck plane");
+    assert.deepEqual([npc.getLocation().getX(), npc.getLocation().getY(), npc.getLocation().getZ()],
+      [boat.deckBaseX + helm.x, boat.deckBaseY + helm.y, 0], "on the helm, on the level the people aboard stand on");
+    const deck = BoatManager.getDeck(boat);
+    assert.ok(deck.getNpcs().includes(npc), "on the boat's deck");
+    for (let i = 0; i < 3; i++) resonance.strike(player, boat);
+    assert.equal(resonance.helmOf(boat), undefined, "the crystals off");
+    assert.equal(deck.getNpcs().includes(npc), false, "and the NPC off the deck");
+    assert.equal(npc.getArea() ?? null, null);
+  } finally {
+    leave(player);
+  }
+});
+
 const cutscene = require("../plugins/skills/sailing/barracudatrials/Cutscene.BarracudaTrials");
 
 /** A transcript line reaching the screen: its `before` runs, as NpcDialogues does. */
@@ -750,6 +773,8 @@ test("wind catcher: switched on it keeps trimmed gusts as motes, up to 2, and re
       "You trim the sails, catching the wind and storing a wind mote in your helm.",
       "For storing a wind mote, you'll receive full XP the next time you consume one.",
     ]);
+    // rsprox: both are spam lines (105), 432 times each.
+    assert.deepEqual(player.sent.filter(([key]) => key === "sendTypedMessage").slice(-2).map(([, type]) => type), [105, 105]);
     assert.equal(catcher.storeFromTrim(player, boat), false, "full at 2: an ordinary trim");
     tick();
     assert.equal(player.varbits.get(19178), 2, "the charges a tick later");

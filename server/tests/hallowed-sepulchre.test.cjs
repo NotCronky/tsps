@@ -83,7 +83,8 @@ function container() {
 }
 
 function fakePlayer({ agility = 99, thieving = 99, ring = null } = {}) {
-  const attributes = new Map();
+  // A fake can't be snapshotted; a real reward's save request (e.g. a new Collection Log item) skips it, as for bots.
+  const attributes = new Map([['bot-skip-persistence', true]]);
   const p = {
     location: new Location(2387, 5982, 0), area: null, messages: [], spam: [], boxes: [], anims: [], graphics: [],
     varbits: new Map(), scripts: [], subs: [], xp: {}, songs: [], forced: [], registered: true,
@@ -121,6 +122,8 @@ function fakePlayer({ agility = 99, thieving = 99, ring = null } = {}) {
     getPacketSender() {
       const sender = {
         sendVarbit: (id, value) => { p.varbits.set(id, value); return sender; },
+        sendConfig: (id, value) => { (p.varps ??= new Map()).set(id, value | 0); return sender; },
+        getVarp: (id) => p.varps?.get(id) ?? 0,
         sendClientScript: (id, ...args) => { p.scripts.push([id, ...args]); return sender; },
         sendSubInterface: (uid, id) => { p.subs.push(id); return sender; },
         closeSubInterface: (uid) => { p.subs.push(-uid); return sender; },
@@ -128,6 +131,8 @@ function fakePlayer({ agility = 99, thieving = 99, ring = null } = {}) {
         sendSong: (id) => { p.songs.push(id); return sender; },
         sendJingle: () => sender,
         sendSound: () => sender,
+        sendSoundEffect: () => sender,
+        sendInterfaceScript: () => sender,
         sendObjectAnimation: (object, anim) => { (p.locAnims ??= []).push([object.getId(), anim.getId()]); return sender; },
         sendGraphic: (graphic, location) => { (p.tileGraphics ??= []).push([graphic.id, location]); return sender; },
         sendInterfaceRemoval: () => sender,
@@ -712,6 +717,41 @@ test('pads: a forward pad pushes the player on the way they were going, a backwa
   assert.fail('no direction let the pad push');
 });
 
+// Wiki (Strange Tile): "temporarily immune to attacks for a few seconds after being teleported" (5 ticks assumed).
+test('pads: after a push the player is immune to trap hits for 5 ticks', () => {
+  const { p, run } = trapFloor(2, 0, [2532, 5984, 2]);
+  const pad = run.traps.pads.find((x) => x.forward);
+  run.traps.lastMove = [0, 0];
+  const random = Math.random;
+  Math.random = () => 0.99;
+  try {
+    let pushed = false;
+    for (const [dx, dy] of [[0, 1], [0, -1], [1, 0], [-1, 0]]) {
+      run.traps.prev = [pad.tile[0] - dx, pad.tile[1] - dy, pad.tile[2]];
+      p.moveTo(run.area.at(pad.tile));
+      run.traps.pendingPad = null;
+      pad.last = run.traps.tick + 1;
+      Traps.tick(run);
+      Traps.tick(run);
+      if (run.area.templateOf(p.getLocation()).join() !== pad.tile.join()) { pushed = true; break; }
+    }
+    assert.ok(pushed, 'a pad pushed the player');
+    const here = run.area.templateOf(p.getLocation());
+    const hitsBefore = p.hits.length;
+    run.traps.pendingHit = [1, here];
+    Traps.tick(run);
+    assert.equal(p.hits.length, hitsBefore, 'no hit during the immunity');
+    assert.equal(run.traps.pendingHit, null, 'the hit on its way is dropped');
+    while (run.traps.tick < run.traps.immuneUntil) Traps.tick(run);
+    run.traps.pendingHit = [1, here];
+    Traps.tick(run);
+    assert.ok(p.hits.length > hitsBefore, 'hits land again once it ends');
+  } finally {
+    Math.random = random;
+    run.finish();
+  }
+});
+
 test('a hit picks the nearest recorded zone, and floor 3 layout B uses the west landing', () => {
   const { run } = trapFloor(3, 1, [2396, 5856, 2]);
   assert.deepEqual(Traps.checkpoint(run, [2400, 5840, 1]), [2398, 5828, 1]);
@@ -907,7 +947,9 @@ test('native environmental recovery is faster with the equipped Hallowed ring', 
   ['below both requirements', 87, 87, 83, 83, false],
   ['already looted', 92, 92, 84, 84, false, 'looted'],
   ['agility requirement', 92, 92, 66, 66, true],
-  ['agility requirement below ordinary thieving level', 92, 92, 65, 65, true],
+  // Wiki (Grand Hallowed Coffin): the Agility route still needs the ordinary coffins' 66 Thieving.
+  ['agility requirement below ordinary thieving level', 92, 92, 65, 65, false],
+  ['agility requirement with boosted thieving', 92, 92, 64, 66, true],
   ['ordinary coffin below thieving requirement', 92, 92, 65, 65, false, 'normal'],
   ['boosted agility', 90, 92, 83, 83, true],
   ['drained agility', 92, 91, 83, 83, false],
@@ -986,7 +1028,14 @@ test('native environmental recovery is faster with the equipped Hallowed ring', 
     const prior = run.busyUntil, taskCount = tasks.size;
     assert.equal(skills.getCurrentLevel(Skill.AGILITY), agilityCurrent);
     assert.equal(skills.getCurrentLevel(Skill.THIEVING), thievingCurrent);
-    assert.equal(PluginManager.emitObjectInteraction({ player, object, definition, objectId: id, clickType: 1, option }), true);
+    // Shaped as ObjectActionPacketListener sends it: the loc tile and the tile the player clicked from.
+    const at = object.getLocation(), from = player.getLocation();
+    assert.equal(PluginManager.emitObjectInteraction({
+      player, object, definition, objectId: id, clickType: 1, option,
+      location: { x: at.getX(), y: at.getY(), z: at.getZ() },
+      sourceLocation: { x: from.getX(), y: from.getY(), z: from.getZ() },
+      handled: false,
+    }), true);
     assert.equal(run.busyUntil, accepted ? run.ticks + 8 : prior, name);
     if (!accepted) assert.equal(tasks.size, taskCount, 'refusal schedules no action');
     if (state === 'held') run.traps = null;
@@ -1023,3 +1072,29 @@ test('native environmental recovery is faster with the equipped Hallowed ring', 
 
 });
 
+
+test('coffin runes go to the rune pouch first, still announced and logged (Wiki: Rune pouch)', () => {
+  const Coffins = require('../plugins/minigames/hallowedsepulchre/Coffins.HallowedSepulchre');
+  const p = fakePlayer();
+  const api = Common.api;
+  const previous = api.emitCustomEvent;
+  const logged = [];
+  let pouchTakes = true;
+  api.emitCustomEvent = function (name, request) {
+    if (name === 'rune-pouch:gather' && pouchTakes && request.itemId === 565) request.stored = request.amount;
+    if (name === 'collection-log:obtain') logged.push(request);
+    return previous.call(this, name, request);
+  };
+  try {
+    Coffins.give(p, [[565, 20], [24711, 3]]);
+    assert.equal(p.inventory.getAmount(565), 0, 'the blood runes went into the pouch');
+    assert.equal(p.inventory.getAmount(24711), 3, 'the marks to the inventory');
+    assert.ok(p.messages.includes('<col=005f00>Tester received a drop: 20 x Blood rune</col>'));
+    assert.ok(logged.some((event) => event.itemId === 565 && event.amount === 20));
+    pouchTakes = false;
+    Coffins.give(p, [[565, 20]]);
+    assert.equal(p.inventory.getAmount(565), 20, 'no pouch room: the inventory');
+  } finally {
+    api.emitCustomEvent = previous;
+  }
+});

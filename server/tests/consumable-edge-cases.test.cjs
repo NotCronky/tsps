@@ -24,6 +24,8 @@ before(async () => {
       if (key === "onItemFirstAction") drinkPotion = args[0];
       if (key === "onCustomEvent" && args[0] === "potions:apply-stamina") staminaFromHook = args[1];
       if (key === "emitCustomEvent" && args[0] === "potions:stamina-effect") staminaEffect = { ...args[1] };
+      // An area holding boosts (Rogues' Den) answers this.
+      if (key === "emitCustomEvent" && args[0] === "stats:boost-decay" && args[1].player.boostsHeld) args[1].allowed = false;
       // The Skillcapes plugin answers this; a worn Prayer cape is all these tests need.
       if (key === "emitCustomEvent" && args[0] === "skillcape:has-perk" && args[1].skill === "PRAYER") {
         args[1].result = args[1].player.getEquipment().contains(ItemIdentifiers.PRAYER_CAPE);
@@ -38,7 +40,7 @@ before(async () => {
 const {
   applyPrayerRestore, applySanfewRestore, applyAncientBrew, applyDivine, processDivine,
   applyMenaphiteRemedy, processMenaphite, applyPrayerRegeneration, processPrayerRegeneration,
-  clearPrayerRegeneration, processBoostDecay, notePreserveActivated, curePoisonAndVenom,
+  clearPrayerRegeneration, processBoostDecay, notePreserveActivated, sendBoostDrainTimer, curePoisonAndVenom,
   pauseTimedEffects, resumeTimedEffects,
 } = Potions._test;
 
@@ -168,7 +170,7 @@ function createPlayer({ base = 99, current = 1, inventory = [], equipment = [] }
     getPrayerActive: () => player.prayerActive,
     getInventory: () => ({ contains: (id) => inventory.includes(id) }),
     getEquipment: () => ({ contains: (id) => equipment.includes(id) }),
-    getPacketSender: () => ({ sendSound() { return this; }, sendPoisonType() {}, sendRunEnergy() {}, sendVarbit(id, value) { varbits.push([id, value]); return this; } }),
+    getPacketSender: () => ({ sendSound() { return this; }, sendPoisonType() {}, sendRunEnergy() {}, sendTypedMessage() { return this; }, sendVarbit(id, value) { varbits.push([id, value]); return this; } }),
     getSession: () => ({ sendClientPacket() {} }),
     setHitpoints(value) { levels.set(Skill.HITPOINTS, value); },
     setPoisonDamage(value) { player.poisonDamage = value; },
@@ -201,6 +203,25 @@ test("prayer potions restore 7 + 25%, or 27% with a holy wrench or worn prayer c
   assert.equal(cape.levels.get(Skill.PRAYER), 1 + 8 + 26);
 });
 
+test("prayer-restoring potions play no prayer recharge sound (only the drink sound)", () => {
+  const PRAYER_RECHARGE = 2674;
+  for (const [name, apply] of [
+    ["prayer potion", (player) => applyPrayerRestore(player, false)],
+    ["super restore", (player) => applyPrayerRestore(player, true)],
+    ["sanfew serum", applySanfewRestore],
+    ["ancient brew", (player) => applyAncientBrew(player, 2, 0.05)],
+  ]) {
+    const player = createPlayer();
+    const sounds = [];
+    const sender = player.getPacketSender();
+    sender.sendSoundEffect = (id) => { sounds.push(id); return sender; };
+    player.getPacketSender = () => sender;
+    player.getUsername = () => "drinker";
+    apply(player);
+    assert.ok(!sounds.includes(PRAYER_RECHARGE), `${name} sent ${sounds}`);
+  }
+});
+
 test("a Sanfew dose restores 4 + 30% (prayer 32% with the bonus)", () => {
   const player = createPlayer({ equipment: [ItemIdentifiers.RING_OF_THE_GODS_I_] });
   applySanfewRestore(player);
@@ -212,9 +233,9 @@ test("two divine potions keep their own five minutes: the second doesn't drop th
   const player = createPlayer({ current: 99 });
   let now = 1_000_000;
   t.mock.method(Date, "now", () => now);
-  applyDivine(player, (p) => p.levels.set(Skill.ATTACK, 118), [Skill.ATTACK], { damage: 0 });
+  applyDivine(player, (p) => p.levels.set(Skill.ATTACK, 118), [Skill.ATTACK]);
   now += 60_000;
-  applyDivine(player, (p) => p.levels.set(Skill.RANGED, 112), [Skill.RANGED], { damage: 0 });
+  applyDivine(player, (p) => p.levels.set(Skill.RANGED, 112), [Skill.RANGED]);
   const skills = () => (player.getAttribute("potions:divine:state")?.targets ?? []).map((entry) => entry.skillIndex).sort();
   assert.deepEqual(skills(), [Skill.ATTACK.getIndex(), Skill.RANGED.getIndex()].sort(), "both stay pinned");
   now += 4 * 60_000 + 1; // the first potion's five minutes are over, the second has a minute left
@@ -242,7 +263,7 @@ test("divine potions: the warning at 30 ticks left, the worn-off line at the end
     const player = createPlayer({ current: 99 });
     const lines = [];
     player.sendMessage = (text) => lines.push(text);
-    applyDivine(player, (p) => { for (const skill of skills) p.levels.set(skill, 112); }, skills, { damage: 0 });
+    applyDivine(player, (p) => { for (const skill of skills) p.levels.set(skill, 112); }, skills);
     return { player, lines };
   };
   const bastion = drink([Skill.RANGED, Skill.DEFENCE]);
@@ -310,6 +331,7 @@ SpellTeleports.register({
     ) }) },
     TeleportHandler: {
       checkReqs: () => allowTeleport,
+      confirm: (player, destination, go, level, { item } = {}) => go(item),
       teleport: (player, destination, type, warning, onArrival, onMiddle) =>
         teleports.push({ destination, type, onArrival, onMiddle }),
     },
@@ -384,7 +406,7 @@ test("a Nardah scroll uses its Teleport action and is used up on the click", () 
   assert.equal(teleports.length, 1);
   assert.deepEqual(
     [teleports[0].destination.getX(), teleports[0].destination.getY(), teleports[0].destination.getZ()],
-    [3401, 2918, 0]
+    [3419, 2917, 0], // the Wiki's Nardah teleport map
   );
   assert.equal(teleports[0].type, "TELE_SCROLL");
   assert.equal(player.items.length, 0, "scrolls go on the click (docs/teleport-tablets.md)");
@@ -469,9 +491,120 @@ test("Preserve stretches the boost cycle to 90 seconds once it has been on for 1
   assert.equal(player.levels.get(Skill.ATTACK), 109, "then the stretched cycle decays it");
 
   notePreserveActivated({ player, prayerId: PrayerHandler.PRESERVE });
+  // Its last warm moment was over 13 seconds ago, so the turn-off grace below does not apply either.
+  player.setAttribute("potions:preserve-warm-at", Date.now() - 14_000);
   player.setAttribute("potions:boost-cycle", Date.now() - 1);
   processBoostDecay(player);
   assert.equal(player.levels.get(Skill.ATTACK), 108, "Preserve switched on under 15 seconds ago does not stretch it");
+});
+
+// Wiki (Preserve): "Players can turn off Preserve when there are less than 13 seconds left until the next buff
+// drain, and still keep the full effect."
+test("Preserve turned off under 13 seconds before the cycle ends still stretches it; earlier does not", () => {
+  const { PrayerHandler } = core;
+  for (const [secondsLeft, stretched] of [[12, true], [14, false]]) {
+    const player = createPlayer({ base: 99, current: 99 });
+    player.levels.set(Skill.ATTACK, 110);
+    player.prayerActive[PrayerHandler.PRESERVE] = true;
+    player.setAttribute("potions:preserve-since", Date.now() - 20_000);
+    player.setAttribute("potions:boost-cycle", Date.now() + secondsLeft * 1000);
+    processBoostDecay(player); // a tick with Preserve on and warm
+    player.prayerActive[PrayerHandler.PRESERVE] = false;
+    // The cycle ends secondsLeft later: move it to now, keeping the gap since Preserve was warm.
+    player.setAttribute("potions:preserve-warm-at", Number(player.getAttribute("potions:preserve-warm-at")) - secondsLeft * 1000);
+    const cycleEnd = Date.now() - 1;
+    player.setAttribute("potions:boost-cycle", cycleEnd);
+    processBoostDecay(player);
+    assert.equal(player.levels.get(Skill.ATTACK), stretched ? 110 : 109, `turned off with ${secondsLeft} seconds left`);
+    if (stretched) assert.equal(player.getAttribute("potions:boost-cycle"), cycleEnd + 30_000);
+  }
+});
+
+test("the boost drain timer counts a Preserve turned off under 13 seconds before the cycle ends", () => {
+  const player = createPlayer({ base: 99, current: 99 });
+  const scripts = [];
+  player.getPacketSender = () => ({ sendClientScript: (...args) => { scripts.push(args); } });
+  player.levels.set(Skill.ATTACK, 110);
+  player.setAttribute("potions:preserve-warm-at", Date.now() - 1_000);
+  player.setAttribute("potions:boost-cycle", Date.now() + 10_000 - 100);
+  sendBoostDrainTimer({ player });
+  assert.deepEqual(scripts.pop(), [4518, 150, 67], "17 ticks left plus Preserve's 50");
+  player.setAttribute("potions:preserve-warm-at", Date.now() - 5_000);
+  sendBoostDrainTimer({ player });
+  assert.deepEqual(scripts.pop(), [4518, 100, 17], "turned off 15 seconds before the cycle ends: no stretch");
+});
+
+test("the modified stats overlay's boost drain timer shows the ticks left in the boost cycle", () => {
+  const { PrayerHandler } = core;
+  const player = createPlayer({ base: 99, current: 99 });
+  const scripts = [];
+  player.getPacketSender = () => ({ sendClientScript: (...args) => { scripts.push(args); } });
+  player.setAttribute("potions:boost-cycle", Date.now() + 30_000 - 100);
+  sendBoostDrainTimer({ player });
+  assert.deepEqual(scripts.pop(), [4518, 100, 100], "nothing boosted: a full minute");
+  player.levels.set(Skill.ATTACK, 110);
+  sendBoostDrainTimer({ player });
+  assert.deepEqual(scripts.pop(), [4518, 100, 50], "a boost drains in 30 seconds");
+  player.prayerActive[PrayerHandler.PRESERVE] = true;
+  player.setAttribute("potions:preserve-since", Date.now() - 1_000);
+  sendBoostDrainTimer({ player });
+  assert.deepEqual(scripts.pop(), [4518, 150, 100], "Preserve, on for 15 seconds when the cycle ends, adds 30 seconds");
+  player.setAttribute("potions:preserve-since", Date.now());
+  player.setAttribute("potions:boost-cycle", Date.now() + 10_000 - 100);
+  sendBoostDrainTimer({ player });
+  assert.deepEqual(scripts.pop(), [4518, 150, 17], "on under 15 seconds when the cycle ends: no stretch");
+
+  player.prayerActive[PrayerHandler.PRESERVE] = false;
+  player.setAttribute("potions:boost-cycle-preserved", true);
+  player.setAttribute("potions:boost-cycle", Date.now() + 84_000 - 100);
+  sendBoostDrainTimer({ player });
+  assert.deepEqual(scripts.pop(), [4518, 150, 140], "a cycle Preserve already stretched keeps its 150-tick period");
+  player.setAttribute("potions:boost-cycle-preserved", false);
+  player.setAttribute("potions:boost-cycle", Date.now() - 1);
+  sendBoostDrainTimer({ player });
+  assert.deepEqual(scripts.pop(), [4518, 100, 100], "a cycle ending before the decay has run is followed by a full one");
+});
+
+test("the boost drain timer counts Preserve on a cycle ending before the decay has run", () => {
+  const { PrayerHandler } = core;
+  const ticksTo = (at) => Math.ceil((at - Date.now()) / 600);
+  for (const [preserved, ticks, label] of [
+    [false, 50, "Preserve stretches the ending cycle by 30 seconds"],
+    [true, 150, "the next cycle starts, and Preserve will stretch it too"],
+  ]) {
+    const player = createPlayer({ base: 99, current: 99 });
+    const scripts = [];
+    player.getPacketSender = () => ({ sendClientScript: (...args) => { scripts.push(args); } });
+    player.levels.set(Skill.ATTACK, 110);
+    player.prayerActive[PrayerHandler.PRESERVE] = true;
+    player.setAttribute("potions:preserve-since", Date.now() - 120_000);
+    player.setAttribute("potions:boost-cycle-preserved", preserved);
+    player.setAttribute("potions:boost-cycle", Date.now() - 1);
+    sendBoostDrainTimer({ player });
+    assert.deepEqual(scripts.pop(), [4518, 150, ticks], label);
+    processBoostDecay(player);
+    if (preserved) {
+      // The cycle that just started ends in 100 ticks, when Preserve stretches it.
+      assert.equal(ticksTo(player.getAttribute("potions:boost-cycle")), 100);
+      player.setAttribute("potions:boost-cycle", Date.now() - 1);
+      processBoostDecay(player);
+      assert.equal(player.levels.get(Skill.ATTACK), 109, "one drain for the cycle that ended");
+      assert.equal(ticksTo(player.getAttribute("potions:boost-cycle")), 50, "then 50 more ticks: 150 in all");
+    } else {
+      assert.equal(ticksTo(player.getAttribute("potions:boost-cycle")), ticks, "where the decay puts it");
+    }
+  }
+});
+
+test("the boost drain timer shows a full period where an area holds boosts", () => {
+  const player = createPlayer({ base: 99, current: 99 });
+  const scripts = [];
+  player.getPacketSender = () => ({ sendClientScript: (...args) => { scripts.push(args); } });
+  player.levels.set(Skill.ATTACK, 110);
+  player.setAttribute("potions:boost-cycle", Date.now() + 30_000 - 100);
+  player.boostsHeld = true;
+  sendBoostDrainTimer({ player });
+  assert.deepEqual(scripts.pop(), [4518, 100, 100]);
 });
 
 test("a divine-timed skill is pinned and only decays after the divine state ends", () => {
@@ -803,9 +936,12 @@ test("drinking beer sends its captured feedback instead of potion completion tex
   const { Player } = require("../dist/game/entity/impl/player/Player");
   const player = new Player(null);
   const messages = [];
-  const sender = new Proxy({}, { get: () => () => sender });
+  // The beer lines are spam, as live sends them (rsprox: type=spam).
+  const sender = new Proxy({}, { get: (_target, key) => key === "sendTypedMessage"
+    ? (type, message) => { if (type === core.ChatType.SPAM) messages.push(message); return sender; }
+    : () => sender });
   t.mock.method(player, "getPacketSender", () => sender);
-  t.mock.method(player, "sendMessage", message => messages.push(message));
+  t.mock.method(player, "sendMessage", message => messages.push(`game: ${message}`));
   const beer = core.CacheDefinitions.getObjId("beer");
   const glass = core.CacheDefinitions.getObjId("beer_glass");
   assert.equal(beer, ItemIdentifiers.BEER);

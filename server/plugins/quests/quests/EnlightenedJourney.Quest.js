@@ -526,13 +526,13 @@ module.exports = function registerEnlightenedJourneyQuest(api) {
         return hasTestMaterials(player);
       case "8VDUe9": // has them in noted form
         return hasNotedTestMaterials(player);
-      case "HqA8Gq": // second experiment: two papyrus and a sack of potatoes
+      case "bhVUCf": // second experiment: two papyrus and a sack of potatoes
         return held(player, POTATOES) && held(player, PAPYRUS, EXPERIMENT_TWO_PAPYRUS);
-      case "y8uuFQ":
+      case "_OGIzV": // neither
         return !held(player, POTATOES) && !held(player, PAPYRUS, EXPERIMENT_TWO_PAPYRUS);
-      case "NbTsCS":
+      case "e-wFDO":
         return !held(player, POTATOES);
-      case "YB6Lup":
+      case "iBZETA":
         return !held(player, PAPYRUS, EXPERIMENT_TWO_PAPYRUS);
       case "gxuWQU": // sapling + basket of apples handout
         return !hasFlag(player, BIT_SAPLING_GIVEN) && inventory.getFreeSlots() >= 2;
@@ -623,11 +623,11 @@ module.exports = function registerEnlightenedJourneyQuest(api) {
       case "G1OzvY":
         return carriedWeight(player) > MAX_FLIGHT_WEIGHT;
       case "pgRm3-":
-        return held(player, LOGS, FLIGHT_LOGS) && held(player, TINDERBOX);
+        return hasFlightFuel(player) && held(player, TINDERBOX);
       case "z2wZOR":
         return !held(player, TINDERBOX);
       case "Kjqrcm":
-        return !held(player, LOGS, FLIGHT_LOGS);
+        return !hasFlightFuel(player);
       case "2DszCS":
         return inventory.getFreeSlots() >= 2;
       case "M-nwQB":
@@ -712,14 +712,6 @@ module.exports = function registerEnlightenedJourneyQuest(api) {
         player.getInventory().deleteNumber(BOWL, 1);
         setFlag(player, BIT_BOWL);
         return;
-      case "HqA8Gq": // second experiment takes two papyrus and the potatoes
-        if (!held(player, POTATOES) || !held(player, PAPYRUS, EXPERIMENT_TWO_PAPYRUS)) return;
-        player.getInventory().deleteNumber(PAPYRUS, EXPERIMENT_TWO_PAPYRUS);
-        player.getInventory().deleteNumber(POTATOES, 1);
-        if (quest.getStage(player) < STAGE_SECOND_EXPERIMENT) {
-          quest.setStage(player, STAGE_SECOND_EXPERIMENT);
-        }
-        return;
       case "gxuWQU": // sapling and basket of apples handout
         if (hasFlag(player, BIT_SAPLING_GIVEN) || player.getInventory().getFreeSlots() < 2) return;
         player.getInventory().adds(AUGUSTES_SAPLING, 1);
@@ -739,11 +731,34 @@ module.exports = function registerEnlightenedJourneyQuest(api) {
     }
   }
 
+  /** Storage owns eligibility: ten unnoted inventory logs OR ten stored logs, never a mix. */
+  function hasFlightFuel(player) {
+    const request = { player, station: FLIGHT_STATION, logs: FLIGHT_LOGS, canPay: held(player, LOGS, FLIGHT_LOGS) };
+    api.emitCustomEvent("balloon-transport:can-pay", request);
+    return request.canPay === true;
+  }
+
+  /** The same requirements when an offered flight is committed, before any fuel is taken. */
+  function canStartFlight(player) {
+    if (quest.getStage(player) !== STAGE_BALLOON_READY) return false;
+    let refusal = null;
+    if (hasFollower(player)) refusal = "You need to put your pet into your inventory before the flight.";
+    else if (carriedWeight(player) > MAX_FLIGHT_WEIGHT) refusal = "You have too much weight in your bag. You may only bring 40kg of weight.";
+    else if (!held(player, TINDERBOX)) refusal = "You need a tinderbox.";
+    else if (!hasFlightFuel(player)) refusal = "You don't have enough logs. You need ten normal logs.";
+    if (refusal) player.sendMessage(refusal);
+    return refusal === null;
+  }
+
   /** The ten logs onto Auguste's fire, from `source`: the balloon controls fly to Taverley. */
   function startFlight(player, source) {
-    if (quest.getStage(player) !== STAGE_BALLOON_READY) return;
-    if (!held(player, LOGS, FLIGHT_LOGS) || !held(player, TINDERBOX)) return;
-    api.emitCustomEvent("balloon-transport:quest-flight", { player, station: FLIGHT_STATION, logs: FLIGHT_LOGS, source });
+    if (!canStartFlight(player)) return;
+    const at = player.getLocation();
+    const origin = new Location(at.getX(), at.getY(), at.getZ());
+    api.emitCustomEvent("balloon-transport:quest-flight", {
+      player, station: FLIGHT_STATION, logs: FLIGHT_LOGS, source,
+      canStart: () => origin.equals(player.getLocation()) && canStartFlight(player),
+    });
   }
 
   /** Landed on Taverley's target: Auguste is there, and the quest moves on. */
@@ -790,8 +805,11 @@ module.exports = function registerEnlightenedJourneyQuest(api) {
       case "_ZdYV3": // end of cutscene
         event.handled = true;
         return;
-      case "MqDt3v": // second experiment cutscene
+      case "1JQEmc": // second experiment cutscene: Auguste takes two papyrus and the potatoes
         event.handled = true;
+        if (!held(player, POTATOES) || !held(player, PAPYRUS, EXPERIMENT_TWO_PAPYRUS)) return;
+        player.getInventory().deleteNumber(PAPYRUS, EXPERIMENT_TWO_PAPYRUS);
+        player.getInventory().deleteNumber(POTATOES, 1);
         if (quest.getStage(player) < STAGE_SECOND_EXPERIMENT) {
           quest.setStage(player, STAGE_SECOND_EXPERIMENT);
         }
@@ -936,7 +954,9 @@ module.exports = function registerEnlightenedJourneyQuest(api) {
       return;
     }
     if (itemId !== WILLOW_BRANCH || !BASKET_FRAME_OBJECT_IDS.has(objectId)) return;
-    if (quest.getStage(player) !== STAGE_MATERIALS || !saplingRecord(player)) return;
+    // Wiki: the 12 branches may be bought ("buy from the Grand Exchange, or plant a willow
+    // sapling"); what the basket needs is everything already handed to Auguste.
+    if (quest.getStage(player) !== STAGE_MATERIALS || !allMaterialsHanded(player)) return;
     event.handled = true;
     if (!held(player, WILLOW_BRANCH, REQUIRED_BRANCHES)) {
       startTranscript(
@@ -990,7 +1010,7 @@ module.exports = function registerEnlightenedJourneyQuest(api) {
   function handleItemOnNpc(event) {
     const { player, npcId, itemId } = event;
     if (!AUGUSTE_NPC_IDS.has(npcId) || itemId !== WILLOW_BRANCH) return;
-    if (!allMaterialsHanded(player) || !saplingRecord(player)) return;
+    if (quest.getStage(player) !== STAGE_MATERIALS || !allMaterialsHanded(player)) return;
     event.handled = true;
     startTranscript(
       api,

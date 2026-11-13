@@ -8,7 +8,7 @@ const { NpcDefinitionLoader } = require('../dist/game/definition/loader/impl/Npc
 const { PluginManager } = require('../dist/plugins/PluginManager');
 const { Item } = require('../dist/game/model/Item');
 const { ItemDefinition } = require('../dist/game/definition/ItemDefinition');
-const diary = require('../plugins/achievements/diaries/ArdougneIbanStaffDiary.plugin');
+const diary = require('../plugins/achievements/diaries/ArdougneIbanStaffDiary.AchievementDiaries');
 const core = PluginManager.getCoreApi();
 
 before(async () => {
@@ -173,6 +173,21 @@ test('post-quest Talk-to selection and its conditions only apply to the two towe
   assert.equal(f.variants[0]({ ...event, npcId: core.NpcIdentifiers.DARK_MAGE }), null);
   assert.equal(f.conditions[0]({ ...event, stepId: diary._test.BROKEN_STAFF_CONDITION_ID }), null,
     'active-quest condition answers remain unavailable');
+});
+
+test('the recharge option is offered for every Iban staff variant, the (o) ones included', (t) => {
+  for (const id of ['IBANS_STAFF', 'IBANS_STAFF_U_', 'IBANS_STAFF_O_', 'IBANS_STAFF_U_O_']) {
+    const f = fixture(t);
+    const event = {
+      player: f.player,
+      npcId: core.NpcIdentifiers.DARK_MAGE_2,
+      pages: [{ page: 'Dark Mage' }],
+      stepId: diary._test.RECHARGE_STAFF_CONDITION_ID,
+    };
+    assert.equal(f.conditions[0](event), false, `${id}: no staff, no recharge option`);
+    add(f.player, core.ItemIdentifiers[id]);
+    assert.equal(f.conditions[0](event), true, `${id}: the recharge option`);
+  }
 });
 
 test('a real Dark Mage Talk-to dialogue offers and completes the upgrade', (t) => {
