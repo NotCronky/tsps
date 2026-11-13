@@ -3,6 +3,7 @@ import { MAIN_PROFILE, type PlayerProfile } from "./persistence/PlayerProfile";
 import { Sound } from "../../../Sound";
 import { PrayerData, PrayerHandler } from "../../../content/PrayerHandler";
 import { CombatFactory } from "../../../content/combat/CombatFactory";
+import { HitQueue } from "../../../content/combat/hit/HitQueue";
 import { CombatSpecial } from "../../../content/combat/CombatSpecial";
 import { CombatType } from "../../../content/combat/CombatType";
 import { FightType } from "../../../content/combat/FightType";
@@ -311,17 +312,21 @@ export class Player extends Mobile {
 
     public appendDeath() {
         if (!this.isDying) {
-            const beforeDeath = { player: this, preventDeath: false, announce: true };
+            const beforeDeath: { player: Player; preventDeath: boolean; announce: boolean; message?: string } =
+                { player: this, preventDeath: false, announce: true };
             if (PluginManager.emitPlayerBeforeDeath(beforeDeath)) {
                 return;
             }
             // A respawn is the same Player object; drop rolls cached against the state it died in.
             CombatFactory.clearHitRollCache(this);
+            // Hits still in the air belong to this life too.
+            HitQueue.dropHitsFrom(this);
             // Kill credit is per life: damage this player dealt stops counting once they die.
             World.getPlayers().forEach((other) => {
                 if (other !== this) other.getCombat().removeDamager(this);
             });
-            TaskManager.submit(new PlayerDeathTask(this, beforeDeath.announce !== false));
+            TaskManager.submit(new PlayerDeathTask(this, beforeDeath.announce !== false,
+                typeof beforeDeath.message === "string" ? beforeDeath.message : undefined));
             this.isDying = true;
         }
     }

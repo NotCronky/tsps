@@ -45,7 +45,7 @@ const ClockworkToys = require("./ClockworkToys.Construction");
 const HAMMER_ID = ItemIdentifiers.HAMMER;
 const HAMMERS = [HAMMER_ID, ItemIdentifiers.IMCANDO_HAMMER, ItemIdentifiers.IMCANDO_HAMMER_OFF_HAND_];
 const SAW_ID = ItemIdentifiers.SAW;
-const SAWS = [ItemIdentifiers.SAW, ItemIdentifiers.CRYSTAL_SAW, ItemIdentifiers.AMYS_SAW];
+const SAWS = [ItemIdentifiers.SAW, ItemIdentifiers.CRYSTAL_SAW, ItemIdentifiers.AMYS_SAW, ItemIdentifiers.AMYS_SAW_OFF_HAND_];
 const TINDERBOX_ID = ItemIdentifiers.TINDERBOX;
 // Wiki (Nails): with several kinds carried, the higher tier goes first.
 const NAIL_IDS = [ItemIdentifiers.DRAGON_NAILS, ItemIdentifiers.RUNE_NAILS, ItemIdentifiers.ADAMANTITE_NAILS,
@@ -813,6 +813,7 @@ function exitHouse(player) {
   const house = houseFor(player);
   if (!house) return false;
   standFromChair(player);
+  Workbench.standUp(player);
   houseViewers.delete(player);
   pendingRoomMenus.delete(player);
   if (house.owner === player) advertisedHouses.delete(house);
@@ -1169,8 +1170,9 @@ function getBuildMaterials(player, house, target, buildable) {
     // The cache's second skills: Farming (spirit trees), Cooking (the kitchen barrels), Smithing (the armour displays)
     // and Runecraft (the rune cases). Boostable, so the current level counts (Wiki: Beer barrel, Cooking 5; Mithril
     // armour (Construction), Smithing 68; Rune case space, Runecraft 14, 44 and 90).
+    // Skill.getName() says "Runecrafting"; the game's name for the skill is Runecraft (Wiki; level-up lines).
     if (player.getSkillManager().getCurrentLevel(skill) < requirement.level)
-      return `You need ${skill.getName()} level ${requirement.level} to build that.`;
+      return `You need ${skill === Skill.RUNECRAFTING ? "Runecraft" : skill.getName()} level ${requirement.level} to build that.`;
   }
   // Natural teleports use a filled watering can instead (Wiki: Teleport space).
   if (buildable.tool !== "watering-can" && (!hasHammer(player) || !hasSaw(player))) return "You need a saw and a hammer in order to make furniture.";
@@ -1222,10 +1224,11 @@ function hasHammer(player) {
   return HAMMERS.some(id => player.getInventory().contains(id) || wielded.includes(id));
 }
 
-/** A saw, the crystal saw or Amy's saw, carried or (Amy's) in the off-hand. */
+/** A saw, the crystal saw or Amy's saw, carried or wielded (Amy's saw in the weapon slot, its off-hand copy in the shield slot). */
 function hasSaw(player) {
-  const offhand = player.getEquipment().getItems()[Equipment.SHIELD_SLOT]?.getId?.();
-  return SAWS.some(id => player.getInventory().contains(id) || offhand === id);
+  const equipment = player.getEquipment();
+  const wielded = [Equipment.WEAPON_SLOT, Equipment.SHIELD_SLOT].map(slot => equipment.get(slot)?.getId());
+  return SAWS.some(id => player.getInventory().contains(id) || wielded.includes(id));
 }
 
 /** What a carried container (the plank sack) holds of a material ("storage:amount"). */
@@ -1245,7 +1248,7 @@ function useMaterial(player, itemId, amount) {
 /**
  * Uses a build's materials (getBuildMaterials' map), as content may keep some of them
  * ("construction:materials" `{ player, buildable, materials }` as [id, amount] pairs, a league
- * fragment's planks kept): a listener may lower an amount, never raise it.
+ * fragment's planks kept; `buildable` is null for a Mahogany Homes job): a listener may lower an amount, never raise it.
  */
 function useMaterials(player, buildable, materials) {
   const request = { player, buildable, materials: [...materials].map(([itemId, amount]) => [itemId, amount]) };
@@ -1484,7 +1487,9 @@ function handleFurnitureAction(event) {
   }
   if (Servants.useServantFurniture(event) || Portals.useHousePortal(event)
     || (["light", "re-light"].includes(action ?? "") && Altars.lightHouseBurner(event))
-    || (["open", "search", "view"].includes(action ?? "") && Storage.openHouseStorage(event))) event.handled = true;
+    || (action === "open" && Storage.openHouseFurniture(event))
+    || (action === "close" && Storage.closeHouseFurniture(event))
+    || (["search", "view"].includes(action ?? "") && Storage.openHouseStorage(event))) event.handled = true;
 }
 
 // Cache-native ready poses for the seven parlour chairs, in furniture-menu order.
@@ -1770,6 +1775,7 @@ function logoutHouse({ player }) { standFromChair(player); releaseHouse(player, 
 /** Per tick, for players inside a house only (PlayerHouseInstance.process). */
 function processOccupant(player, house) {
   processChair(player);
+  Workbench.processSeat(player, house);
   Servants.processServant(player);
   syncKickOption(player);
   Altars.expireHouseBurners(house);
@@ -1780,6 +1786,7 @@ function processOccupant(player, house) {
 /** PlayerHouseInstance.postLeave, after the player is out of the house. */
 function leftHouse(player, house) {
   standFromChair(player);
+  Workbench.standUp(player);
   syncKickOption(player);
   if (house.owner === player) advertisedHouses.delete(house);
   GamesRoom.leftGamesRoom(player, house);
@@ -1800,9 +1807,11 @@ function recordRegionVisit({ player, location }) {
   }
 }
 
-// Vengeance can't be cast in a house (rsprox capture 1074, Wiki: Vengeance).
+// Vengeance can't be cast in a house (rsprox capture 1074, Wiki: Vengeance), nor Vengeance Other (Wiki: Vengeance
+// Other: "unable to cast Vengeance Other inside of a player-owned house").
 function refuseHouseVengeance(event) {
-  if (event.spell !== EffectSpells.VENGEANCE || !houseFor(event.player)) return;
+  const vengeance = event.spell === EffectSpells.VENGEANCE || event.spellId === EffectSpells.VENGEANCE_OTHER.spellId();
+  if (!vengeance || !houseFor(event.player)) return;
   event.player.sendMessage("You can't use this spell inside a player-owned house.");
   event.disabled = true;
 }
@@ -1888,4 +1897,4 @@ function attach(api) {
   api.onPlayerLogout(logoutHouse);
 }
 
-Object.assign(module.exports, { completeFurniture, enterHouse, visitHouse, storedAmount, houseStateFor, releaseHouse, canVisitHouse, syncHouseOptions, isSeatedForDinner, houseFor, saveHouse, rebuildHouse, removeRoomPrompt, isBuildingMode, constructionLevel, hasHammer, getBuildMaterials, useMaterial, useMaterials, hammer, hammerNails, nailsOf, hotspotChoices, furnitureCreationText, processOccupant, leftHouse, attach });
+Object.assign(module.exports, { completeFurniture, enterHouse, visitHouse, storedAmount, houseStateFor, releaseHouse, canVisitHouse, syncHouseOptions, isSeatedForDinner, houseFor, saveHouse, rebuildHouse, removeRoomPrompt, isBuildingMode, constructionLevel, hasHammer, hasSaw, getBuildMaterials, useMaterial, useMaterials, hammer, hammerNails, nailsOf, hotspotChoices, furnitureCreationText, processOccupant, leftHouse, attach });

@@ -86,6 +86,26 @@ test("bone staff: preset chaos runes are refused; only plain ones charge, and Un
   assert.equal(amount(f.inv, I.CHAOS_RUNE, false), 50);
 });
 
+test("bone staff creation with only preset chaos runes says preset items cannot be used, not that runes are missing", (t) => {
+  const f = actor(t);
+  levels(f, core.Skill.CRAFTING);
+  f.inv.setItem(0, new core.Item(I.BATTLESTAFF, 1));
+  f.inv.setItem(1, new core.Item(I.SCURRIUS_SPINE, 1));
+  f.inv.setItem(2, new core.Item(I.CHISEL, 1));
+  f.inv.setItem(3, preset(new core.Item(I.CHAOS_RUNE, 1000)));
+  itemOnItem(f, I.SCURRIUS_SPINE, I.BATTLESTAFF);
+  assert.equal(f.messages.at(-1), PRESET_TEXT);
+  assert.equal(f.inv.getAmount(I.BATTLESTAFF), 1, "nothing made");
+  assert.equal(amount(f.inv, I.CHAOS_RUNE, true), 1000);
+  // Preset and plain together still short of 1,000 plain: the preset line; too few in all: the runes line.
+  f.inv.setItem(4, new core.Item(I.CHAOS_RUNE, 400));
+  itemOnItem(f, I.SCURRIUS_SPINE, I.BATTLESTAFF);
+  assert.equal(f.messages.at(-1), PRESET_TEXT);
+  f.inv.setItem(3, new core.Item(-1, 0));
+  itemOnItem(f, I.SCURRIUS_SPINE, I.BATTLESTAFF);
+  assert.equal(f.messages.at(-1), "You need 1,000 chaos runes and a Scurrius' spine to create the Bone staff.");
+});
+
 test("rat bone mace: a preset rune mace makes a preset bone mace", (t) => {
   const f = actor(t);
   levels(f, core.Skill.SMITHING, core.Skill.CRAFTING, core.Skill.FLETCHING);
@@ -356,11 +376,29 @@ test("Smiths gloves combine and dismantle through registered inventory actions",
   assert.deepEqual(prompt(), { title: "Dismantle your Smithing gloves (i)?", options: ["Yes.", "No."] });
   answer(f.p, 2);
   assert.equal(f.inv.getAmount(I.SMITHS_GLOVES_I_), 1);
+  const shown = [];
+  t.mock.method(f.p.getDialogueManager(), "startDialogues", (chain) => { shown.push(...chain.getDialogues().values()); });
   dismantle(slot);
   answer(f.p, 1);
   assert.equal(f.inv.getAmount(I.SMITHS_GLOVES_I_), 0);
   assert.equal(f.inv.getAmount(I.SMITHS_GLOVES), 1);
   assert.equal(f.inv.getAmount(I.ICE_GLOVES), 1);
+  // Wiki, Transcript:Smiths gloves (i): Yes ends with this line.
+  assert.equal(shown.length, 1);
+  assert.ok(shown[0] instanceof core.ItemStatementDialogue);
+  assert.equal(shown[0].getText(), "The gloves get separated into smith gloves and ice gloves.");
+});
+
+test("worn Smiths gloves (i) get no Dismantle prompt", (t) => {
+  const f = actor(t);
+  const gloves = new core.Item(I.SMITHS_GLOVES_I_, 1);
+  f.p.getEquipment().setItem(core.Equipment.HANDS_SLOT, gloves);
+  const index = core.CacheDefinitions.getItem(I.SMITHS_GLOVES_I_).inventoryActions.indexOf("Dismantle");
+  const { ItemActionPacketListener } = require("../dist/net/packet/impl/ItemActionPacketListener");
+  ItemActionPacketListener.handleAction(f.p, core.Equipment.INVENTORY_INTERFACE_ID, I.SMITHS_GLOVES_I_, core.Equipment.HANDS_SLOT,
+    index + 1, "Dismantle");
+  assert.equal(core.MultiChatboxPrompt.getPending(f.p), null);
+  assert.equal(f.p.getEquipment().getItems()[core.Equipment.HANDS_SLOT], gloves);
 });
 
 test("Smiths gloves confirmations preserve stale, restricted and full inventories", (t) => {
