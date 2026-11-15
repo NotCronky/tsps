@@ -944,6 +944,16 @@ Combat tasks with a few additions, data in `data/combat-tasks.json`; what's spec
     prayer potions, a forgotten brew and a divine bastion): the scroll to Zul-Andra, the
     priestess's item collected, a kill (3:00), "restock: food", **the ring to Castle Wars, banked,
     the scroll back**, a second kill (2:32), "task done" (2 kills, 1 restock). Unit test.
+  - **The kit restock fixed (user, 2026-11-14: "more of the potions but no food", "put my gear
+    away"; log 2026-11-13: a "food" restock after nearly every kill, then "no magic set"):** the
+    withdraw topped each exact item up to its start amount, so a prayer potion(4) was taken per one
+    drunk while the (1)-(3) doses stayed: the pack filled with potions and the sharks had no room.
+    And "theirs" came from the pack alone: fled mid-fight in the ranged switch, the trident and
+    mystic in the pack were loot and banked (the trident isn't in gear.json: no magic set after).
+    Now the main set goes back on first; every supply goes in (partial doses too) with what isn't
+    theirs, the sets' pieces and their own gear stay, and the kit comes out as it came, short of an
+    item's own id its other doses (`Banks.withdraw` `like`, most doses first). Worn items count as
+    theirs; names drop "(full)"/"(empty)"/"(uncharged)" too. Unit tests; not yet seen live.
   - **Prayers checked (user: "wrong sometimes"):** every attack thrown at it is judged against the
     protection it had up (the server reads it as the attack is thrown), a miss logged
     (`spp_bots_zulrah {wrongPrayer, prayed, phase, form}`) and the fight's count at its end

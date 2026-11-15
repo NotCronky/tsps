@@ -934,6 +934,48 @@ test('a player\'s kit: what they brought is restocked to; short with no food (un
   assert.equal(withBrew.boost, 1);
   pack = [[385, 1], [385, 1], [385, 1], [2434, 1]];
   assert.equal(kitShort(core, player, withBrew), 'boost potions');
+  // What's worn is theirs too, its charge left off (the trident banked as loot after a flight).
+  names[22288] = 'Trident of the seas (full)';
+  const worn = { getItems: () => [{ getId: () => 22288, getAmount: () => 1 }] };
+  const wearing = kitOf(core, { ...player, getEquipment: () => worn });
+  assert.ok(wearing.names.has('trident of the seas'), 'the worn trident, "(full)" left off');
+});
+
+test('a bank withdrawal tops up with the item\'s other doses, most first', () => {
+  // Imports needs the built server: its one constant Banks uses stands in.
+  const imports = require.resolve('../plugins/spp-bots/Imports.SppBots');
+  const real = require.cache[imports];
+  require.cache[imports] ??= { id: imports, filename: imports, loaded: true, exports: { BLOCKED: 0 } };
+  const Banks = require('../plugins/spp-bots/Banks.SppBots');
+  if (!real) delete require.cache[imports];
+  const names = { 2434: 'Prayer potion(4)', 139: 'Prayer potion(1)', 141: 'Prayer potion(2)', 385: 'Shark' };
+  let bank = [[139, 2], [141, 3], [385, 10]];
+  const taken = [];
+  const pack = new Map();
+  const core = {
+    CacheDefinitions: { getItem: (id) => ({ name: names[id] }) },
+    Bank: {
+      TOTAL_BANK_TABS: 1,
+      withdraw: (player, id, slot, amount) => {
+        assert.equal(bank[slot][0], id, 'the slot holds the item');
+        taken.push([id, amount]);
+        pack.set(id, (pack.get(id) ?? 0) + amount);
+        bank[slot][1] -= amount;
+        bank = bank.filter(([, n]) => n > 0);
+      },
+    },
+  };
+  const container = () => ({
+    getItems: () => bank.map(([id, n]) => ({ getId: () => id, getAmount: () => n })),
+    getSlotForItemId: (id) => bank.findIndex(([b]) => b === id),
+  });
+  const player = { getInventory: () => ({ getAmount: (id) => pack.get(id) ?? 0 }), getBank: () => container() };
+  const potion = / *prayer potion/i;
+  Banks.withdraw(core, player, [
+    { item: 2434, amount: 4, like: (id) => potion.test(names[id] ?? '') },
+    { item: 385, amount: 5 },
+  ]);
+  assert.deepEqual(taken, [[141, 3], [139, 1], [385, 5]], 'no 4-doses: the 2-doses, then a 1-dose; the sharks after');
 });
 
 test('geared up from where it stands: the worn weapon is the set, other styles in the pack are switches', () => {

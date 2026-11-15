@@ -176,11 +176,15 @@ function nearestBank(core, getFlag, here, avoid = new Set()) {
   return best?.bank ?? null;
 }
 
-/** Withdraws `items` ([{ item, amount }], up to amount in the inventory) from an open bank. */
+/**
+ * Withdraws `items` ([{ item, amount }], up to amount in the inventory) from an open bank. `like`
+ * (id => bool): with too few of the item itself, others that do (a prayer potion's other doses,
+ * the most doses first).
+ */
 function withdraw(core, player, items) {
   const { Bank } = core;
   const inventory = player.getInventory();
-  for (const { item, amount, noted = false } of items) {
+  for (const { item, amount, noted = false, like = null } of items) {
     // `noted`: with the bank's "Note" toggle on, as a player takes a stack of bones out as notes.
     const noteId = noted ? Number(core.ItemDefinition.forId(item)?.getNoteId?.() ?? -1) : -1;
     if (noted && !(noteId > 0)) continue;
@@ -195,6 +199,26 @@ function withdraw(core, player, items) {
       const take = Math.min(remaining, stack.getAmount());
       Bank.withdraw(player, item, slot, take, tab);
       remaining -= take;
+    }
+    if (like && !noted && remaining > 0) {
+      const dose = (id) => Number(/\((\d+)\)$/.exec(String(core.CacheDefinitions?.getItem?.(id)?.name ?? ""))?.[1] ?? 0);
+      const others = [];
+      for (let tab = 0; tab < Bank.TOTAL_BANK_TABS; tab++) {
+        (player.getBank(tab)?.getItems?.() ?? []).forEach((stack) => {
+          const id = stack?.getId?.();
+          if (id > 0 && id !== item && stack.getAmount() > 0 && like(id)) others.push({ id, tab, amount: stack.getAmount() });
+        });
+      }
+      others.sort((a, b) => dose(b.id) - dose(a.id));
+      for (const other of others) {
+        if (remaining <= 0) break;
+        // Its slot looked up again: a stack taken whole moves the ones after it.
+        const slot = player.getBank(other.tab)?.getSlotForItemId?.(other.id) ?? -1;
+        if (slot < 0) continue;
+        const take = Math.min(remaining, other.amount);
+        Bank.withdraw(player, other.id, slot, take, other.tab);
+        remaining -= take;
+      }
     }
     if (noted) player.setNoteWithdrawal(false);
   }

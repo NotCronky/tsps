@@ -226,17 +226,23 @@ function findTarget(core, player, task) {
 
 // A player's kit runs short (bot mode): fewer foods than this, or no prayer restore, when it had them.
 const KIT_FOOD_LOW = 3;
-const baseName = (core, id) => lower(core.CacheDefinitions?.getItem?.(id)?.name).replace(/\s*\(\d+\)$/, "");
+// Without dose or charge: "prayer potion(4)", "ring of dueling(8)", "trident of the seas (full)".
+const baseName = (core, id) => lower(core.CacheDefinitions?.getItem?.(id)?.name).replace(/\s*\((\d+|full|empty|uncharged|charged)\)$/, "");
 const isGear = (core, id) => (core.ItemDefinition?.forId?.(id)?.getEquipmentType?.()?.getSlot?.() ?? -1) >= 0;
 
 /**
  * What a player in bot mode brought (the pack at the task's start): its supplies to restock to,
  * [{ item: id, amount }] (food, potions, teleport scrolls: what isn't gear), and every item's name
  * without its dose or charge ("ring of dueling", "prayer potion"): what's theirs, kept at the bank.
+ * What's worn is theirs too (mid-fight the main set's pieces are in the pack: the trident was
+ * banked as loot after a flight in the ranged switch).
  */
 function kitOf(core, player) {
   const take = new Map();
   const names = new Set();
+  for (const item of player.getEquipment?.()?.getItems?.() ?? []) {
+    if (item?.getId?.() > 0) names.add(baseName(core, item.getId()));
+  }
   for (const item of player.getInventory().getItems()) {
     const id = item?.getId?.();
     if (!(id > 0)) continue;
@@ -490,9 +496,18 @@ function createCombatTask({ api, entry, taskId, task = TASKS[taskId] ?? require(
 
   /** A bank trip for a player's kit: what's not theirs (loot) deposited, the kit withdrawn to its start. */
   function startKitRestock(player, why) {
-    const loot = player.getInventory().getItems().map((item) => item?.getId?.())
-      .filter((id) => id > 0 && !state.kit.names.has(baseName(core, id)));
-    state.visit = createBankVisit({ api, depositIds: [...new Set(loot)], withdraw: state.kit.take, teleports: true, log });
+    // The main set back on first (a flight mid-fight leaves the switch worn).
+    if (state.set) Tactics.wearSet(core, player, state.set);
+    const sets = new Set(Object.values(hooks.sets ?? {}).flatMap((set) => [...Object.values(set.worn ?? {}), set.ammo?.id]).filter(Boolean));
+    // In: every supply (the half-drunk potions too: kept, they piled up a trip at a time until
+    // the food had no room) and what isn't theirs (loot); the gear stays. Out: the kit as it came.
+    const out = player.getInventory().getItems().map((item) => item?.getId?.())
+      .filter((id) => id > 0 && !sets.has(id) && (!isGear(core, id) || !state.kit.names.has(baseName(core, id))));
+    const withdraw = state.kit.take.map(({ item, amount }) => {
+      const name = baseName(core, item);
+      return { item, amount, like: (id) => baseName(core, id) === name };
+    });
+    state.visit = createBankVisit({ api, depositIds: [...new Set(out)], withdraw, teleports: true, log });
     state.restocks += 1;
     state.phase = "kitRestock";
     log("spp_bots_task", { name: entry.bot.name, task: taskId, step: "restock", why, kit: true });
