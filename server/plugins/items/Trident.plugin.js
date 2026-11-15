@@ -382,6 +382,20 @@ function removeFang(player, item, trident) {
   player.sendMessage("You wrench the fang off the trident. Both items seem to be unharmed.");
 }
 
+/**
+ * Wiki (Uncharged toxic trident): the fang only goes on an uncharged trident; on a charged trident
+ * of the seas it refuses. The graft itself is a Crafting combine (plugins/skills/data/crafting.json).
+ */
+function fangOnChargedTrident(event) {
+  const { player, usedItemId, usedWithItemId } = event;
+  const fang = ItemIdentifiers.MAGIC_FANG;
+  const tridentId = usedItemId === fang ? usedWithItemId : usedWithItemId === fang ? usedItemId : null;
+  const recipe = recipeForTridentId(tridentId);
+  if (!recipe || recipe.venom || !recipe.pairs.some(([charged]) => charged === tridentId)) return;
+  event.handled = true;
+  player.sendMessage("You can't graft the fang onto a charged trident.");
+}
+
 function answerSpell(request) {
   for (const staff of staves) staff.answerSpell(request);
 }
@@ -413,10 +427,12 @@ module.exports = {
     venom,
     dismantle,
     removeFang,
+    fangOnChargedTrident,
   },
   register(pluginApi) {
     initialize(pluginApi);
     pluginApi.onItemOnItem(chargeWithResources, { noted: false });
+    pluginApi.onItemOnItem(fangOnChargedTrident, { noted: false });
     for (const name of [
       "Trident of the Seas", "Trident of the Seas (full)", "Trident of the Seas (o)", "Trident of the Seas (full) (o)",
       "Trident of the Seas (e)", "Trident of the Seas (e) (o)",

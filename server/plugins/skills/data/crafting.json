@@ -294,7 +294,7 @@
     ]
   },
   "combine": {
-    "$comment": "One item used on another, both used up; `materials` used up too, `tools` kept. `ticks` per item (Wiki).",
+    "$comment": "One item used on another, both used up; `materials` used up too, `tools` kept. `ticks` per item (Wiki). No `seq`: no animation captured. The magic fang rows (Wiki: Uncharged toxic trident, Uncharged toxic trident (e), Toxic staff (uncharged)) list 1 tick for the staff and '?' for the tridents, which take the staff's.",
     "recipes": [
       {
         "pair": [
@@ -541,6 +541,48 @@
         "ticks": 5,
         "seq": 1249,
         "seqName": "human_leather_crafting",
+        "members": true
+      },
+      {
+        "pair": [
+          "MAGIC_FANG",
+          "UNCHARGED_TRIDENT"
+        ],
+        "tools": [
+          "CHISEL"
+        ],
+        "item": "UNCHARGED_TOXIC_TRIDENT",
+        "level": 59,
+        "xp": 0,
+        "ticks": 1,
+        "members": true
+      },
+      {
+        "pair": [
+          "MAGIC_FANG",
+          "UNCHARGED_TRIDENT_E_"
+        ],
+        "tools": [
+          "CHISEL"
+        ],
+        "item": "UNCHARGED_TOXIC_TRIDENT_E_",
+        "level": 59,
+        "xp": 0,
+        "ticks": 1,
+        "members": true
+      },
+      {
+        "pair": [
+          "MAGIC_FANG",
+          "STAFF_OF_THE_DEAD"
+        ],
+        "tools": [
+          "CHISEL"
+        ],
+        "item": "TOXIC_STAFF_UNCHARGED_",
+        "level": 59,
+        "xp": 0,
+        "ticks": 1,
         "members": true
       }
     ]
@@ -1628,6 +1670,13 @@
       {"shell": "BLAMISH_OCHRE_SHELL_3", "item": "POINTED_OCHRE_SNELM"},
       {"shell": "BLAMISH_BLUE_SHELL_3", "item": "POINTED_BRUISE_BLUE_SNELM"}
     ]
+  },
+  "serpentineHelm": {
+    "$comment": "https://oldschool.runescape.wiki/w/Serpentine_helm_(uncharged) - a chisel on a serpentine visage, level 52 Crafting (boostable), 120 XP, 1 tick. No capture: no animation or chat line is known.",
+    "visage": "SERPENTINE_VISAGE",
+    "item": "SERPENTINE_HELM_UNCHARGED_",
+    "level": 52,
+    "xp": 120
   },
   "gemSickles": {
     "$comment": "A gem on a silver sickle (b). XP: Wiki (Emerald/Ruby/Diamond sickle (b)). Prompt, message, the gem's cutting animation and sound: rsprox captures 102 and 1637 (ruby) and 4288 (diamond); the emerald follows them (no capture).",

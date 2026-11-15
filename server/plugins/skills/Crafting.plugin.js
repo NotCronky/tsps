@@ -19,6 +19,7 @@ module.exports = {
     require("./crafting/Gems.Crafting")(api);
     require("./crafting/Snelms.Crafting")(api);
     require("./crafting/Limestone.Crafting")(api);
+    require("./crafting/SerpentineHelm.Crafting")(api);
     require("./crafting/Buttons.Crafting")(api);
     require("./crafting/Jewellery.Crafting")(api);
     require("./crafting/Glassblowing.Crafting")(api);

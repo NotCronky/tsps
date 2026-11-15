@@ -41,7 +41,7 @@ function data() {
       pair: recipe.pair.map(Shared.itemId),
       materials: (recipe.materials ?? []).map(([name, amount]) => [Shared.itemId(name), amount]),
       tools: (recipe.tools ?? []).map(Shared.itemId),
-      animation: new Animation(recipe.seq),
+      animation: recipe.seq == null ? null : new Animation(recipe.seq),
     })),
     animation: new Animation(LEATHER_CRAFTING_ANIMATION_ID),
   };
