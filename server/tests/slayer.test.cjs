@@ -61,6 +61,7 @@ Slayer.register({
     emitted.push([name, payload]);
     for (const fn of handlers.events.get(name) ?? []) fn(payload);
   },
+  sendMultiChatboxPrompt: (player, title, ...pairs) => { player.prompt = { title, pairs }; },
 });
 
 const varbit = (player, name) => player.getPacketSender().getVarbit(CacheDefinitions.getVarbitId(name));
@@ -175,16 +176,83 @@ test("Zombies count the wiki's undead variants by name, but not the Zombies Cham
   assert.equal(Data.taskLevel(zombies), 1);
 });
 
-test("demonic gorillas count for Black Demons as well as Monkeys, but not the stunted one", () => {
+// Chaos Temple zombie pirates (cache names/ids), also listed under Pirates on the OSRS Wiki.
+const WILDERNESS_ZOMBIE_PIRATES = [
+  core.NpcIdentifiers.ZOMBIE_PIRATE_44,
+  core.NpcIdentifiers.ZOMBIE_PIRATE_45,
+  core.NpcIdentifiers.ZOMBIE_PIRATE_46,
+  core.NpcIdentifiers.ZOMBIE_PIRATE_47,
+  core.NpcIdentifiers.ZOMBIE_PIRATE_48,
+];
+
+test("zombie pirates count for Pirates as well as Zombies", () => {
+  const pirates = taskId("Pirates");
+  const zombies = taskId("Zombies");
+  for (const id of WILDERNESS_ZOMBIE_PIRATES) {
+    const name = CacheDefinitions.getNpc(id).name;
+    assert.equal(name, "Zombie pirate");
+    assert.ok(Data.npcCountsFor(pirates, id, name), "variant " + id + " counts for Pirates");
+    assert.ok(Data.npcCountsFor(zombies, id, name), "variant " + id + " still counts for Zombies");
+  }
+  const ordinaryZombie = npcNamed("Zombie");
+  assert.ok(!Data.npcCountsFor(pirates, ordinaryZombie.getId(), "Zombie"), "ordinary zombies are not pirates");
+});
+
+test("Krystilia credits zombie pirate kills on both tasks only in the Wilderness", () => {
+  const wilderness = { getX: () => 3236, getY: () => 3638, getZ: () => 0 };
+  const outside = { getX: () => 3200, getY: () => 3200, getZ: () => 0 };
+  for (const name of ["Pirates", "Zombies"]) {
+    const player = createPlayer();
+    giveTask(player, 7, name, 10);
+    for (const id of WILDERNESS_ZOMBIE_PIRATES) kill(player, npc(id, wilderness));
+    assert.equal(varp(player, "slayer_count"), 5, name + " credits every Wilderness variant");
+    assert.equal(player.xp.length, 5);
+    assert.ok(player.xp.every(([skill, amount]) => skill === Skill.SLAYER && amount > 0));
+    kill(player, npc(WILDERNESS_ZOMBIE_PIRATES[0], outside));
+    assert.equal(varp(player, "slayer_count"), 5, name + " does not credit kills outside the Wilderness");
+    assert.equal(player.xp.length, 5, "off-task kill awards no Slayer XP");
+  }
+});
+
+// Crash Site Cavern demonic gorillas. The Wiki lists them under both Black Demons and Monkeys
+// ("Demonic gorillas count as monkeys and black demons for the progression of Slayer tasks").
+const DEMONIC_GORILLAS = [
+  core.NpcIdentifiers.DEMONIC_GORILLA,
+  core.NpcIdentifiers.DEMONIC_GORILLA_2,
+  core.NpcIdentifiers.DEMONIC_GORILLA_3,
+  core.NpcIdentifiers.DEMONIC_GORILLA_4,
+  core.NpcIdentifiers.DEMONIC_GORILLA_5,
+  core.NpcIdentifiers.DEMONIC_GORILLA_6,
+  core.NpcIdentifiers.DEMONIC_GORILLA_7,
+];
+
+test("demonic gorillas count for Black Demons as well as Monkeys", () => {
   const blackDemons = taskId("Black Demons");
   const monkeys = taskId("Monkeys");
-  const gorilla = npcNamed("Demonic gorilla");
-  assert.ok(Data.npcCountsFor(blackDemons, gorilla.getId(), "Demonic gorilla"), "demonic gorilla counts for Black Demons");
-  assert.ok(Data.npcCountsFor(monkeys, gorilla.getId(), "Demonic gorilla"), "demonic gorilla still counts for Monkeys");
+  for (const id of DEMONIC_GORILLAS) {
+    const name = CacheDefinitions.getNpc(id).name;
+    assert.equal(name, "Demonic gorilla");
+    assert.ok(Data.npcCountsFor(blackDemons, id, name), "variant " + id + " counts for Black Demons");
+    assert.ok(Data.npcCountsFor(monkeys, id, name), "variant " + id + " still counts for Monkeys");
+  }
+});
+
+test("stunted demonic gorillas don't count for Black Demons", () => {
+  const blackDemons = taskId("Black Demons");
   const stunted = [...Array(CacheDefinitions.getCounts().npcs).keys()].find((id) => CacheDefinitions.getNpc(id)?.name === "Stunted demonic gorilla");
   assert.ok(stunted !== undefined);
   assert.ok(!Data.npcCountsFor(blackDemons, stunted, "Stunted demonic gorilla"));
   assert.equal(Data.taskLevel(blackDemons), 1);
+});
+
+test("a Black Demons assignment credits demonic gorilla kills with Slayer XP", () => {
+  const player = createPlayer();
+  giveTask(player, 5, "Black Demons", 10);
+  kill(player, npc(core.NpcIdentifiers.DEMONIC_GORILLA, { getX: () => 3200, getY: () => 3200, getZ: () => 0 }));
+  assert.equal(varp(player, "slayer_count"), 9, "the gorilla kill counts down the task");
+  assert.equal(player.xp.length, 1, "the gorilla kill awards Slayer XP");
+  assert.equal(player.xp[0][0], Skill.SLAYER);
+  assert.ok(player.xp[0][1] > 0);
 });
 
 test("an assignment sets the task varps and respects the Slayer level", () => {
@@ -229,6 +297,24 @@ test("Konar gives an area; her kills only count inside it", () => {
   assert.equal(varp(player, "slayer_count"), 5);
   kill(player, npcNamed("Bloodveld", at(1690, 10070))); // the Catacombs
   assert.equal(varp(player, "slayer_count"), 4);
+});
+
+test("Konar's Taverley Dungeon hellhounds count Cerberus in her lair, the task's listed alternative (Wiki: Konar quo Maten)", () => {
+  const CERBERUS = 5862; // cerberus_attacking, task param 31 (hellhounds)
+  const player = createPlayer();
+  giveTask(player, 8, "Hellhounds", 5);
+  const taverley = [...Data.get().areas.values()].find((area) => area.id === 6);
+  assert.match(taverley.text ?? taverley.name ?? "", /Taverley/);
+  player.getPacketSender().sendConfig(CacheDefinitions.getVarpId("slayer_area"), taverley.id);
+  const at = (x, y) => ({ getX: () => x, getY: () => y, getZ: () => 0 });
+  kill(player, npc(CERBERUS, at(1238, 1250))); // the west arena's spawn (bosses/data/cerberus.json)
+  assert.equal(varp(player, "slayer_count"), 4);
+  kill(player, npc(CERBERUS, at(1366, 1250))); // the east arena
+  assert.equal(varp(player, "slayer_count"), 3);
+  const karuulm = [...Data.get().areas.values()].find((area) => area.id === 3);
+  player.getPacketSender().sendConfig(CacheDefinitions.getVarpId("slayer_area"), karuulm.id);
+  kill(player, npc(CERBERUS, at(1238, 1250)));
+  assert.equal(varp(player, "slayer_count"), 3, "not on a Karuulm hellhound task");
 });
 
 test("every Konar task has spawns inside each of its areas", () => {
@@ -436,7 +522,8 @@ test("monsters with a Slayer level can't be attacked below it", () => {
   const event = { attacker: player, target: npcNamed("Abyssal demon"), allow: null };
   Combat.canAttack(event);
   assert.equal(event.allow, false);
-  assert.deepEqual(player.messages, ["You need a higher Slayer level to know how to wound this monster."]);
+  assert.equal(event.message, "You need a higher Slayer level to know how to wound this monster.");
+  assert.deepEqual(player.messages, [], "the core says it on the player's own attack, not the check (cannons, scanners)");
   const able = { attacker: createPlayer({ slayer: 85 }), target: npcNamed("Abyssal demon"), allow: null };
   Combat.canAttack(able);
   assert.equal(able.allow, null);
@@ -500,10 +587,27 @@ test("rewards: a block confirmed after the task changed blocks nothing", () => {
   assert.ok(player.amountAction, "the confirm is waiting");
   Tasks.clear(player);
   giveTask(player, 3, "Bloodveld", 10);
-  player.amountAction.execute(1);
+  player.amountAction.execute(0); // Yes
   assert.equal(varbit(player, "slayer_points"), 500, "nothing spent");
   assert.equal(varbit(player, "slayer_blocked_vannaka_1"), 0, "the old task isn't blocked");
   assert.equal(Tasks.current(player)?.taskId, taskId("Bloodveld"), "the new task stays");
+});
+
+test("rewards: the block popup's Yes (count 0) blocks a task the master doesn't give; No (count 1) doesn't", () => {
+  const player = createPlayer({ points: 500 });
+  player.setEnteredAmountAction = (action) => { player.amountAction = action; };
+  player.getPacketSender().sendConfig(101, 50);
+  setVarbit(player, "slayer_master_in_focus", 3);
+  giveTask(player, 5, "Drakes", 10); // Vannaka doesn't give Drakes: the Yes/No popup
+  Rewards.block(player);
+  player.amountAction.execute(1); // No
+  assert.equal(varbit(player, "slayer_blocked_vannaka_1"), 0, "No blocks nothing");
+  assert.equal(Tasks.current(player)?.taskId, taskId("Drakes"));
+  Rewards.block(player);
+  player.amountAction.execute(0); // Yes
+  assert.equal(varbit(player, "slayer_blocked_vannaka_1"), taskId("Drakes"), "Yes blocks it");
+  assert.equal(varbit(player, "slayer_points"), 440, "Vannaka's block costs 60");
+  assert.equal(Tasks.current(player), null);
 });
 
 test("rewards: the Buy tab sells enum 840's items for enum 842's prices", () => {
@@ -528,6 +632,101 @@ test("rewards: the buttons answer only while the rewards are open at a master", 
   player.getInterfaceId = () => 426;
   buy({ player, slot, opId: 2 });
   assert.deepEqual(player.inventory, [[4160, 250]], "open: bought");
+});
+
+const STORE = Rewards.SLOT.STORE;
+const UNSTORE = Rewards.SLOT.UNSTORE;
+const storedTask = (player) => ({
+  count: varp(player, "if4"), task: varp(player, "if5"), boss: varp(player, "if6"), master: varbit(player, "slayer_master_stored"),
+});
+
+test("task storage: store, swap and unstore keep each task whole, free", () => {
+  const player = createPlayer({ points: 100 });
+  giveTask(player, 3, "Bloodveld", 44);
+  Rewards.confirmClick({ player, slot: STORE });
+  assert.equal(Tasks.current(player)?.taskId, taskId("Bloodveld"), "nothing stored without the unlock");
+
+  setVarbit(player, "slayer_unlock_storage", 1);
+  player.setAttribute("slayer:task-xp", 120);
+  Rewards.confirmClick({ player, slot: STORE });
+  assert.equal(Tasks.current(player), null, "stored: no current task");
+  assert.deepEqual(storedTask(player), { count: 44, task: taskId("Bloodveld"), boss: 0, master: 3 });
+  assert.equal(varbit(player, "slayer_points"), 100, "storing is free");
+
+  giveTask(player, 5, "Drakes", 20);
+  Rewards.confirmClick({ player, slot: STORE }); // Swap
+  assert.equal(Tasks.current(player)?.taskId, taskId("Bloodveld"));
+  assert.equal(Tasks.current(player)?.count, 44);
+  assert.equal(Tasks.current(player)?.masterId, 3);
+  assert.equal(player.getAttribute("slayer:task-xp"), 120, "the stored task's XP comes back with it");
+  assert.deepEqual(storedTask(player), { count: 20, task: taskId("Drakes"), boss: 0, master: 5 });
+
+  Rewards.confirmClick({ player, slot: UNSTORE });
+  assert.equal(Tasks.current(player)?.taskId, taskId("Bloodveld"), "unstore needs no current task");
+  Tasks.clear(player);
+  Rewards.confirmClick({ player, slot: UNSTORE });
+  assert.equal(Tasks.current(player)?.taskId, taskId("Drakes"));
+  assert.equal(Tasks.current(player)?.count, 20);
+  assert.deepEqual(storedTask(player), { count: 0, task: 0, boss: 0, master: 0 });
+  assert.equal(player.getAttribute("slayer:stored-task"), null);
+  assert.equal(varbit(player, "slayer_points"), 100);
+});
+
+test("task storage: a stored boss task keeps its boss and modifier", () => {
+  const player = createPlayer();
+  setVarbit(player, "slayer_unlock_storage", 1);
+  const [bossId] = [...Data.get().bosses.keys()];
+  giveTask(player, 10, "Bloodveld", 7);
+  player.getPacketSender().sendConfig(CacheDefinitions.getVarpId("slayer_target"), Data.BOSS_TASK_ID);
+  setVarbit(player, "slayer_target_bossid", bossId);
+  setVarbit(player, "slayer_modifier_id", 5);
+  setVarbit(player, "slayer_modifier_value", 30);
+  Rewards.confirmClick({ player, slot: STORE });
+  assert.equal(storedTask(player).boss, bossId);
+  assert.equal(varbit(player, "slayer_target_bossid"), 0);
+  assert.equal(varbit(player, "slayer_modifier_id"), 0);
+  Rewards.confirmClick({ player, slot: UNSTORE });
+  assert.equal(Tasks.current(player)?.bossId, bossId);
+  assert.deepEqual(Tasks.current(player)?.modifier, { id: 5, value: 30, negative: false });
+});
+
+test("the task list: rows are the master's tasks; Block takes a slot, refusals say why", () => {
+  const player = createPlayer({ points: 500 });
+  player.getPacketSender().sendConfig(101, 100); // two block slots
+  setVarbit(player, "slayer_master_in_focus", 7); // Krystilia, blocks cost 100
+  const tasks = master(7).tasks;
+  const slotOf = (name) => tasks.findIndex((entry) => entry.task.displayName === name);
+
+  Rewards.listClick({ player, slot: slotOf("Black Demons") });
+  assert.equal(player.prompt.title, "Select an option");
+  assert.deepEqual(player.prompt.pairs.filter((value) => typeof value === "string"), ["Block Black Demons (100 points)", "Don't Block"]);
+  player.prompt.pairs[3](); // Don't Block
+  assert.equal(varbit(player, "slayer_blocked_krystilia_1"), 0);
+  assert.equal(varbit(player, "slayer_points"), 500);
+
+  Rewards.listClick({ player, slot: slotOf("Black Demons") });
+  player.prompt.pairs[1](); // Block
+  assert.equal(varbit(player, "slayer_blocked_krystilia_1"), taskId("Black Demons"));
+  assert.equal(varbit(player, "slayer_points"), 400);
+  assert.equal(player.messages.at(-1), "<col=ef1020>Black Demons</col> has been blocked.");
+
+  player.prompt = null;
+  Rewards.listClick({ player, slot: slotOf("Black Demons") });
+  assert.equal(player.prompt, null);
+  assert.equal(player.messages.at(-1), "This task is currently blocked.");
+
+  setVarbit(player, "slayer_blocked_krystilia_2", taskId("Ice Giants"));
+  Rewards.listClick({ player, slot: slotOf("Hill Giants") });
+  player.prompt.pairs[1]();
+  assert.equal(player.messages.at(-1), "You do not have any available slots in which to block this task.");
+  assert.equal(varbit(player, "slayer_points"), 400);
+
+  const low = createPlayer({ points: 500, slayer: 1 });
+  setVarbit(low, "slayer_master_in_focus", 7);
+  low.prompt = null;
+  Rewards.listClick({ player: low, slot: slotOf("Bloodveld") }); // needs 50 Slayer
+  assert.equal(low.prompt, null);
+  assert.equal(low.messages.at(-1), "This master cannot currently assign you this task.");
 });
 
 test("slayer:grant-points and slayer:current-task", () => {
@@ -1796,4 +1995,103 @@ test("registered Wilderness assignment and NPC death keep the first-four points 
   assert.equal(varbit(player, "slayer_tasks_completed"), 20);
   assert.ok(skills.getExperience(Skill.SLAYER) > beforeXp);
   assert.equal(varbit(player, "slayer_points"), 0, "the fourth Wilderness completion gives no points despite twenty standard completions");
+});
+
+test("elite diaries raise Nieve's/Steve's points to 15 and Konar's to 20, milestones included (Wiki: Slayer reward point)", (t) => {
+  const Diaries = require("../plugins/achievements/diaries/Data.AchievementDiaries");
+  const { onIsComplete } = require("../plugins/achievements/AchievementDiaries.plugin")._test;
+  const prior = handlers.events.get("diary:is-complete");
+  t.after(() => prior ? handlers.events.set("diary:is-complete", prior) : handlers.events.delete("diary:is-complete"));
+  handlers.events.set("diary:is-complete", [onIsComplete]);
+  useTestEvents();
+  /** Tasks done up to `tier` of each diary in `done` ({ western: "elite" }). */
+  const tasksFor = (done) => Object.fromEntries(Object.entries(done).map(([key, tier]) => {
+    const diary = Diaries.BY_KEY.get(key);
+    return [key, Diaries.TIERS.slice(0, Diaries.TIERS.indexOf(tier) + 1).flatMap((each) => diary.tiers[each].tasks.map((task) => task.key))];
+  }));
+  /** The points for one task from `masterId` that ends a streak of `streak`, with the diaries `done`. */
+  function points(masterId, streak, done = {}) {
+    const player = createPlayer();
+    player.setAttribute("achievement-diaries:tasks", tasksFor(done));
+    setVarbit(player, "slayer_tasks_completed", streak - 1);
+    giveTask(player, masterId, "Bloodveld", 1);
+    Tasks.complete(player, Tasks.current(player));
+    assert.equal(varbit(player, "slayer_tasks_completed"), streak);
+    return varbit(player, "slayer_points");
+  }
+  const NIEVE = 6, KONAR = 8, DURADEL = 5;
+  const milestones = [[5, 1], [10, 5], [50, 15], [100, 25], [250, 35], [1000, 50]];
+  for (const [streak, times] of milestones) {
+    assert.equal(points(NIEVE, streak), 12 * times, `Nieve, no diary, task ${streak}`);
+    assert.equal(points(NIEVE, streak, { western: "elite" }), 15 * times, `Nieve, elite Western, task ${streak}`);
+    assert.equal(points(KONAR, streak), 18 * times, `Konar, no diary, task ${streak}`);
+    assert.equal(points(KONAR, streak, { kourend: "elite" }), 20 * times, `Konar, elite Kourend, task ${streak}`);
+  }
+  // Only the elite tier of the master's own diary counts.
+  assert.equal(points(NIEVE, 5, { western: "hard" }), 12, "hard Western is not enough");
+  assert.equal(points(NIEVE, 5, { kourend: "elite" }), 12, "Kourend does not raise Nieve's");
+  assert.equal(points(KONAR, 5, { kourend: "hard" }), 18, "hard Kourend is not enough");
+  assert.equal(points(KONAR, 5, { western: "elite" }), 18, "Western does not raise Konar's");
+  assert.equal(points(DURADEL, 5, { western: "elite", kourend: "elite" }), 15, "Duradel has no diary bonus");
+  // Steve is Nieve's master id (6), so he pays the same.
+  assert.deepEqual(master(NIEVE).names, ["Nieve", "Steve"]);
+});
+
+/** Answers "combat-achievements:tier" for `player`: the first `claimed` tiers claimed, `met` for their points. */
+function withCombatAchievementTiers(player, claimed, met = true) {
+  const names = ["easy", "medium", "hard", "elite", "master", "grandmaster"];
+  const answer = (request) => {
+    if (request.player !== player) return;
+    const index = names.indexOf(String(request.tier).toLowerCase());
+    request.claimed = index >= 0 && index < claimed;
+    request.currentThresholdMet = met;
+  };
+  handlers.events.set("combat-achievements:tier", [...(handlers.events.get("combat-achievements:tier") ?? []), answer]);
+  return () => handlers.events.set("combat-achievements:tier", handlers.events.get("combat-achievements:tier").filter((fn) => fn !== answer));
+}
+
+test("Combat Achievement tiers raise the boss task cap by 5 a tier (Barrows 36 + 6), Wiki: Boss task", () => {
+  useTestEvents();
+  const player = createPlayer();
+  const [someBoss] = [...Data.get().bosses.keys()].filter((id) => id !== 17);
+  assert.deepEqual(Tasks.bossAmountRange(player, someBoss), { min: 3, max: 35 }, "no tiers: 3-35");
+  assert.deepEqual(Tasks.bossAmountRange(player, 17), { min: 3, max: 36 }, "Barrows: 3-36");
+  assert.deepEqual([...Data.get().bossNames].find(([id]) => id === 17)?.[1].has("Dharok the Wretched"), true, "17 is the Barrows brothers");
+  for (const [tiers, max, barrows] of [[1, 40, 42], [3, 50, 54], [6, 65, 72]]) {
+    const undo = withCombatAchievementTiers(player, tiers);
+    assert.deepEqual(Tasks.bossAmountRange(player, someBoss), { min: 3, max }, `${tiers} tiers`);
+    assert.deepEqual(Tasks.bossAmountRange(player, 17), { min: 3, max: barrows }, `${tiers} tiers, Barrows`);
+    assert.equal(Tasks.rollAmount(player, null, someBoss, () => 0.9999), max, "the roll reaches the raised cap");
+    undo();
+  }
+  const lapsed = withCombatAchievementTiers(player, 6, false);
+  assert.deepEqual(Tasks.bossAmountRange(player, someBoss), { min: 3, max: 35 }, "claimed but under the current threshold: no perk");
+  lapsed();
+});
+
+test("the Elite Combat Achievement tier makes superior Slayer monsters 1 in 150 (from 1 in 200)", () => {
+  useTestEvents();
+  Superiors.init({ core, emitCustomEvent: (name, payload) => { for (const fn of handlers.events.get(name) ?? []) fn(payload); } });
+  const player = createPlayer();
+  const bloodveld = npcNamed("Bloodveld");
+  // Read the rule the Slayer plugin builds, then stop the spawn itself.
+  const chances = [];
+  const watch = (rule) => {
+    if (rule.player !== player) return;
+    chances.push(rule.chance);
+    rule.unlocked = false;
+  };
+  handlers.events.set("slayer:superior-spawn", [...(handlers.events.get("slayer:superior-spawn") ?? []), watch]);
+  const roll = () => Superiors.taskKill({ player, npc: bloodveld }, () => 0);
+  roll();
+  for (const tiers of [3, 4, 6]) {
+    const undo = withCombatAchievementTiers(player, tiers);
+    roll();
+    undo();
+  }
+  const lapsed = withCombatAchievementTiers(player, 4, false);
+  roll();
+  lapsed();
+  handlers.events.set("slayer:superior-spawn", handlers.events.get("slayer:superior-spawn").filter((fn) => fn !== watch));
+  assert.deepEqual(chances, [200, 200, 150, 150, 200], "none, Hard, Elite, Grandmaster, Elite under its threshold");
 });
