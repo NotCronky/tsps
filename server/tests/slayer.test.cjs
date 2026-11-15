@@ -175,6 +175,18 @@ test("Zombies count the wiki's undead variants by name, but not the Zombies Cham
   assert.equal(Data.taskLevel(zombies), 1);
 });
 
+test("demonic gorillas count for Black Demons as well as Monkeys, but not the stunted one", () => {
+  const blackDemons = taskId("Black Demons");
+  const monkeys = taskId("Monkeys");
+  const gorilla = npcNamed("Demonic gorilla");
+  assert.ok(Data.npcCountsFor(blackDemons, gorilla.getId(), "Demonic gorilla"), "demonic gorilla counts for Black Demons");
+  assert.ok(Data.npcCountsFor(monkeys, gorilla.getId(), "Demonic gorilla"), "demonic gorilla still counts for Monkeys");
+  const stunted = [...Array(CacheDefinitions.getCounts().npcs).keys()].find((id) => CacheDefinitions.getNpc(id)?.name === "Stunted demonic gorilla");
+  assert.ok(stunted !== undefined);
+  assert.ok(!Data.npcCountsFor(blackDemons, stunted, "Stunted demonic gorilla"));
+  assert.equal(Data.taskLevel(blackDemons), 1);
+});
+
 test("an assignment sets the task varps and respects the Slayer level", () => {
   const player = createPlayer({ slayer: 1, combat: 126 });
   const result = Tasks.assign(player, master(3), () => 0.5);
