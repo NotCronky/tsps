@@ -136,6 +136,14 @@ function mapClass() {
       return true;
     }
 
+    /**
+     * Floor items stay for the whole run (supplies left in the start room are still there to
+     * cook later); the map clears them when the run ends and it is destroyed.
+     */
+    groundItemDespawnDelay() {
+      return Number.MAX_SAFE_INTEGER;
+    }
+
     process(mobile) {
       if (mobile.isPlayer?.()) this.run?.updateRoom?.();
     }

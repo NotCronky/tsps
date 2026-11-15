@@ -123,6 +123,28 @@ test('rooms are found from their tiles', () => {
   }
 });
 
+test('floor items in the maze last the whole run and go with the map', () => {
+  const { World } = require('../dist/game/World');
+  const { Item } = require('../dist/game/model/Item');
+  const { ItemOnGround, State } = require('../dist/game/entity/impl/grounditem/ItemOnGround');
+  const { ItemOnGroundManager } = require('../dist/game/entity/impl/grounditem/ItemOnGroundManager');
+  const map = GauntletMap.createMap({ random: seeded(9) });
+  let fish;
+  try {
+    // A raw paddlefish dropped in the start room, left for longer than a full prep phase.
+    fish = new ItemOnGround(State.SEEN_BY_PLAYER, 'gauntlet-floor-test', map.startTile(seeded(1)),
+      new Item(23872, 1), true, -1, map);
+    ItemOnGroundManager.register(fish);
+    for (let tick = 0; tick < 6000; tick++) ItemOnGroundManager.process();
+    assert.ok(World.getItems().includes(fish) && !fish.isPendingRemoval(), 'still on the floor after an hour');
+    assert.equal(fish.getTiming().expiresTick, 0, 'the client is told it never expires');
+  } finally {
+    map.destroy();
+  }
+  assert.ok(!World.getItems().includes(fish) || fish.isPendingRemoval(), 'cleared with the map');
+  ItemOnGroundManager.process();
+});
+
 // ------------------------------------------------------------------ runs
 
 const { TaskManager } = require('../dist/game/task/TaskManager');
