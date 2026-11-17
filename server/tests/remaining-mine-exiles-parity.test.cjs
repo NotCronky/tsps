@@ -108,7 +108,7 @@ function setup(pluginPath, questKey, options = {}) {
       spawned.push(npc); return npc;
     },
     removeNpc(npc) { removed.push(npc); },
-    getItemOnGroundManager() { return { registerLocation() {} }; },
+    getItemOnGroundManager() { return { registerLocation() {}, ownedBy: () => [] }; },
     sendMultiChatboxPrompt(player, title, ...pairs) { menus.push({ player, title, pairs }); },
   }, { get(target, key) { return target[key] ?? (() => {}); } });
   require(pluginPath)(api);
@@ -135,6 +135,7 @@ function setup(pluginPath, questKey, options = {}) {
     getAttribute: (key) => attrs.get(key), setAttribute(key, value) { attrs.set(key, value); },
     getPacketSender: () => sender, getInterfaceId: () => modal,
     sendMessage(message) { messages.push(message); },
+    performAnimation() {},
     getInventory: () => ({
       getAmount: (id) => inventory.get(id) ?? 0,
       getValidItems: () => [...inventory].filter(([, amount]) => amount > 0).map(([id, amount]) => new core.Item(id, amount)),
@@ -162,6 +163,7 @@ function setup(pluginPath, questKey, options = {}) {
     getLocation: () => location, moveTo(value) { location = value; },
     getMovementQueue: () => ({ reset() { return this; }, setBlockMovement() { return this; } }), setUntargetable() {},
     getUsername: () => 'tester', getDisplayName: () => 'tester', getAppearance: () => ({ isMale: () => true }), getPositionToFace: () => null,
+    setPositionToFace(tile) { player.facing = tile; },
     setEnteredSyntaxAction(action) { player.syntaxAction = action; },
     getDialogueManager: () => ({ startDialogues(chain) { current = chain; }, getCurrent: () => current, reset() { current = null; }, isActive: () => Boolean(current), advance() {} }),
     isPlayer: () => true, isNpc: () => false, isRegistered: () => true, isPlayerBot: () => false,
@@ -502,9 +504,45 @@ test('Fremennik Exiles captured stages: exile, shield, kegs, invasion, island, p
   h.line(N.BRUNDT_THE_CHIEFTAIN_6, "Dalkar! Get to the boat. It's time for us to go!");
   assert.equal(h.quest.getStage(h.player), 85);
 
+  // rsprox_transcripts/227/01768.txt ticks 3700-3706: fade out on the click, message and teleport two ticks
+  // later, fade back in two after that, the overlay closed two ticks on.
+  const islandSender = h.player.getPacketSender();
+  const islandFades = [], islandCloses = [];
+  const islandMount = islandSender.mountSubInterface;
+  islandSender.mountSubInterface = (target, group, type, options) => {
+    islandFades.push({ group, args: options?.postScripts?.[0]?.args });
+    return islandMount(target, group, type);
+  };
+  islandSender.closeSubInterface = (uid) => { islandCloses.push(uid); return islandSender; };
+  const islandFrom = h.player.getLocation();
   h.object(O.FREMENNIK_BOAT_6);
   assert.equal(h.quest.getStage(h.player), 85);
-  assert.ok(h.cameras.shakes.some(([axis, amplitude, , rate]) => axis === 1 && amplitude === 10 && rate === 25), 'Island of Stone arrival shake');
+  assert.deepEqual(islandFades, [{ group: 174, args: [0, 255, 0, 0, 50] }], 'the boat fades out on the click');
+  assert.equal(h.player.getLocation(), islandFrom, 'still at the dock while the screen fades');
+  const busyVarbit = h.core.CacheDefinitions.getVarbitId('busy');
+  assert.ok(busyVarbit != null, 'the cache names the busy varbit');
+  assert.equal(h.varbits.get(busyVarbit), 1, 'busy while sailing');
+  h.object(O.FREMENNIK_BOAT_6);
+  assert.equal(islandFades.length, 1, 'a second click during the trip does not restart it');
+  h.tick(1);
+  assert.equal(h.player.getLocation(), islandFrom);
+  h.tick(1);
+  assert.deepEqual([h.player.getLocation().getX(), h.player.getLocation().getY()], [2472, 3994],
+    'lands where every recording does, two ticks after the click');
+  assert.deepEqual([h.player.facing?.getX(), h.player.facing?.getY()], [2472, 3995], 'facing north (angle 1024)');
+  assert.equal(h.messages.filter((m) => m === 'You board the boat and travel to the Island of Stone.').length, 1);
+  h.tick(1);
+  assert.equal(islandFades.length, 1);
+  h.tick(1);
+  assert.deepEqual(islandFades[1], { group: 174, args: [0, 0, 0, 255, 50] }, 'fades back in four ticks after the click');
+  assert.equal(h.varbits.get(busyVarbit), 0, 'no longer busy on the fade in');
+  const closesBefore = islandCloses.length;
+  h.tick(2);
+  assert.ok(islandCloses.length > closesBefore, 'the fade overlay closes two ticks after the fade in');
+  islandSender.mountSubInterface = islandMount;
+  delete islandSender.closeSubInterface;
+  // rsprox_transcripts/227/01768.txt tick 3702 (and five other recorded arrivals): no camera shake, so none is left running.
+  assert.deepEqual(h.cameras.shakes, [], 'the Island of Stone arrival sends no camera shake');
   h.setLocation(new h.core.Location(2470, 4010, 0));
   h.hooks.namedNpcs.get('Brundt the Chieftain')['Talk-to']({ player: h.player, npcId: N.BRUNDT_THE_CHIEFTAIN_9 });
   assert.equal(h.quest.getStage(h.player), 90);
@@ -582,6 +620,37 @@ test('Fremennik Exiles captured stages: exile, shield, kegs, invasion, island, p
   h.hooks.logouts[0]({ player: h.player });
 });
 
+// rsprox_transcripts/227/01862.txt tick 9626: Haskell's opnpc3 ("Island of Stone" on haskell_travel 9271) is followed
+// by the boat's fade trip (busy, fade out, then the arrival message and move two ticks later).
+test('Fremennik Exiles: Haskell\'s Island of Stone option sails like the boat, and his Rellekka option returns', () => {
+  const h = setup('../plugins/quests/quests/TheFremennikExiles.Quest', 'the_fremennik_exiles');
+  const N = NPCS(h);
+  const haskell = h.hooks.namedNpcs.get('Haskell');
+  assert.ok(haskell?.['Island of Stone'] && haskell?.Rellekka, 'both cache travel options are handled');
+  const busyVarbit = h.core.CacheDefinitions.getVarbitId('busy');
+  const dock = h.player.getLocation();
+
+  h.quest.setStage(h.player, 80);
+  assert.equal(haskell['Island of Stone']({ player: h.player, npcId: N.HASKELL_2 }), false, 'not before the boat stage');
+  assert.equal(h.varbits.get(busyVarbit), undefined);
+
+  h.quest.setStage(h.player, 85);
+  assert.notEqual(haskell['Island of Stone']({ player: h.player, npcId: N.HASKELL_2 }), false);
+  assert.equal(h.varbits.get(busyVarbit), 1, 'busy on the click, as the boat');
+  assert.equal(h.player.getLocation(), dock, 'still at the dock while the screen fades');
+  haskell['Island of Stone']({ player: h.player, npcId: N.HASKELL_2 });
+  h.tick(2);
+  assert.deepEqual([h.player.getLocation().getX(), h.player.getLocation().getY()], [2472, 3994]);
+  assert.equal(h.messages.filter((m) => m === 'You board the boat and travel to the Island of Stone.').length, 1,
+    'a second click during the trip does not sail twice');
+  h.tick(4);
+  assert.equal(h.varbits.get(busyVarbit), 0);
+
+  assert.notEqual(haskell.Rellekka({ player: h.player, npcId: N.HASKELL_3 }), false);
+  assert.deepEqual([h.player.getLocation().getX(), h.player.getLocation().getY()], [2625, 3692],
+    'back to the Rellekka port, as his "Yes please."');
+});
+
 // rsprox_transcripts/227/01768.txt: a rejected guess sends no chat line; the ninth failure says "You fail to open the
 // doors and the lock resets." and only closes the lock, whose board clears when it is next opened. Wiki: the solution changes.
 test('Fremennik Exiles lock: the ninth failed guess rerolls the puzzle', () => {
@@ -649,6 +718,26 @@ test('Fremennik Exiles lock: empty slots are refused, and the hints are a sorted
   assert.deepEqual(before, [2, 1, 1, 0], 'the same checks before the count, in any slots');
   assert.deepEqual(order.slice(at + 1).map(([id, value]) => [id, value]), [[9482, 2], [9483, 1], [9484, 1], [9485, 0]],
     'then sorted: green, red, red, none');
+});
+
+// rsprox_transcripts/227/01768.txt tick 4135: the solving submit closes the lock, the stage goes 90 -> 95 and the player
+// says "That's the door unlocked." (chat_right), then Brundt "Good work ..."; no chat message.
+test('Fremennik Exiles lock: the solve plays "That\'s the door unlocked." and Brundt\'s reply, with no chat line', () => {
+  const h = setup('../plugins/quests/quests/TheFremennikExiles.Quest', 'the_fremennik_exiles');
+  const O = OBJECTS(h);
+  const lines = [];
+  h.api.onCustomEvent('npc-dialogue:line', (event) => { if (event.player === h.player) lines.push(event.text); });
+  h.quest.setStage(h.player, 90);
+  h.player.setAttribute('quest.the_fremennik_exiles.puzzle-solution', '0,1,2,3');
+  h.player.setAttribute('quest.the_fremennik_exiles.puzzle-attempts', 0);
+  h.player.setAttribute('quest.the_fremennik_exiles.puzzle-guess', '0,1,2,3');
+  h.object(O.CAVE_74);
+  h.interfaceButton((622 << 16) | 33);
+  assert.equal(h.quest.getStage(h.player), 95);
+  assert.ok(!h.subInterfaces.has(622), 'the lock closes');
+  assert.deepEqual(h.messages, [], 'no chat line');
+  assert.equal(lines[0], "That's the door unlocked.");
+  assert.match(lines[1] ?? '', /^Good work .+\. Let's get inside and see what's going on\.$/);
 });
 
 test('Fremennik Exiles legacy save stages migrate once and keep completion rewards', () => {
@@ -778,9 +867,9 @@ test('Fremennik Exiles uses shipped Anvil/Furnace names and defers ordinary smit
   assert.equal(h.inventory.get(I.LUNAR_BAR), 0);
   assert.equal(h.inventory.get(I.V_SIGIL), 1);
   const furnace = h.itemOnObject(I.LUNAR_ORE, 24009);
-  assert.equal(furnace.handled, true, 'canonical Furnace 24009 owns lunar ore');
-  assert.equal(h.inventory.get(I.LUNAR_ORE), 0);
-  assert.equal(h.inventory.get(I.LUNAR_BAR), 1);
+  assert.equal(furnace.handled, false, 'lunar ore defers to Smithing');
+  assert.equal(h.inventory.get(I.LUNAR_ORE), 1);
+  assert.equal(h.inventory.get(I.LUNAR_BAR), 0);
   const ordinary = h.itemOnObject(I.IRON_BAR, 2097);
   assert.equal(ordinary.handled, false, 'ordinary bars defer to Smithing');
   h.quest.setStage(h.player, 35);
@@ -1102,7 +1191,7 @@ test('Waterbirth captured landings, cache gate ids and the lower pathfinder reac
     getSize: () => 1,
     getPrivateArea: () => null,
     isPlayer: () => true,
-    getAsPlayer: () => ({ isPlayerBot: () => false, getUsername: () => 'tester', getDisplayName: () => 'tester' }),
+    getAsPlayer: () => ({ isPlayerBot: () => false, getUsername: () => 'tester', getDisplayName: () => 'tester' , getAttribute: () => undefined }),
     getMovementQueue: queue,
   };
   assert.equal(PathFinder.calculateWalkRoute(player, 1850, 4392), 1, 'the captured landing walks to Bardur');
@@ -1171,7 +1260,7 @@ test('Waterbirth handler opens the real base-map door clipping and restores it',
   };
   const walker = {
     getLocation: () => new Location(2545, 10146, 0), getSize: () => 1, getPrivateArea: () => null,
-    isPlayer: () => true, getAsPlayer: () => ({ isPlayerBot: () => false, getUsername: () => 'tester', getDisplayName: () => 'tester' }),
+    isPlayer: () => true, getAsPlayer: () => ({ isPlayerBot: () => false, getUsername: () => 'tester', getDisplayName: () => 'tester' , getAttribute: () => undefined }),
     getMovementQueue: queue,
   };
   assert.ok(PathFinder.calculateWalkRoute(walker, 2545, 10144) > 0, 'path into the ladder room opens');

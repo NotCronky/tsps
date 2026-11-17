@@ -454,6 +454,44 @@ module.exports = function registerHauntedMineQuest(api) {
     return V_START;
   }
 
+  /** The repeat question in the talk-again menus, answered {{tact|above}} on the Wiki transcript. */
+  const HISTORY_AGAIN_OPTION = "Can you explain the history of these mines again?";
+  /** The first line of the history the Zealot tells in the starting-out conversation. */
+  const HISTORY_FIRST_LINE = "Well, below the very ground you stand upon";
+
+  /** The starting-out history, from its first line to the menu after it, or null if the page lost it. */
+  function historySteps(steps) {
+    for (const step of steps ?? []) {
+      const nested = [step.steps, ...(step.options ?? []).map((option) => option.steps)];
+      for (const list of nested) {
+        if (!Array.isArray(list)) continue;
+        const at = list.findIndex((entry) => entry?.type === "line" && String(entry.text ?? "").startsWith(HISTORY_FIRST_LINE));
+        if (at >= 0) return list.slice(at);
+        const found = historySteps(list);
+        if (found) return found;
+      }
+    }
+    return null;
+  }
+
+  /**
+   * "Can you explain the history of these mines again?" is "(same as above)" on the Wiki: the Zealot tells the
+   * starting-out history again, then its menu. The dump keeps only an unresolvable jump (lZ-7gL), so the chat
+   * ended after the player's line; play the question and the starting-out history instead.
+   */
+  function handleZealotChoice(event) {
+    const { player, npc, npcId, option } = event;
+    if (npcId !== ZEALOT_NPC_ID || option !== HISTORY_AGAIN_OPTION) return;
+    event.end = true;
+    api.emitCustomEvent("npc-dialogue:start", {
+      player, npc, npcId, variant: V_START, handled: false,
+      select: (steps) => {
+        const history = historySteps(steps);
+        return history ? [{ player: HISTORY_AGAIN_OPTION }, ...history] : [];
+      },
+    });
+  }
+
   /** Answers the page's gameplay conditions; other pages get null. */
   function answerCondition({ player, stepId }) {
     if (!MY_CONDITION_IDS.has(stepId)) return null;
@@ -636,7 +674,7 @@ module.exports = function registerHauntedMineQuest(api) {
     if (npcId !== ZEALOT_NPC_ID) return false;
     if (!quest.isStarted(player) || quest.isComplete(player)) return false;
     if (hasBit(player, BIT_VALVE_KEY_USED)) return false;
-    if (held(player, ZEALOTS_KEY_ITEM_ID)) {
+    if (held(player, ZEALOTS_KEY_ITEM_ID) || keyOnGround(player)) {
       player.sendMessage(ZEALOT_ALREADY_PICKED_MESSAGE);
       return;
     }
@@ -645,6 +683,15 @@ module.exports = function registerHauntedMineQuest(api) {
     player.sendMessage(ZEALOT_PICKPOCKET_MESSAGE);
     giveItem(player, ZEALOTS_KEY_ITEM_ID);
     player.getPacketSender().sendVarbit(VARBIT_HEARD_ABOUT_KEY, 1);
+  }
+
+  /**
+   * Ours: a key that dropped to the ground (full inventory) counts as picked until it despawns, so
+   * the steal is not repeated with its animation, sound and message; no source covers this case.
+   */
+  function keyOnGround(player) {
+    return api.getItemOnGroundManager().ownedBy(player.getUsername())
+      .some((groundItem) => groundItem.getItem().getId() === ZEALOTS_KEY_ITEM_ID);
   }
 
   /** Take on the innocent-looking key: first take wakes Treus; later takes claim it. */
@@ -1223,6 +1270,7 @@ module.exports = function registerHauntedMineQuest(api) {
   api.onNpcDialogueVariant(selectVariant);
   api.onNpcDialogueCondition(answerCondition);
   api.onCustomEvent("npc-dialogue:hook", handleStartHook);
+  api.onCustomEvent("npc-dialogue:choice", handleZealotChoice);
   api.onCustomEvent("npc-dialogue:action", handleDialogueAction);
   api.onCustomEvent("door:toggle", handleDoorToggle);
   api.onCustomEvent("ladders:climb", claimHauntedLadder);

@@ -26,6 +26,8 @@
 module.exports = function registerTempleOfIkovQuest(api) {
   const { Item, Skill, ItemIdentifiers, NpcIdentifiers } = api.core;
   const { registerQuest, refreshQuestList, startTranscript } = require("../QuestRuntime");
+  const ObstacleRunner = require("../../skills/agility/ObstacleRunner.Agility");
+  ObstacleRunner.init(api);
 
   const LUCIEN_NPC_IDS = new Set([
     NpcIdentifiers.LUCIEN,
@@ -41,6 +43,7 @@ module.exports = function registerTempleOfIkovQuest(api) {
   const INN_LUCIEN_NPC_ID = NpcIdentifiers.LUCIEN_5;
   const HOUSE_LUCIEN_NPC_ID = NpcIdentifiers.LUCIEN_4;
   const WINELDA_NPC_ID = NpcIdentifiers.WINELDA;
+  const WINELDA_MET_ATTRIBUTE = "temple-of-ikov:met-winelda";
   const GUARDIAN_NPC_IDS = new Set([
     NpcIdentifiers.GUARDIAN_OF_ARMADYL,
     NpcIdentifiers.GUARDIAN_OF_ARMADYL_2,
@@ -99,29 +102,60 @@ module.exports = function registerTempleOfIkovQuest(api) {
   const TRAP_DAMAGE = 20;
   const TRAP_DISARMED_ATTRIBUTE = "temple-of-ikov:trap-disarmed";
   const TRAP_DOOR_UNLOCKED_ATTRIBUTE = "temple-of-ikov:trap-door-unlocked";
+  // rsprox_transcripts/242/912156.txt ticks 1236 and 1239-1247: Search plays lever_switch_up_down with its mesbox.
+  // Pull (handled at 1240) moves the quest on at once, macro_lever_switch_down follows a tick later, and a tick
+  // after that the lever shows as ikov_leverdown (88) with synth sound lever (2400) for 5 ticks.
+  const TRAP_PULL_ANIMATION_DELAY = 1;
+  const TRAP_PULL_EFFECT_DELAY = 2;
+  const TRAP_LEVER_DOWN_TICKS = 5;
+  const LEVER_SOUND = 2400; // lever
   const ICE_CHEST_CLOSED_ID = 103;
   const ICE_CHEST_OPEN_ID = 104;
   const ICE_CHEST_OPEN_TICKS = 300;
   const ICE_ARROWS_FOUND_SOUND = 1628;
+  const CHEST_OPEN_SOUND = 52; // chest_open
+  /** rsprox_transcripts/242/912156.txt ticks 796-797, 828-829: human_openchest and chest_open, the open loc a tick on. */
+  const ICE_CHEST_OPEN_DELAY_TICKS = 1;
   const ICE_CHEST_TILES = [
     [2710, 9850], [2719, 9838], [2729, 9850], [2747, 9848], [2738, 9835], [2745, 9821],
   ];
   /** West side of the lava, in the skeleton corridor, per Winelda's teleport. */
   const WINELDA_LANDING_TILE = { x: 2644, y: 9890, z: 0 };
+  const BRIDGE_WALL_ID = 3550;
+  const BRIDGE_ROWS = new Set([9828, 9829]);
+  // Attributed maintainer requirement 5911243892, not independently decoded parity.
+  const BRIDGE_CROSSING_ROW = 9828;
+  const BRIDGE_ORIGIN_ATTRIBUTE = "temple-of-ikov:bridge-origin";
+  const BRIDGE_WEST_EDGE = 2648, BRIDGE_EAST_EDGE = 2650;
+  const BRIDGE_WEST_BANK = 2647, BRIDGE_EAST_BANK = 2651;
+  // Existing runner ownership key; this quest does not create another lock.
+  const OBSTACLE_ATTRIBUTE = "agility.obstacle";
+  const bridgeApproaches = new WeakMap(), bridgePassages = new WeakMap(), bridgeOrigins = new WeakMap();
+
 
   const START_HOOK = "quest:temple-of-ikov:start";
   /** Winelda's root hand-in (UB9hSI) and her repeat teleport (7xhwuW). */
   const WINELDA_ROOT_TELEPORT_STEP_ID = "UB9hSI";
   const WINELDA_REPEAT_TELEPORT_STEP_ID = "7xhwuW";
+  const WINELDA_INTRO_VARIANT = "inside-the-dungeon-talking-to-winelda";
+  const WINELDA_INTRO_END_LINES = new Set([
+    "Then we shows them some magic!",
+    "Hehe! Ye'll come back! They always come back!",
+  ]);
   /** The Fire Warrior's fire bolt knocks the player back from the door. */
   const FIRE_WARRIOR_KNOCKBACK_STEP_ID = "i4DijU";
   /** The guardian attacks when Lucien's follower takes the staff. */
   const TAKE_STAFF_ACTION_ID = "zJVI_k";
   /** Lucien's two quest-complete endings. */
-  const COMPLETE_ACTION_IDS = new Set(["f8loKo", "rgR_39"]);
-  /** Guardian "attacks the player" stage directions: the player backed Lucien. */
-  const LUCIEN_LOYALTY_STEP_IDS = new Set(["Z00rUz", "GUJaTp", "yPcDYb", "yW7QWI", "KcVBoC"]);
-  const ARMADYL_PENDANT_LINE = "You will need this pendant to attack him.";
+  const LUCIEN_STAFF_COMPLETE_ACTION_ID = "f8loKo";
+  const COMPLETE_ACTION_IDS = new Set([LUCIEN_STAFF_COMPLETE_ACTION_ID, "rgR_39"]);
+  /** Every hostile Guardian action in the imported Temple of Ikov transcript. */
+  const GUARDIAN_ATTACK_STEP_IDS = new Set([
+    "ir-ZYZ", "Z00rUz", "GUJaTp", "yrI1iq", "yPcDYb", "yW7QWI", "KcVBoC", TAKE_STAFF_ACTION_ID,
+  ]);
+  const ARMADYL_PENDANT_LINE = "He must be gaining in power again. If you can defeat him he will be banished from this plane for a while. You will need this pendant to attack him.";
+  const STAFF_TABLE_TILE = { x: 2638, y: 9906, z: 0 };
+  const STAFF_CHALLENGE_VARIANT = "inside-the-dungeon-taking-the-staff-of-armadyl-while-helping-lucien";
 
   const SIDE_ATTRIBUTE = "quest.temple_of_ikov.side";
   const SIDE_NONE = 0;
@@ -137,11 +171,27 @@ module.exports = function registerTempleOfIkovQuest(api) {
   const FIRE_WARRIOR_DEFEATED_ATTRIBUTE = "temple-of-ikov:fire-warrior-defeated";
   // Bounded local-actor acquisition, not a captured encounter delay.
   const FIRE_WARRIOR_LOCAL_WAIT_TICKS = 8;
+  // rsprox_transcripts/242/912156.txt ticks 1779-1786: smokepuff on his tile, then he is added with
+  // human_smokepuff_tele_appear and speaks 2 ticks later; "Amitus! Setitii!" comes with the fire blast,
+  // and the knock-back is a one-tile exactmove (30/56 cycles, facing north) with human_stumble_back at delay 30.
+  const FIRE_WARRIOR_APPEAR_HOLD_TICKS = 1;
+  const FIRE_WARRIOR_BLAST_LINE = "Amitus! Setitii!";
+  const SMOKEPUFF_SOUND = 1930; // smokepuff
+  const FIRE_TELEPORT_SOUND = 1629; // fire_teleport
+  const FIREBLAST_CAST_SOUND = 155; // fireblast_cast_and_fire
+  const FIREBLAST_HIT_SOUND = 156; // fireblast_hit
+  const FIRE_WARRIOR_SOUND_RANGE = 10;
+  const STUMBLE_BACK_DELAY = 30;
   const iceChestsByPlayer = new WeakMap();
   const bracketByPlayer = new WeakMap();
   const trapTasksByPlayer = new WeakMap();
+  const trapLeverDownByPlayer = new WeakMap();
   const LUCIEN_PRIVATE_NPC_IDS = new Set([INN_LUCIEN_NPC_ID, HOUSE_LUCIEN_NPC_ID]);
   const FIRE_WARRIOR_PRIVATE_NPC_IDS = new Set([FIRE_WARRIOR_NPC_ID]);
+  const guardianChallenges = new WeakMap();
+  const defeatedGuardian = new WeakMap();
+  const guardianConversations = new WeakMap();
+  const lucienConversations = new WeakMap();
 
   const held = (player, itemId, amount = 1) =>
     player.getInventory().getAmount(itemId) >= amount;
@@ -152,6 +202,11 @@ module.exports = function registerTempleOfIkovQuest(api) {
     (player.getEquipment().getItems() || []).some(
       (item) => item && item.getId?.() === ARMADYL_PENDANT_ITEM_ID
     );
+  const ownsQuestItem = (player, itemId) =>
+    held(player, itemId) || player.getEquipment().getAmount(itemId) > 0
+      || player.getBanks().some(bank => bank?.getAmount(itemId) > 0);
+  const wearingLucienPendant = player =>
+    player.getEquipment().getItems().some(item => item?.getId?.() === PENDANT_OF_LUCIEN_ITEM_ID);
 
   function sameTile(location, tile) {
     return (
@@ -234,11 +289,18 @@ module.exports = function registerTempleOfIkovQuest(api) {
       return "finishing-up-talking-to-lucien-near-varrock";
     }
     if (npcId === WINELDA_NPC_ID) {
-      if (stage < STAGE_STARTED) return "inside-the-dungeon-talking-to-winelda";
-      if (stage < STAGE_CROSSED_LAVA) return "inside-the-dungeon-talking-to-winelda-again";
-      return "inside-the-dungeon-talking-to-winelda-after-giving-the-limpwurts";
+      // Existing paid saves keep the free repeat. Starting the quest alone is
+      // not a meeting; the documented full-root first-talk shortcut still applies.
+      if (stage >= STAGE_CROSSED_LAVA) return "inside-the-dungeon-talking-to-winelda-after-giving-the-limpwurts";
+      if (player.getAttribute(WINELDA_MET_ATTRIBUTE) === 1
+        || (stage >= STAGE_STARTED && limpwurtCount(player) >= LIMPWURT_REQUIRED))
+        return "inside-the-dungeon-talking-to-winelda-again";
+      return "inside-the-dungeon-talking-to-winelda";
     }
     if (GUARDIAN_NPC_IDS.has(npcId)) {
+      if (wearingLucienPendant(player)) {
+        return "inside-the-dungeon-talking-to-a-guardian-of-armadyl-while-wearing-the-pendant-of-lucien";
+      }
       if (stage >= STAGE_HAS_STAFF) {
         return "inside-the-dungeon-talking-to-a-guardian-of-armadyl-while-carrying-the-staff-of-armadyl";
       }
@@ -341,6 +403,7 @@ module.exports = function registerTempleOfIkovQuest(api) {
   }
 
   function removeLucien(player) {
+    lucienConversations.delete(player);
     const entry = lucienSpawnsByPlayer.get(player);
     if (!entry) return;
     lucienSpawnsByPlayer.delete(player);
@@ -419,26 +482,72 @@ module.exports = function registerTempleOfIkovQuest(api) {
 
   /** Agreeing to help the Guardians hands over the Armadyl pendant (9p_LQ7). */
   function handleDialogueLine(event) {
+    if (event.npcId === WINELDA_NPC_ID && WINELDA_INTRO_END_LINES.has(event.text)
+      && event.pages?.some(page => page.page === PAGE && page.variants?.includes(WINELDA_INTRO_VARIANT))) {
+      // Lines are compiled ahead of time. Mark only when this final line is
+      // actually reached, so interrupting or double-clicking cannot skip the introduction.
+      event.before = () => event.player.setAttribute(WINELDA_MET_ATTRIBUTE, 1);
+      return;
+    }
     if (event.npcId === FIRE_WARRIOR_NPC_ID && event.step?.presentation === "overhead"
       && event.pages?.some(page => page.page === PAGE
         && page.variants?.includes("inside-the-dungeon-opening-door-in-the-fire-warrior-room"))) {
       const scene = fireWarriorScenes.get(event.player);
       event.actors = scene && scene.npc === event.npc && currentFireWarriorScene(event.player, scene)
         ? [scene.npc] : [];
+      const blast = event.text === FIRE_WARRIOR_BLAST_LINE;
       event.before = () => {
         if (scene && !currentFireWarriorScene(event.player, scene)) finishFireWarriorScene(event.player, scene);
+        else if (scene && blast) playFireWarriorBlast(event.player, scene.npc);
       };
       return;
     }
     if (!GUARDIAN_NPC_IDS.has(event.npcId)) return;
-    if (String(event.text ?? "").includes(ARMADYL_PENDANT_LINE)) {
+    if (event.text === ARMADYL_PENDANT_LINE && event.pages?.some(page => page.page === PAGE
+      && page.variants?.includes("inside-the-dungeon-talking-to-a-guardian-of-armadyl-while-not-wearing-the-pendant-of-lucien"))) {
       const { player } = event;
-      if (quest.getStage(player) < STAGE_STARTED) return;
-      player.setAttribute(SIDE_ATTRIBUTE, SIDE_GUARDIANS);
-      if (!held(player, ARMADYL_PENDANT_ITEM_ID)) {
-        player.getInventory().adds(ARMADYL_PENDANT_ITEM_ID, 1);
-        player.sendMessage("The guardian hands you an Armadyl pendant.");
-      }
+      const conversation = guardianConversations.get(player);
+      const manager = player.getDialogueManager();
+      const finishHandover = () => {
+        if (!conversation || manager.getOwner() !== conversation.owner) return;
+        player.getPacketSender().closeChatboxFor(conversation.owner);
+        if (manager.getOwner() === conversation.owner) manager.reset();
+        if (guardianConversations.get(player) === conversation) guardianConversations.delete(player);
+      };
+      event.before = () => {
+        const npc = conversation?.npc;
+        const here = player.getLocation(), there = npc?.getLocation();
+        if (!conversation || guardianConversations.get(player) !== conversation
+          || manager.getOwner() !== conversation.owner || !(manager.getCurrent() instanceof api.core.ActionDialogue)
+          || event.npc !== npc || event.npcId !== conversation.npcId || !player.isRegistered() || player.getHitpoints() <= 0
+          || !npc?.isRegistered() || npc.getHitpoints() <= 0 || npc.getId() !== conversation.npcId
+          || npc.getIndex() !== conversation.npcIndex
+          || api.core.World.getNpcs().get(conversation.npcIndex) !== npc
+          || (npc.getOwner() != null && npc.getOwner() !== player)
+          || npc.getPrivateArea() !== conversation.privateArea || player.getPrivateArea() !== conversation.privateArea
+          || here.getZ() !== conversation.plane || there.getZ() !== conversation.plane
+          || Math.max(Math.abs(here.getX() - there.getX()), Math.abs(here.getY() - there.getY())) > 1
+          || npc.getInteractingMobile() !== player || wearingLucienPendant(player)
+          || conversation.stage < STAGE_STARTED || quest.getStage(player) !== conversation.stage || quest.isComplete(player)) {
+          finishHandover(); return;
+        }
+        if (!ownsQuestItem(player, ARMADYL_PENDANT_ITEM_ID)) {
+          const inventory = player.getInventory();
+          if (inventory.getAddableAmount(new Item(ARMADYL_PENDANT_ITEM_ID, 1)) < 1) {
+            inventory.full();
+            // End this handover before its line/tail; a subsequent Talk-to can retry.
+            finishHandover();
+            return;
+          }
+          const before = inventory.getAmount(ARMADYL_PENDANT_ITEM_ID);
+          inventory.adds(ARMADYL_PENDANT_ITEM_ID, 1);
+          if (inventory.getAmount(ARMADYL_PENDANT_ITEM_ID) !== before + 1) {
+            finishHandover(); return;
+          }
+          player.sendMessage("The guardian hands you an Armadyl pendant.");
+        }
+        player.setAttribute(SIDE_ATTRIBUTE, SIDE_GUARDIANS);
+      };
     }
   }
 
@@ -477,7 +586,10 @@ module.exports = function registerTempleOfIkovQuest(api) {
       const destination = here.transform(0, -1);
       if (!api.core.RegionManager.canMovestart(here, destination, player.getSize(), player.getSize(), null)) return;
       scene.task?.stop(); // the exact retreat now owns terminal scene cleanup
-      const force = new api.core.ForceMovement(here.clone(), new api.core.Location(0, -1, 0), 0, 30, 2, -1);
+      const stumble = api.core.CacheDefinitions.getSeqId("human_stumble_back") ?? -1;
+      // Direction 0 is the recorded angle 1024: he stumbles back south still facing the door.
+      const force = new api.core.ForceMovement(here.clone(), new api.core.Location(0, -1, 0), 30, 56, 0, stumble);
+      if (stumble >= 0) player.performAnimation(new api.core.Animation(stumble, STUMBLE_BACK_DELAY));
       // A bounded authored retreat, using the existing force task with exact scene guards.
       const task = new (class extends api.core.ForceMovementTask {
         execute() {
@@ -494,34 +606,155 @@ module.exports = function registerTempleOfIkovQuest(api) {
       api.getTaskManager().submit(task);
       return;
     }
-    if (GUARDIAN_NPC_IDS.has(npcId) && LUCIEN_LOYALTY_STEP_IDS.has(stepId)) {
-      if (quest.getStage(player) >= STAGE_STARTED) {
-        player.setAttribute(SIDE_ATTRIBUTE, SIDE_LUCIEN);
-      }
-      return;
-    }
-    if (GUARDIAN_NPC_IDS.has(npcId) && stepId === TAKE_STAFF_ACTION_ID) {
-      if (quest.getStage(player) < STAGE_HAS_STAFF) {
-        // Past this stage no one hands out another, so with no room it stays and talking again retries.
-        // Our wording. The floor won't do: an item there despawns, leaving the quest stuck.
-        if (player.getInventory().getAddableAmount(new Item(STAFF_OF_ARMADYL_ITEM_ID, 1)) < 1) {
-          player.sendMessage("You don't have enough inventory space.");
-          return;
-        }
-        player.getInventory().adds(STAFF_OF_ARMADYL_ITEM_ID, 1);
-        player.sendMessage("You take the Staff of Armadyl.");
-        quest.setStage(player, STAGE_HAS_STAFF);
+    if (GUARDIAN_NPC_IDS.has(npcId) && GUARDIAN_ATTACK_STEP_IDS.has(stepId)) {
+      const npc = event.npc;
+      if (quest.getStage(player) < STAGE_STARTED || !player.isRegistered() || !npc?.isRegistered()
+        || api.core.World.getNpcs().get(npc.getIndex()) !== npc || npc.getId() !== npcId
+        || (npc.getOwner() != null && npc.getOwner() !== player)
+        || npc.getPrivateArea() !== player.getPrivateArea()
+        || npc.getLocation().getZ() !== player.getLocation().getZ()) return;
+      event.handled = true;
+      event.end = true;
+      player.getPacketSender().sendInterfaceRemoval();
+      // A conversation cannot steal another player's existing fight. Hostility
+      // alone is not a permanent branch choice and never hands out the staff.
+      const combat = npc.getCombat();
+      if (combat.getTarget() == null || combat.getTarget() === player) {
+        combat.attack(player);
+        // The native engine may refuse an NPC that cannot fight back. Do not
+        // seed combat stats or turn a failed attack into an earned permission.
+        if (combat.getTarget() === player) guardianChallenges.set(player, { npc,
+          privateArea: player.getPrivateArea(), plane: player.getLocation().getZ(), teleportSerial: player.getTeleportSerial() });
       }
       return;
     }
     if (LUCIEN_NPC_IDS.has(npcId) && COMPLETE_ACTION_IDS.has(stepId)) {
-      if (!quest.isComplete(player)) {
-        if (held(player, STAFF_OF_ARMADYL_ITEM_ID)) {
-          player.getInventory().deleteNumber(STAFF_OF_ARMADYL_ITEM_ID, 1);
+      if (stepId === LUCIEN_STAFF_COMPLETE_ACTION_ID) {
+        // Preserve the existing atomic hand-in/completion boundary. The earlier
+        // prose message is not a second transfer or a durable delivery receipt.
+        const conversation = lucienConversations.get(player), npc = event.npc;
+        const manager = player.getDialogueManager(), here = player.getLocation(), there = npc?.getLocation();
+        event.handled = true;
+        if (!conversation || conversation.npc !== npc || conversation.owner !== manager.getOwner()
+          || !(manager.getCurrent() instanceof api.core.ActionDialogue)
+          || !event.pages?.some(page => page.page === PAGE
+            && page.variants?.includes("finishing-up-talking-to-lucien-near-varrock"))
+          || !player.isRegistered() || player.getHitpoints() <= 0 || !npc?.isRegistered() || npc.getHitpoints() <= 0
+          || npcId !== HOUSE_LUCIEN_NPC_ID || npc.getId() !== npcId || npc.getIndex() !== conversation.npcIndex
+          || api.core.World.getNpcs().get(conversation.npcIndex) !== npc
+          || lucienSpawnsByPlayer.get(player)?.house !== npc || npc.getOwner() !== player || !npc.isOwnerOnly()
+          || player.getPrivateArea() !== conversation.privateArea || npc.getPrivateArea() !== conversation.privateArea
+          || here.getZ() !== conversation.plane || there.getZ() !== conversation.plane
+          || Math.max(Math.abs(here.getX() - there.getX()), Math.abs(here.getY() - there.getY())) > 1
+          || quest.getStage(player) !== conversation.stage || conversation.stage < STAGE_HAS_STAFF
+          || quest.isComplete(player) || !held(player, STAFF_OF_ARMADYL_ITEM_ID)) {
+          event.end = true;
+          if (lucienConversations.get(player) === conversation) lucienConversations.delete(player);
+          return;
         }
+        const inventory = player.getInventory(), before = inventory.getAmount(STAFF_OF_ARMADYL_ITEM_ID);
+        inventory.deleteNumber(STAFF_OF_ARMADYL_ITEM_ID, 1);
+        if (inventory.getAmount(STAFF_OF_ARMADYL_ITEM_ID) !== before - 1) { event.end = true; return; }
+        quest.complete(player);
+        return;
+      }
+      // The existing Armadyl death-transcript ending retains its current behavior.
+      if (!quest.isComplete(player)) {
+        if (held(player, STAFF_OF_ARMADYL_ITEM_ID)) player.getInventory().deleteNumber(STAFF_OF_ARMADYL_ITEM_ID, 1);
         quest.complete(player);
       }
     }
+  }
+
+  function isWorldStaff(groundItem) {
+    const at = groundItem?.getPosition?.();
+    return groundItem?.getItem?.()?.getId() === STAFF_OF_ARMADYL_ITEM_ID
+      && groundItem.isStaticSpawn() && at?.getX() === STAFF_TABLE_TILE.x
+      && at.getY() === STAFF_TABLE_TILE.y && at.getZ() === STAFF_TABLE_TILE.z;
+  }
+
+  function hasDefeatedGuardian(player) {
+    const permit = defeatedGuardian.get(player);
+    if (!permit) return false;
+    if (player.isRegistered() && player.getHitpoints() > 0 && player.getPrivateArea() === permit.privateArea
+      && player.getLocation().getZ() === permit.plane && player.getTeleportSerial() === permit.teleportSerial) return true;
+    defeatedGuardian.delete(player);
+    return false;
+  }
+
+  function refuseStaff(player, groundItem, source) {
+    let reason;
+    if (source === "telegrab") reason = "The staff cannot be telekinetically grabbed."; // Our refusal wording; Wiki rule.
+    else if (quest.isComplete(player)) reason = "You have completed the quest of the Temple of Ikov.";
+    else if (ownsQuestItem(player, STAFF_OF_ARMADYL_ITEM_ID)) reason = "I already have the staff.";
+    else if (isWorldStaff(groundItem) && sideOf(player) === SIDE_GUARDIANS) {
+      reason = "You decide not to steal the staff as you have agreed to help the Guardians.";
+    } else if (isWorldStaff(groundItem) && quest.getStage(player) < STAGE_STARTED) {
+      reason = "You need to start Temple of Ikov before taking this staff."; // Our progression refusal.
+    }
+    if (reason) player.sendMessage(reason);
+    return Boolean(reason);
+  }
+
+  function handleStaffPickup(event) {
+    if (!isWorldStaff(event.groundItem)) return;
+    const { player, groundItem } = event;
+    if (refuseStaff(player, groundItem, "pickup")) { event.handled = true; return; }
+    if (hasDefeatedGuardian(player)) return; // Continue through the ordinary physical transfer.
+    event.handled = true;
+    if (player.getInventory().getAddableAmount(groundItem.getItem()) < 1) {
+      player.getInventory().full(); return;
+    }
+    const table = groundItem.getPosition();
+    const guardians = player.getLocalNpcs().filter(npc => npc?.isRegistered()
+      && npc.getId() === api.core.NpcIdentifiers.GUARDIAN_OF_ARMADYL_2
+      && api.core.World.getNpcs().get(npc.getIndex()) === npc
+      && (npc.getOwner() == null || npc.getOwner() === player)
+      && npc.getPrivateArea() === player.getPrivateArea() && npc.getLocation().getZ() === table.getZ()
+      && (npc.getCombat().getTarget() == null || npc.getCombat().getTarget() === player));
+    const cost = npc => (npc.getLocation().getX() - table.getX()) ** 2 + (npc.getLocation().getY() - table.getY()) ** 2;
+    guardians.sort((a, b) => cost(a) - cost(b));
+    const guardian = guardians[0];
+    if (!guardian) { player.sendMessage("The staff is guarded."); return; } // Our failure-closed feedback.
+    startTranscript(api, player, guardian.getId(), PAGE, STAFF_CHALLENGE_VARIANT, undefined, guardian);
+  }
+
+  function handleStaffTransfer(event) {
+    if (event.itemId !== STAFF_OF_ARMADYL_ITEM_ID) return;
+    if (refuseStaff(event.player, event.groundItem, event.source)
+      || (isWorldStaff(event.groundItem) && !hasDefeatedGuardian(event.player))) event.allow = false;
+  }
+
+  function handleStaffTelegrab(event) {
+    if (event.groundItem?.getItem?.()?.getId() !== STAFF_OF_ARMADYL_ITEM_ID) return;
+    refuseStaff(event.player, event.groundItem, "telegrab");
+    event.allow = false;
+  }
+
+  function handleStaffTaken(event) {
+    if (event.source !== "pickup" || event.itemId !== STAFF_OF_ARMADYL_ITEM_ID
+      || event.amount !== 1 || !isWorldStaff(event.groundItem) || !hasDefeatedGuardian(event.player)) return;
+    const { player } = event;
+    if (!held(player, STAFF_OF_ARMADYL_ITEM_ID) || quest.isComplete(player)
+      || sideOf(player) === SIDE_GUARDIANS || quest.getStage(player) < STAGE_STARTED) return;
+    defeatedGuardian.delete(player);
+    player.setAttribute(SIDE_ATTRIBUTE, SIDE_LUCIEN);
+    quest.setStage(player, STAGE_HAS_STAFF);
+  }
+
+  function handleGuardianDeath({ killer, npc, npcId }) {
+    const challenge = killer && guardianChallenges.get(killer);
+    if (!killer || !npc || !GUARDIAN_NPC_IDS.has(npcId) || challenge?.npc !== npc
+      || !killer.isRegistered() || !npc.isRegistered()
+      || api.core.World.getNpcs().get(npc.getIndex()) !== npc
+      || (npc.getOwner() != null && npc.getOwner() !== killer)
+      || npc.getPrivateArea() !== killer.getPrivateArea()
+      || npc.getLocation().getZ() !== killer.getLocation().getZ()
+      || killer.getPrivateArea() !== challenge.privateArea || killer.getLocation().getZ() !== challenge.plane
+      || killer.getTeleportSerial() !== challenge.teleportSerial
+      || quest.getStage(killer) < STAGE_STARTED || quest.isComplete(killer)) return;
+    guardianChallenges.delete(killer);
+    defeatedGuardian.set(killer, challenge);
   }
 
   /** A natural pre-Winelda kill is independent of her existing lava stage. */
@@ -605,6 +838,32 @@ module.exports = function registerTempleOfIkovQuest(api) {
   function handleNpcInteraction(event) {
     const { player, npcId } = event;
     const action = npcAction(event);
+    if (npcId === WINELDA_NPC_ID) {
+      if (action !== "talk-to" || !player.isRegistered() || !event.npc?.isRegistered()
+        || api.core.World.getNpcs().get(event.npc.getIndex()) !== event.npc) return;
+      const variant = selectVariant({ npcId, player });
+      if (startTranscript(api, player, npcId, PAGE, variant, undefined, event.npc)) {
+        event.handled = true;
+      }
+      return;
+    }
+    if (GUARDIAN_NPC_IDS.has(npcId)) {
+      const npc = event.npc;
+      if (action !== "talk-to" || !player.isRegistered() || !npc?.isRegistered()
+        || api.core.World.getNpcs().get(npc.getIndex()) !== npc || npc.getId() !== npcId
+        || (npc.getOwner() != null && npc.getOwner() !== player)
+        || npc.getPrivateArea() !== player.getPrivateArea()
+        || npc.getLocation().getZ() !== player.getLocation().getZ()) return;
+      guardianConversations.delete(player);
+      const variant = selectVariant({ player, npcId });
+      if (startTranscript(api, player, npcId, PAGE, variant, undefined, npc, { scoped: true })) {
+        const owner = player.getDialogueManager().getOwner();
+        if (owner) guardianConversations.set(player, { owner, npc, npcId, npcIndex: npc.getIndex(),
+          privateArea: player.getPrivateArea(), plane: player.getLocation().getZ(), stage: quest.getStage(player) });
+        event.handled = true;
+      }
+      return;
+    }
     if (npcId === INN_LUCIEN_NPC_ID) {
       if (action !== "talk-to") return;
       event.handled = true;
@@ -617,8 +876,18 @@ module.exports = function registerTempleOfIkovQuest(api) {
       return;
     }
     if (npcId === HOUSE_LUCIEN_NPC_ID && action === "talk-to") {
+      const npc = event.npc;
+      if (!player.isRegistered() || !npc?.isRegistered()
+        || api.core.World.getNpcs().get(npc.getIndex()) !== npc
+        || lucienSpawnsByPlayer.get(player)?.house !== npc || npc.getOwner() !== player || !npc.isOwnerOnly()
+        || npc.getPrivateArea() !== player.getPrivateArea() || npc.getLocation().getZ() !== player.getLocation().getZ()) return;
       event.handled = true;
-      startTranscript(api, player, npcId, PAGE, "finishing-up-talking-to-lucien-near-varrock");
+      lucienConversations.delete(player);
+      if (startTranscript(api, player, npcId, PAGE, "finishing-up-talking-to-lucien-near-varrock", undefined, npc, { scoped: true })) {
+        const owner = player.getDialogueManager().getOwner();
+        if (owner) lucienConversations.set(player, { owner, npc, npcIndex:npc.getIndex(),
+          privateArea:player.getPrivateArea(), plane:player.getLocation().getZ(), stage:quest.getStage(player) });
+      }
     }
   }
 
@@ -643,6 +912,21 @@ module.exports = function registerTempleOfIkovQuest(api) {
     iceChestsByPlayer.delete(player);
   }
 
+  /** The open loc as the chest's animation ends; a logout or leaving the dungeon meanwhile drops it. */
+  function openIceChest(player, state, index, object) {
+    state.opening.delete(index);
+    if (iceChestsByPlayer.get(player) !== state || state.open.has(index) || player.isRegistered?.() === false) return;
+    if (!api.core.ObjectManager.hideMapObjectFor(player, ICE_CHEST_CLOSED_ID, object.getLocation())) return;
+    const opened = new api.core.GameObject(ICE_CHEST_OPEN_ID, object.getLocation().clone(), object.getType(),
+      object.getFace(), object.getPrivateArea()).setOwner(player);
+    api.core.ObjectManager.register(opened, true);
+    state.open.set(index, opened);
+    const timer = new api.core.CountdownTask(opened, ICE_CHEST_OPEN_TICKS,
+      () => closeIceChest(player, state, index, opened));
+    state.timers.set(index, timer);
+    api.core.TaskManager.submit(timer);
+  }
+
   function handleIceChest(event, index) {
     const { player, object, objectId } = event;
     // These are shared cache chests; private-instance loc lookup has different ownership semantics.
@@ -650,21 +934,19 @@ module.exports = function registerTempleOfIkovQuest(api) {
     event.handled = true;
     let state = iceChestsByPlayer.get(player);
     if (!state) {
-      state = { selected: api.core.Misc.random(0, ICE_CHEST_TILES.length - 1), amount: null, open: new Map(), timers: new Map() };
+      state = { selected: api.core.Misc.random(0, ICE_CHEST_TILES.length - 1), amount: null, open: new Map(), opening: new Set(), timers: new Map() };
       iceChestsByPlayer.set(player, state);
     }
     const action = String(event.option ?? event.definition?.getInteractions?.()[event.clickType - 1]).toLowerCase();
     if (objectId === ICE_CHEST_CLOSED_ID && action === "open") {
-      if (state.open.has(index)) return;
-      if (!api.core.ObjectManager.hideMapObjectFor(player, ICE_CHEST_CLOSED_ID, object.getLocation())) return;
-      const opened = new api.core.GameObject(ICE_CHEST_OPEN_ID, object.getLocation().clone(), object.getType(),
-        object.getFace(), object.getPrivateArea()).setOwner(player);
-      api.core.ObjectManager.register(opened, true);
-      state.open.set(index, opened);
-      const timer = new api.core.CountdownTask(opened, ICE_CHEST_OPEN_TICKS,
-        () => closeIceChest(player, state, index, opened));
-      state.timers.set(index, timer);
-      api.core.TaskManager.submit(timer);
+      if (state.open.has(index) || state.opening.has(index)) return;
+      state.opening.add(index);
+      const sequence = api.core.CacheDefinitions.getSeqId("human_openchest");
+      if (sequence != null) player.performAnimation(new api.core.Animation(sequence));
+      player.getPacketSender().sendSound(CHEST_OPEN_SOUND, 10, 0);
+      // Keyed to this stock, not the player: a cancelled player task would leave the chest stuck "opening".
+      api.core.TaskManager.submit(new api.core.CountdownTask(state, ICE_CHEST_OPEN_DELAY_TICKS,
+        () => openIceChest(player, state, index, object)));
       return;
     }
     if (objectId !== ICE_CHEST_OPEN_ID || state.open.get(index) !== object) return;
@@ -717,6 +999,36 @@ module.exports = function registerTempleOfIkovQuest(api) {
     scene.cancel?.(); // exact scoped owner, preserving a replacement dialogue
   }
 
+  /** The Warrior is the owner's private NPC, so his scene effects go to the owner alone. */
+  function fireWarriorTileEffect(player, spotanim, tile, sound, { height = 0, delay = 0, soundDelay = 0, soundTile = tile } = {}) {
+    const sender = player.getPacketSender(), id = api.core.CacheDefinitions.getSpotanimId(spotanim);
+    if (id != null) sender.sendGraphic(api.core.Graphic.atHeight(id, height, delay), tile);
+    sender.sendAreaSound(sound, soundTile.getX(), soundTile.getY(), soundTile.getZ(), 1, soundDelay, FIRE_WARRIOR_SOUND_RANGE);
+  }
+
+  function playFireWarriorArrival(player, npc) {
+    fireWarriorTileEffect(player, "smokepuff", npc.getLocation(), SMOKEPUFF_SOUND);
+    const appear = api.core.CacheDefinitions.getSeqId("human_smokepuff_tele_appear");
+    if (appear != null) npc.performAnimation(new api.core.Animation(appear));
+    const at = npc.getLocation();
+    player.getPacketSender().sendAreaSound(FIRE_TELEPORT_SOUND, at.getX(), at.getY(), at.getZ(), 1, 0, FIRE_WARRIOR_SOUND_RANGE);
+  }
+
+  function playFireWarriorBlast(player, npc) {
+    const cast = api.core.CacheDefinitions.getSeqId("human_caststrike");
+    const casting = api.core.CacheDefinitions.getSpotanimId("fireblast_casting");
+    const travel = api.core.CacheDefinitions.getSpotanimId("fireblast_travel");
+    if (cast != null) npc.performAnimation(new api.core.Animation(cast));
+    if (casting != null) npc.performGraphic(api.core.Graphic.atHeight(casting, 92));
+    npc.setPositionToFace(player.getLocation());
+    const from = npc.getLocation(), door = constructLocation(FIRE_WARRIOR_DOOR_TILE), sender = player.getPacketSender();
+    sender.sendAreaSound(FIREBLAST_CAST_SOUND, from.getX(), from.getY(), from.getZ(), 1, 0, FIRE_WARRIOR_SOUND_RANGE);
+    // Recorded flight 76-130 cycles at height 124 (the packet field is a quarter of it), slope 32, start 128.
+    if (travel != null) sender.sendProjectile(from, door, 0, 130, travel, 31, 31, null, 76, 32, 128);
+    fireWarriorTileEffect(player, "fireblast_impact", door, FIREBLAST_HIT_SOUND,
+      { height: 124, delay: 130, soundDelay: 124, soundTile: player.getLocation() });
+  }
+
   function beginFireWarriorEncounter(event) {
     const { player, object } = event;
     if (!object || object.getId() !== FIRE_WARRIOR_DOOR_ID || object.getType() !== FIRE_WARRIOR_DOOR_TYPE
@@ -730,11 +1042,15 @@ module.exports = function registerTempleOfIkovQuest(api) {
     if (quest.getStage(player) < STAGE_STARTED || defeatedFireWarrior(player)
       || !player.isRegistered() || player.getHitpoints() <= 0 || player.getPrivateArea()) return;
     if (fireWarriorScenes.has(player)) return;
+    const fresh = !fireWarriorByPlayer.has(player);
     const npc = ensureFireWarrior(player);
     if (!npc || announcedFireWarriors.has(npc)) return;
     const scene = { npc, start: player.getLocation().clone(), area: player.getArea(),
-      teleportSerial: player.getTeleportSerial(), task: null, played: false };
+      teleportSerial: player.getTeleportSerial(), task: null, played: false,
+      hold: fresh ? FIRE_WARRIOR_APPEAR_HOLD_TICKS : 0 };
     fireWarriorScenes.set(player, scene);
+    // Only a fresh spawn arrives in smoke; one still standing from an interrupted scene just speaks again.
+    if (fresh) playFireWarriorArrival(player, npc);
     let left = FIRE_WARRIOR_LOCAL_WAIT_TICKS;
     const task = new (class extends api.core.Task {
       constructor() { super(1, player); }
@@ -749,6 +1065,7 @@ module.exports = function registerTempleOfIkovQuest(api) {
           if (--left <= 0) finishFireWarriorScene(player, scene);
           return;
         }
+        if (scene.hold > 0) { scene.hold--; return; } // his first line 2 ticks after he appears
         const request = { player, npc, npcId: FIRE_WARRIOR_NPC_ID,
           variant: { page: PAGE, variant: "inside-the-dungeon-opening-door-in-the-fire-warrior-room" },
           exact: true, handled: false };
@@ -841,6 +1158,8 @@ module.exports = function registerTempleOfIkovQuest(api) {
     const { player, object } = event;
     if (!player.isRegistered() || trapTasksByPlayer.has(player)
       || api.core.MapObjects.getPrivateArea(player, TRAPPED_LEVER_ID, object.getLocation()) !== object) return;
+    const search = api.core.CacheDefinitions.getSeqId("lever_switch_up_down");
+    if (search != null) player.performAnimation(new api.core.Animation(search));
     if (thievingLevel(player) < TRAP_DISARM_LEVEL) {
       api.core.StatementDialogue.send(player, "You find nothing.");
       return;
@@ -851,6 +1170,28 @@ module.exports = function registerTempleOfIkovQuest(api) {
 
   function stopTrapTask(player) {
     trapTasksByPlayer.get(player)?.stop();
+    raiseTrapLever(player);
+  }
+
+  /** The pulled lever is the owner's view only; the shared lever never changes. */
+  function lowerTrapLever(player, base) {
+    raiseTrapLever(player);
+    if (!api.core.ObjectManager.hideMapObjectFor(player, TRAPPED_LEVER_ID, base.getLocation())) return;
+    const object = new api.core.GameObject(LOWERED_LEVER_ID, base.getLocation().clone(), base.getType(), base.getFace(), null)
+      .setOwner(player);
+    api.core.ObjectManager.register(object, true);
+    const timer = new api.core.CountdownTask(object, TRAP_LEVER_DOWN_TICKS, () => raiseTrapLever(player, object));
+    trapLeverDownByPlayer.set(player, { base, object, timer });
+    api.core.TaskManager.submit(timer);
+  }
+
+  function raiseTrapLever(player, only = null) {
+    const state = trapLeverDownByPlayer.get(player);
+    if (!state || (only && state.object !== only)) return;
+    trapLeverDownByPlayer.delete(player);
+    state.timer.stop();
+    api.core.ObjectManager.deregister(state.object, true);
+    api.core.ObjectManager.showMapObjectFor(player, TRAPPED_LEVER_ID, state.base.getLocation());
   }
 
   function pullTrappedLever(event) {
@@ -872,26 +1213,35 @@ module.exports = function registerTempleOfIkovQuest(api) {
       if (!landing) return;
     }
     const sequence = api.core.CacheDefinitions.getSeqId("macro_lever_switch_down");
-    if (sequence != null) player.performAnimation(new api.core.Animation(sequence));
+    // The recorded quest stage moves on the tick the safe Pull is handled.
+    if (disarmed) player.setAttribute(TRAP_DOOR_UNLOCKED_ATTRIBUTE, 1);
     const start = player.getLocation().clone(), key = { player, object };
     movement.setBlockMovement(true).reset();
+    let ticks = 0;
     const task = new (class extends api.core.Task {
       constructor() { super(1, key); }
       execute() {
+        let done = true;
         try {
           if (trapTasksByPlayer.get(player) !== this || !player.isRegistered() || player.getHitpoints() <= 0
             || player.getPrivateArea() !== null || !player.getLocation().equals(start)
             || api.core.MapObjects.getPrivateArea(player, TRAPPED_LEVER_ID, object.getLocation()) !== object) return;
+          if (++ticks === TRAP_PULL_ANIMATION_DELAY) {
+            if (sequence != null) player.performAnimation(new api.core.Animation(sequence));
+          }
+          if (ticks < TRAP_PULL_EFFECT_DELAY) { done = false; return; }
           if (disarmed) {
-            player.setAttribute(TRAP_DOOR_UNLOCKED_ATTRIBUTE, 1);
+            lowerTrapLever(player, object);
+            player.getPacketSender().sendSound(LEVER_SOUND, 10, 0);
           } else {
+            // The unsearched fall is unrecorded; it keeps to the same pull timing.
             player.moveTo(landing);
             player.getCombat().getHitQueue().addPendingDamage([
               new api.core.HitDamage(TRAP_DAMAGE, api.core.HitMask.RED),
             ]);
             player.forceChat("Ouch!");
           }
-        } finally { this.stop(); }
+        } finally { if (done) this.stop(); }
       }
       stop() {
         if (trapTasksByPlayer.get(player) === this) {
@@ -976,8 +1326,222 @@ module.exports = function registerTempleOfIkovQuest(api) {
     ensureLucien(player);
   }
 
+  // This slice covers the guide's negative displayed-weight region only.
+  // Fractional-negative/displayed-zero, heavy falls and recovery keep their
+  // current ordinary route; this is not a universal retail weight threshold.
+  function documentedBridgeWeight(player) { return player.getWeightKg() < 0; }
+
+  function stopBridgeApproach(player, clearPath = false) {
+    const request = bridgeApproaches.get(player);
+    if (!request) return;
+    bridgeApproaches.delete(player);
+    request.task?.stop();
+    const queue = player.getMovementQueue();
+    if (clearPath && player.getArea() === request.area
+      && player.getTeleportSerial() === request.teleportSerial
+      && queue.getBlockMovementGeneration() === request.blockGeneration
+      && !ObstacleRunner.isBusy(player) && player.getForceMovement() == null
+      && queue.getDestination()?.equals(request.approach)) queue.reset();
+  }
+
+  function clearBridgeOrigin(player) {
+    bridgeOrigins.delete(player);
+    if (player.getAttribute(BRIDGE_ORIGIN_ATTRIBUTE) != null
+      && player.getAttribute(BRIDGE_ORIGIN_ATTRIBUTE) !== 0) player.setAttribute(BRIDGE_ORIGIN_ATTRIBUTE, 0);
+  }
+
+  function rememberBridgeOrigin(player, origin) {
+    // Only an actual pre-entry edge creates provenance. Persist through the
+    // established PlayerSave attribute contract, not a guessed relog side.
+    player.setAttribute(BRIDGE_ORIGIN_ATTRIBUTE, { version: 1, entryX: origin.getX() });
+    bridgeOrigins.set(player, { area: player.getArea(), teleportSerial: player.getTeleportSerial() });
+  }
+
+  function bridgeOrigin(player) {
+    const record = player.getAttribute(BRIDGE_ORIGIN_ATTRIBUTE);
+    if (record == null || record === 0) return null;
+    const at = player.getLocation(), bound = bridgeOrigins.get(player);
+    if (typeof record !== "object" || Array.isArray(record)
+      || Object.keys(record).sort().join(",") !== "entryX,version" || record.version !== 1
+      || ![BRIDGE_WEST_EDGE, BRIDGE_EAST_EDGE].includes(record.entryX)
+      || !(player.getArea() instanceof TempleOfIkovIceChests) || player.getPrivateArea() !== null
+      || at.getX() !== 2649 || at.getY() !== BRIDGE_CROSSING_ROW || at.getZ() !== 0
+      || (bound && (bound.area !== player.getArea() || bound.teleportSerial !== player.getTeleportSerial()))) {
+      clearBridgeOrigin(player); return null;
+    }
+    // A fresh Player loaded at the saved gap can bind this session only from
+    // the persisted pre-entry record. A destination never supplies an entry.
+    if (!bound) bridgeOrigins.set(player, { area: player.getArea(), teleportSerial: player.getTeleportSerial() });
+    return new api.core.Location(record.entryX, BRIDGE_CROSSING_ROW, 0);
+  }
+
+  function stopBridgePassage(player) { bridgePassages.get(player)?.task.stop(); }
+
+  function bridgeSceneCurrent(player, scene) {
+    const at = player.getLocation();
+    return bridgePassages.get(player) === scene && player.isRegistered()
+      && player.getHitpoints() > 0 && !player.isNeedsPlacement()
+      && player.getArea() === scene.area && player.getPrivateArea() === scene.privateArea
+      && player.getTeleportSerial() === scene.teleportSerial
+      && player.getForceMovement() == null
+      && player.getAttribute(OBSTACLE_ATTRIBUTE) === scene.task
+      && player.getMovementQueue().getBlockMovementGeneration() === scene.lockGeneration
+      && at.getZ() === 0 && at.getY() === scene.y
+      && at.getX() >= BRIDGE_WEST_BANK && at.getX() <= BRIDGE_EAST_BANK;
+  }
+
+  function startBridgePassage(player, request) {
+    const at = player.getLocation(), queue = player.getMovementQueue();
+    if (!(player.getArea() instanceof TempleOfIkovIceChests) || player.getArea() !== request.area
+      || player.getPrivateArea() !== null || player.getTeleportSerial() !== request.teleportSerial
+      || !player.isRegistered() || player.getHitpoints() <= 0 || player.isNeedsPlacement()
+      || player.busy() || queue.isMovementBlocked() || ObstacleRunner.isBusy(player) || player.getForceMovement() != null
+      || bridgePassages.has(player) || (!documentedBridgeWeight(player) && !request.returning)
+      || !at.equals(request.approach)) return;
+    // Exact cache wall placements bound this scoped scripted walk. No shared
+    // collision change or movement:ignore-clipping privilege is granted.
+    for (const [x, face] of [[BRIDGE_WEST_EDGE, 2], [BRIDGE_EAST_EDGE, 0]]) {
+      const wall = api.core.MapObjects.get(BRIDGE_WALL_ID, new api.core.Location(x, request.y, 0), null);
+      if (!wall || wall.getType() !== 0 || wall.getFace() !== face || wall.getOwner() != null) return;
+    }
+    const bank = new api.core.Location(request.westward ? BRIDGE_WEST_BANK : BRIDGE_EAST_BANK, request.y, 0);
+    // Origin is known before run() performs its first immediate step. A resumed
+    // scene inherits this prior origin; a new destination never invents one.
+    const origin = request.origin.clone();
+    if (origin.getY() !== BRIDGE_CROSSING_ROW
+      || ![BRIDGE_WEST_EDGE, BRIDGE_EAST_EDGE].includes(origin.getX())) return;
+    const scene = { area: request.area, privateArea: null, teleportSerial: request.teleportSerial,
+      y: request.y, origin, returning: request.returning === true,
+      task: null, expected: null, lockGeneration: null };
+    rememberBridgeOrigin(player, origin);
+    const target = scene.returning ? origin : bank;
+    // A one-step resumed return must remain live until its instance finish is wrapped.
+    const steps = [{ walk: [[target.getX(), target.getY()]], arrive: !scene.returning }];
+    // Attributed review 5911478216 requirement: retain the existing owned hold
+    // through arrival-turn packets, then release on the next owned task tick.
+    if (!scene.returning) steps.push({ wait: 1 });
+    const task = ObstacleRunner.run({ player }, steps, {
+      onFinish: () => {
+        if (bridgePassages.get(player) === scene) bridgePassages.delete(player);
+        // The original click is consumed, including a successful crossing.
+      },
+    });
+    scene.task = task;
+    scene.expected = player.getLocation().clone(); // run() performs its first step immediately.
+    scene.lockGeneration = queue.getBlockMovementGeneration();
+    bridgePassages.set(player, scene);
+    const execute = task.execute.bind(task);
+    task.execute = () => {
+      if (!bridgeSceneCurrent(player, scene) || !player.getLocation().equals(scene.expected)) {
+        task.finish(false); return;
+      }
+      if (!scene.returning && !documentedBridgeWeight(player) && !player.getLocation().equals(bank)) {
+        // Authored interim safety policy, not the unimplemented retail fall:
+        // normal steps back to the remembered entry, never a free crossing.
+        scene.returning = true;
+        // A safety return is not a successful arrival and has no arrival tail.
+        task.steps = [];
+        task.index = 0;
+        task.waitTicks = 0;
+        task.walkPath = [[scene.origin.getX(), scene.origin.getY()]];
+        task.walkedTiles = 0;
+        task.walkArrives = true;
+        task.walkTilesPerTick = 1;
+      }
+      execute();
+      if (!task.finished) scene.expected = player.getLocation().clone();
+    };
+    // The unmodified runner releases CURRENT generic state and fast-forwards on
+    // logout. This walk sets no render/animation/force, so finish only its own
+    // exact BUSY and movement hold, leaving replacement work/force/render intact.
+    task.finish = completed => {
+      if (task.finished) return;
+      const accepted = completed && !scene.returning && documentedBridgeWeight(player)
+        && bridgeSceneCurrent(player, scene) && player.getLocation().equals(bank);
+      const here = player.getLocation();
+      // Keep the actual prior origin through temporary foreign work and logout
+      // only while the same physical gap/scene/serial still matches. No movement
+      // is resumed until ordinary input passes the current mobility/owner guards.
+      const ownGap = here.getX() === 2649 && here.getY() === scene.y && here.getZ() === 0
+        && here.equals(scene.expected) && player.getArea() === scene.area
+        && player.getPrivateArea() === scene.privateArea && player.getTeleportSerial() === scene.teleportSerial;
+      if (ownGap) rememberBridgeOrigin(player, scene.origin);
+      else clearBridgeOrigin(player);
+      task.finished = true;
+      api.core.Task.prototype.stop.call(task);
+      if (player.getAttribute(OBSTACLE_ATTRIBUTE) === task) player.setAttribute(OBSTACLE_ATTRIBUTE, null);
+      // BUSY and the movement hold have independent owners.
+      if (queue.getBlockMovementGeneration() === scene.lockGeneration) queue.setBlockMovement(false);
+      task.complete(accepted);
+    };
+    task.fastForward = () => task.finish(false);
+  }
+
+  function routeBridgeWalk(event) {
+    const { player, destination } = event;
+    const old = bridgeApproaches.get(player);
+    if (old?.routing) return; // The nested native request only routes to this bank.
+    stopBridgeApproach(player);
+    if (event.handled || !(player.getArea() instanceof TempleOfIkovIceChests) || !destination
+      || player.getPrivateArea() !== null || player.busy() || ObstacleRunner.isBusy(player)
+      || player.getForceMovement() != null || player.getMovementQueue().isMovementBlocked()
+      || bridgePassages.has(player)) return;
+    const from = player.getLocation();
+    if (from.getZ() !== 0 || destination.z !== 0 || from.getX() < 2630 || from.getX() > 2665
+      || from.getY() < 9827 || from.getY() > 9831 || destination.x < 2630 || destination.x > 2665
+      || !BRIDGE_ROWS.has(destination.y)) return;
+    const withinGap = from.getY() === BRIDGE_CROSSING_ROW && from.getX() === 2649;
+    const knownOrigin = withinGap ? bridgeOrigin(player) : null;
+    if (withinGap && !knownOrigin) return; // Never infer an entry side from this new click.
+    const eligible = documentedBridgeWeight(player);
+    if (!eligible && !knownOrigin) return;
+    const westward = (from.getX() >= BRIDGE_EAST_EDGE || withinGap) && destination.x <= BRIDGE_WEST_EDGE;
+    const eastward = (from.getX() <= BRIDGE_WEST_EDGE || withinGap) && destination.x >= BRIDGE_EAST_EDGE;
+    if (!westward && !eastward) return;
+    const y = BRIDGE_CROSSING_ROW, queue = player.getMovementQueue();
+    const approach = withinGap ? from.clone()
+      : new api.core.Location(westward ? BRIDGE_EAST_EDGE : BRIDGE_WEST_EDGE, y, 0);
+    const request = { player, area: player.getArea(), teleportSerial: player.getTeleportSerial(),
+      blockGeneration: queue.getBlockMovementGeneration(), westward, y, approach,
+      origin: knownOrigin ? knownOrigin.clone() : approach.clone(), returning: !eligible,
+      routing: false, task: null };
+    event.handled = true;
+    if (from.equals(request.approach)) { startBridgePassage(player, request); return; }
+    bridgeApproaches.set(player, request);
+    request.routing = true;
+    queue.requestWalk(request.approach);
+    request.routing = false;
+    if (queue.isMovementBlocked() || ObstacleRunner.isBusy(player)
+      || !queue.getDestination()?.equals(request.approach)) {
+      stopBridgeApproach(player); return;
+    }
+    // A uniquely held task polls the real routed approach; it neither imports
+    // the non-exported MovementTask nor cancels other tasks by a shared key.
+    request.task = new api.core.Task(1, player, false);
+    request.task.execute = () => {
+      if (bridgeApproaches.get(player) !== request) { request.task.stop(); return; }
+      if (player.getArea() !== request.area || player.getPrivateArea() !== null
+        || player.getTeleportSerial() !== request.teleportSerial || !player.isRegistered()
+        || player.getHitpoints() <= 0 || !documentedBridgeWeight(player)
+        || queue.getBlockMovementGeneration() !== request.blockGeneration
+        || ObstacleRunner.isBusy(player) || player.getForceMovement() != null) {
+        stopBridgeApproach(player, true); return;
+      }
+      if (player.getLocation().equals(request.approach)) {
+        stopBridgeApproach(player); startBridgePassage(player, request); return;
+      }
+      if (!queue.getDestination()?.equals(request.approach)) stopBridgeApproach(player);
+    };
+    api.getTaskManager().submit(request.task);
+  }
+
   function handleLogout({ player }) {
     if (player) {
+      guardianChallenges.delete(player);
+      defeatedGuardian.delete(player);
+      guardianConversations.delete(player);
+      stopBridgeApproach(player, true);
+      stopBridgePassage(player);
       removeSpawns(player);
       removeIceChests(player);
       removeBracket(player);
@@ -989,11 +1553,23 @@ module.exports = function registerTempleOfIkovQuest(api) {
   // This is scene lifecycle cleanup, not an account-persistence or OSRS relog-stock claim.
   class TempleOfIkovIceChests extends api.core.Area {
     postEnter(mobile) {
-      if (mobile.isPlayer()) restorePulledBracket(mobile.getAsPlayer());
-    }
-    postLeave(mobile) {
       if (!mobile.isPlayer()) return;
       const player = mobile.getAsPlayer();
+      restorePulledBracket(player);
+      // AreaManager assigns getArea() after enter; provenance binds in process.
+    }
+    process(mobile) {
+      if (mobile.isPlayer() && !bridgePassages.has(mobile.getAsPlayer())) bridgeOrigin(mobile.getAsPlayer());
+    }
+    postLeave(mobile, logout) {
+      if (!mobile.isPlayer()) return;
+      const player = mobile.getAsPlayer();
+      guardianChallenges.delete(player);
+      defeatedGuardian.delete(player);
+      guardianConversations.delete(player);
+      stopBridgeApproach(player, true);
+      stopBridgePassage(player);
+      if (!logout) clearBridgeOrigin(player);
       removeIceChests(player);
       removeBracket(player);
       stopTrapTask(player);
@@ -1021,6 +1597,8 @@ module.exports = function registerTempleOfIkovQuest(api) {
   });
 
   api.registerArea(new TempleOfIkovIceChests([new api.core.Boundary(2624, 2753, 9758, 9916, 0)]));
+  api.persistAttribute(WINELDA_MET_ATTRIBUTE, 0);
+  api.persistAttribute(BRIDGE_ORIGIN_ATTRIBUTE, 0);
   api.persistAttribute(SIDE_ATTRIBUTE);
   api.persistAttribute(ICE_GATE_UNLOCKED_ATTRIBUTE, 0);
   api.persistAttribute(TRAP_DISARMED_ATTRIBUTE, 0);
@@ -1044,6 +1622,12 @@ module.exports = function registerTempleOfIkovQuest(api) {
   api.onCanAttack(handleCanAttack);
   api.onNpcDeath(handleFireWarriorDeath);
   api.onNpcDeath(handleLucienDeath);
+  api.onNpcDeath(handleGuardianDeath);
+  api.onGroundItemPickup(handleStaffPickup);
+  api.onCustomEvent("ground-items:take", handleStaffTransfer);
+  api.onCustomEvent("ground-items:taken", handleStaffTaken);
+  api.onCustomEvent("magic:can-telekinetic-grab", handleStaffTelegrab);
+  api.onWalkRoute(routeBridgeWalk);
   api.onPlayerLogin(handleLogin);
   api.onPlayerLogout(handleLogout);
 };

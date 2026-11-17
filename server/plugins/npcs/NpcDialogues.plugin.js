@@ -15,7 +15,8 @@
  * `box: { items }` (one or two item ids) to show it as an item box, as OSRS shows
  * hand-outs, instead of a chat message, and `after` to run once the player continues past
  * that box. A statement box can also hold its continue for `box.holdTicks` while a scene
- * plays, then continue normally or, with `box.advance`, move on by itself. A line's `pauseTicks`
+ * plays, then continue normally or, with `box.advance`, move on by itself; `box.delayTicks` closes
+ * the chatbox and opens the box that many ticks later instead. A line's `pauseTicks`
  * closes the chatbox after it and waits that many ticks before the conversation carries on (a
  * scene between two lines). "npc-dialogue:start" plays a named variant on demand
  * and returns an optional request.cancel handle scoped to that playback's chain/chatbox.
@@ -28,6 +29,8 @@
 const fs = require("fs");
 const path = require("path");
 const { isDeepStrictEqual } = require("node:util");
+/** A paged menu's back option ("~ previous ~"), as the wiki labels it. */
+const PREVIOUS_PAGE_OPTION = /^~\s*previous\s*~$/i;
 /** successor id -> the retired id whose transcript it plays until it has its own (data/retired-npcs.json). */
 const PREDECESSOR = new Map(Object.entries(require("./data/retired-npcs.json").successors)
   .map(([retired, successor]) => [successor.id, Number(retired)]));
@@ -222,6 +225,23 @@ function reportDialogueGap(event, resolved) {
   console.warn(`[npc-dialogues] ${name} (npc ${event.npcId}) says the placeholder line: ${reason}`);
 }
 
+/**
+ * The head for a line whose label the export resolved to the page's own participant
+ * (`speaker_ids`: "Hrafn" is HRH Hrafn, "Guard" is the Jatizso guard). That beats the
+ * cache-name lookup, which finds nothing for "Hrafn" and an arbitrary NPC for "Guard".
+ * One NPC with several ids keeps the clicked one when it is among them; otherwise the
+ * quest's own speaker map or the cache-name lookup wins when it names one of the listed
+ * ids (Zorgoth's 8136, which has a head, over 8135, which has none), and only then the first.
+ */
+function listedSpeakerId(step, definition, speakerIdByName) {
+  const ids = step.speaker_ids;
+  if (!Array.isArray(ids) || !ids.length) return undefined;
+  const clicked = definition?.getId?.();
+  if (ids.includes(clicked)) return clicked;
+  const named = speakerIdByName?.get(step.speaker);
+  return ids.includes(named) ? named : ids[0];
+}
+
 /** Transcript page name -> an NPC id that speaks it, so cutscene/paired speakers
  * get their own chathead instead of borrowing the NPC being talked to. */
 function speakerIdIndex(index, NpcDefinition) {
@@ -280,6 +300,15 @@ function isLinearConditionBranch(steps) {
 /** True when a branch is only a navigation jump (no dialogue of its own). */
 function jumpOnly(steps) {
   return !Array.isArray(steps) || steps.length === 0 || steps.every((step) => step.type === "jump");
+}
+
+/**
+ * A player line followed only by same-as-above/below jumps (Necrovarus's "What happened to everyone here?"): the
+ * option's own line and a pointer elsewhere, no answer of its own. A lone line ("Okay, thanks.") is an answer.
+ */
+function lineThenSameAs(steps) {
+  return Array.isArray(steps) && steps.length > 1 && typeof steps[0]?.player === "string"
+    && steps.slice(1).every((step) => step?.type === "jump" && /^(above|below)/i.test(String(step.reference ?? "")));
 }
 
 /** A step body that actually says something (usable as a jump target). */
@@ -558,7 +587,8 @@ function flatten(steps, opts = {}) {
     while (steps[position + 1]?.type === "condition") position++;
     const run = steps.slice(runStart, position + 1);
     if (opts.lazyConditions) {
-      out.push({ type: "condition_run", run });
+      // The step before the run, for a branch that opens with a same-as jump (resolveJump's `previous`).
+      out.push({ type: "condition_run", run, ...(runStart > 0 ? { before: steps[runStart - 1] } : {}) });
       continue;
     }
     const chosen = chooseCondition(run, resolveCondition);
@@ -707,6 +737,11 @@ function startDialogue(api, event, steps, branches = {}, context = {}) {
       ? { menu: history[0] ?? context.pageInitialMenu } : "end";
     const match = /^previous(\d*)/i.exec(reference);
     const back = match && match[1] ? Number(match[1]) : 1;
+    // A submenu's way back is the menu whose option opened it (Daero's "Return to previous menu" goes back to his
+    // topics, whichever topic was opened before), not merely the menu shown before it.
+    let opened = current;
+    for (let step = 0; opened && step < back; step++) opened = menuThatOpened(opened);
+    if (opened) return { menu: opened };
     const index = current ? history.indexOf(current) : history.length - 1;
     // "previous" on the first menu means the menu the option came from; only walk
     // further back when the conversation actually has earlier menus.
@@ -723,10 +758,25 @@ function startDialogue(api, event, steps, branches = {}, context = {}) {
     return "end";
   };
 
+  // The menu shown in this chat with an option that opens `menu` (its first step is that menu). Steps are rebuilt per
+  // run, so menus are matched on their option texts; the latest copy shown wins.
+  const menuTexts = (menuStep) => (menuStep?.options || []).map((entry) => String(entry?.text ?? "")).join("|");
+  const menuThatOpened = (menu) => {
+    const texts = menuTexts(menu?.step);
+    if (!texts) return undefined;
+    return [...context.menuHistory].reverse().find((shown) => shown !== menu && (shown.step?.options || []).some((entry) =>
+      entry?.steps?.[0]?.type === "choice" && menuTexts(entry.steps[0]) === texts));
+  };
+
   // "jump above" targets the same option's earlier occurrence, else the option
   // defined just before this one. Wiki jump ids lost their targets in the dump.
   const resolveJump = (step, previous, nextStep) => {
     const reference = String(step.reference ?? "");
+    // A jump that opens a condition branch follows the line before the condition run: the Old Crone's "Do you have
+    // such a thing as a ghostspeak amulet?" then "If the player doesn't have the ghostspeak amulet: (same as above)".
+    const opensCondition = previous?.type === "condition_chosen";
+    const viaCondition = opensCondition && previous.before;
+    if (viaCondition) previous = previous.before;
     if (/^(other|previous\d*|initial)/i.test(reference)) return resolveMenuJump(reference);
     // The player asks one of the page's questions again (Percy's "Is there anything else I can
     // unlock here?" after a purchase): carry on as that question does, without saying it twice.
@@ -734,15 +784,19 @@ function startDialogue(api, event, steps, branches = {}, context = {}) {
       const question = normText(previous.player);
       const asked = realBody(context.pageOptions?.get(question))
         ?? realBody((recordsByText.get(question) ?? [])[0]?.steps);
-      if (asked) {
-        const repeatsLine = typeof asked[0]?.player === "string" && normText(asked[0].player) === normText(previous.player);
-        return realBody(repeatsLine ? asked.slice(1) : asked) ?? asked;
-      }
+      const repeatsLine = typeof asked?.[0]?.player === "string" && normText(asked[0].player) === normText(previous.player);
+      // The question's own option (its line, then this jump) is no answer: replaying it says the line again and
+      // reaches this jump again, until the jump limit (Matthias's "Could I have a go with your bird?").
+      const ownOption = asked && (asked.includes(step) || (repeatsLine && lineThenSameAs(asked)));
+      if (asked && !ownOption) return realBody(repeatsLine ? asked.slice(1) : asked) ?? asked;
     }
     // After an NPC line, "same as above" carries on as that line does where the page first has
     // it (Bryn's first-time "What is this place?" continues as his full explanation).
-    if (/^(above|below)/i.test(reference) && typeof previous?.npc === "string") {
-      const after = context.pageLines?.get(normText(previous.npc))?.slice(1);
+    // A speaker "line" counts here only before a condition run (the Old Crone's line is one).
+    const npcLine = typeof previous?.npc === "string" ? previous.npc
+      : viaCondition && previous?.type === "line" && typeof previous.text === "string" ? previous.text : undefined;
+    if (/^(above|below)/i.test(reference) && npcLine !== undefined) {
+      const after = context.pageLines?.get(normText(npcLine))?.slice(1);
       if (after?.length && after[0] !== step && !jumpOnly(after)) return after;
     }
     // Prefer the queued continuation to guessing another historical option.
@@ -812,14 +866,41 @@ function startDialogue(api, event, steps, branches = {}, context = {}) {
     // "Same as above" can point at an inline line rather than an option (e.g. a
     // repeat option for dialogue the player already spoke in this branch).
     const fromLine = key.length >= 8 ? realBody(context.pageLines?.get(key)) : undefined;
+    // An option that is only its own line and same-as jumps (Necrovarus's "What happened to everyone here?",
+    // lineThenSameAs) is no answer either: its jump is skipped in turn and resolves here again, forever.
+    // A body that plays this same jump again resolves here again (the Wise Old Man's "Okay, 99,000 coins is
+    // fine.": the page's copy of the option differs from the menu's, so sameBranch does not see it).
+    // It also looks through condition branches, inline jump bodies and called branches (not other menus' options):
+    // Timfraku's "I've been doing some work around the village." lands on the page's copy, whose called branch is only
+    // the jump being resolved, so the option replayed itself until the jump limit.
+    const replaysJump = (steps, seen = new Set()) => (steps ?? []).some((entry) => {
+      if (!entry || typeof entry !== "object") return false;
+      if (entry === step || (step.id && entry.type === "jump" && entry.id === step.id)) return true;
+      if (entry.type === "call" && typeof entry.branch === "string" && !seen.has(entry.branch)) {
+        seen.add(entry.branch);
+        return replaysJump(branches?.[entry.branch], seen);
+      }
+      return entry.type !== "choice" && Array.isArray(entry.steps) && replaysJump(entry.steps, seen);
+    });
+    const answers = (candidate) => candidate && !sameBranch(candidate) && !lineThenSameAs(candidate) && !replaysJump(candidate);
+    // The player has just said their line: the pick carries on with the answer, not its own question (the same
+    // line twice for the Entrance Guardian's "Can you explain the different portals?", or another option's
+    // question after it for Necrovarus's "How do I get into the town?").
+    const unrepeated = (pick) => typeof previous?.player === "string" && typeof pick?.[0]?.player === "string"
+      ? realBody(pick.slice(1)) ?? pick : pick;
     if (/^below/i.test(reference)) {
       const next = current ? records[current.id + 1] : records[0];
       const pick = [realBody(sameText?.steps), realBody(fromPage), near, similar, fromLine, realBody(next?.steps)]
-        .find((candidate) => candidate && !sameBranch(candidate));
-      if (pick) return pick;
+        .find(answers);
+      if (pick) return unrepeated(pick);
       if (!current && context.pageMenuBefore) return { menu: context.pageMenuBefore };
-      const last = records[records.length - 1];
-      return realBody(last?.steps) ?? "end";
+      // The menu's last option has nothing below it: the last record is then this one, and replaying it loops.
+      const last = realBody(records[records.length - 1]?.steps);
+      // No body there at all (a jump-only or empty record): the chat ends, as before. Only a last record that
+      // is this option itself goes back to the menu above.
+      if (!last) return "end";
+      if (answers(last)) return unrepeated(last);
+      return context.pageMenuBefore ? { menu: context.pageMenuBefore } : "end";
     }
     if (!/^above/i.test(reference)) return null;
     if (!current) {
@@ -828,9 +909,26 @@ function startDialogue(api, event, steps, branches = {}, context = {}) {
       const last = records[records.length - 1];
       return realBody(last?.steps) ?? "end";
     }
-    const prev = current.id > 0 ? records[current.id - 1] : undefined;
-    return [realBody(sameText?.steps), realBody(fromPage), near, similar, fromLine, realBody(prev?.steps)]
-      .find((candidate) => candidate && !sameBranch(candidate)) ?? "end";
+    // The option above; past options that are only their line and a same-as jump, to the first that has more.
+    let above = current.id - 1;
+    while (above > 0 && lineThenSameAs(records[above]?.steps)) above--;
+    const prev = above >= 0 ? realBody(records[above]?.steps) : undefined;
+    const candidates = [realBody(sameText?.steps), realBody(fromPage), near, similar, fromLine, prev];
+    const pick = candidates.find(answers);
+    if (pick) return unrepeated(pick);
+    // Every candidate only replays this jump, and the option was picked from the last menu shown: that menu comes
+    // back (Timfraku's "I've been doing some work around the village." returns to his four options after his reply,
+    // rsprox_transcripts/237/01102.txt), rather than the chat closing. An option-less menu (a wiki-export gap, as in
+    // the page's copy he lands on) is never drawn, so it is passed over. A jump that opens a condition branch still
+    // ends: the Observatory professor's "If the player did not see this sign:" after a page-2 sign stands for the
+    // page-1 copy, which ends the chat, and drawing the zodiac menu again would let the player keep guessing.
+    const found = opensCondition ? [] : candidates.filter(Boolean);
+    const shown = [context.currentMenu, ...[...context.menuHistory].reverse()].find((menu) => menu?.step?.options?.length);
+    if (found.length && found.every((candidate) => replaysJump(candidate))
+      && (shown?.step.options ?? []).some((option) => optionRecords.get(option) === current)) {
+      return { menu: shown };
+    }
+    return "end";
   };
 
   const flattenOptions = () => ({ resolveCondition, resolveJump, lazyConditions: true,
@@ -903,6 +1001,13 @@ function startDialogue(api, event, steps, branches = {}, context = {}) {
         api.emitCustomEvent("npc-dialogue:choice", choice);
         if (choice.end) return;
         const own = ownMenu(option);
+        // A paged menu's "~ previous ~" goes back a page. The wiki writes it as a bare option with no action
+        // (Transcript:Observatory Quest's sign menu), so the dump leaves it without steps.
+        if (!option.steps?.length && PREVIOUS_PAGE_OPTION.test(String(option.text ?? "").trim())) {
+          // The page shown before is the menu with an option that opens this one.
+          const page = menuThatOpened(own);
+          if (page) return presentMenu(page);
+        }
         context.currentMenu = own;
         context.lastChoice = option.text;
         run([...(option.steps || []), ...(own === menu ? rest : own.rest || []), ...tail], recordOption(option));
@@ -1001,7 +1106,7 @@ function startDialogue(api, event, steps, branches = {}, context = {}) {
               ? step.run.slice(chosen.index + 1).map((condition) => ({ ...condition, afterTrue: true }))
               : [];
           run([
-            { type: "condition_chosen", id: chosen.condition.id, text: chosen.condition.text },
+            { type: "condition_chosen", id: chosen.condition.id, text: chosen.condition.text, ...(step.before ? { before: step.before } : {}) },
             ...(chosen.condition.steps || []),
             ...tail,
             ...after,
@@ -1112,13 +1217,16 @@ function startDialogue(api, event, steps, branches = {}, context = {}) {
           return;
         }
         playedAny = true;
+        // The Wiki's colour, as live draws the line (`styled`: Client of Kourend's possessed Veos in
+        // <col=000080>), unless a handler rewrote the words.
+        const shown = request.text === speech && typeof step.styled === "string" ? formatPlayerText(step.styled, player) : formatted;
         // Pages as the chatbox holds them: four lines of font 497 in 380 pixels (ChatTextLayout).
-        const pages = api.core?.ChatTextLayout?.pages(formatted) ?? characterPages(formatted);
+        const pages = api.core?.ChatTextLayout?.pages(shown) ?? characterPages(shown);
         // A typed line spoken by someone other than the NPC being talked to (a
         // paired NPC talking to them, a cutscene actor) gets that speaker's head.
         // An item's own transcript has no NPC; a named speaker still gets their head.
         const speakerId = request.speakerId ?? (!isPlayer && typedLine && step.speaker && step.speaker !== definition?.getName()
-          ? (context.speakerIdByName?.get(step.speaker) ?? definition?.getId())
+          ? (listedSpeakerId(step, definition, context.speakerIdByName) ?? context.speakerIdByName?.get(step.speaker) ?? definition?.getId())
           : definition?.getId());
         if (typeof request.before === "function") {
           chain.add(new ActionDialogue(index++, { execute: () => {
@@ -1210,7 +1318,9 @@ function startDialogue(api, event, steps, branches = {}, context = {}) {
           playedAny = true;
           const [first, second] = Array.isArray(message.box?.items) ? message.box.items : [];
           if (first !== undefined || message.box?.statement === true) {
-            const text = formatPlayerText(String(message.text ?? ""), player);
+            // A box keeps the Wiki's colour (`styled`) unless a handler rewrote its words.
+            const words = message.text === step.text && typeof step.styled === "string" ? step.styled : message.text;
+            const text = formatPlayerText(String(words ?? ""), player);
             const box = new DialogueChainBuilder();
             // `box.holdTicks` (statement boxes): the box first shows that many ticks without
             // "Click here to continue" while a scene plays out, as live sends it; then it gains
@@ -1238,6 +1348,23 @@ function startDialogue(api, event, steps, branches = {}, context = {}) {
               message.after?.();
               run(rest, currentRecord);
             } }));
+            // `box.delayTicks`: the chatbox closes and the box opens that many ticks later, while a scene
+            // the handler started plays out (an idle entry holds the conversation, as `pauseTicks` does).
+            const delayTicks = Number.isInteger(message.box?.delayTicks) && message.box.delayTicks > 0 ? message.box.delayTicks : 0;
+            if (delayTicks) {
+              const waiting = new ActionDialogue(0, { execute: () => {} }, true);
+              const idle = new DialogueChainBuilder();
+              idle.add(waiting);
+              const packets = player.getPacketSender();
+              const open = packets.getChatboxGroupId?.() ?? -1;
+              if (open >= 0) packets.closeInterface(open);
+              startChain(idle);
+              api.core.TaskManager.submit(new api.core.CountdownTask(player, delayTicks, () => {
+                if (cancelled || manager.getCurrent?.() !== waiting) return;
+                startChain(box);
+              }));
+              return;
+            }
             startChain(box);
             return;
           }
@@ -1253,6 +1380,25 @@ function startDialogue(api, event, steps, branches = {}, context = {}) {
         // Quest actions may start a different conversation (for example, after
         // a cutscene action). Do not let this transcript's remaining tail replace it.
         if (current && manager.getCurrent() !== current) return;
+        // A handler can hold the conversation with `wait(resume)`: the chatbox closes, an idle
+        // entry holds the chain, and the transcript carries on when the handler calls resume()
+        // (a document it opened is closed, say). Another conversation meanwhile owns the chat.
+        if (typeof action.wait === "function") {
+          const waiting = new ActionDialogue(0, { execute: () => {} }, true);
+          const idle = new DialogueChainBuilder();
+          idle.add(waiting);
+          const packets = player.getPacketSender();
+          const open = packets.getChatboxGroupId?.() ?? -1;
+          if (open >= 0) packets.closeInterface(open);
+          startChain(idle);
+          action.wait(() => {
+            // A main interface the handler opened clears the idle entry; only a new chat stops it.
+            const now = manager.getCurrent?.();
+            if (cancelled || (now && now !== waiting)) return;
+            run(rest, currentRecord);
+          });
+          return;
+        }
         // A handler can also hand back `steps` to play first (a story picked from another page).
         if (action.handled) return action.end ? close() : run([...(action.steps ?? []), ...rest], currentRecord);
         if (step.type === "end") return close();
@@ -1346,6 +1492,7 @@ module.exports = {
   collectPageOptions,
   collectMenuBefore,
   speakerIdIndex,
+  listedSpeakerId,
   register(api) {
     const dialogueFile = path.join(GameConstants.DEFINITIONS_DIRECTORY, "npc-dialogues.json");
     const indexFile = path.join(GameConstants.DEFINITIONS_DIRECTORY, "npc-dialogue-index.json");

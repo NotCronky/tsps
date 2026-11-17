@@ -2,7 +2,7 @@ import fs = require("fs");
 import path = require("path");
 import { CacheDefinitions } from "../../../cache/CacheDefinitions";
 import { GameConstants } from "../../../GameConstants";
-import { NpcDefinition } from "../../NpcDefinition";
+import { NpcDefinition, NpcProjectileArc } from "../../NpcDefinition";
 import { DefinitionLoader } from "../DefinitionLoader";
 import { CombatType } from "../../../content/combat/CombatType";
 
@@ -50,6 +50,8 @@ type CombatAnimation = {
     projectile?: number;
     /** The spotanim the npc plays on its own tick when it fires a ranged shot (an arrow drawn on a bow). */
     launchGraphic?: number;
+    /** Its ranged shot's recorded flight, where it differs from the shared NPC arrow flight. */
+    projectileArc?: { startHeight?: number; endHeight?: number; angle?: number; progress?: number };
     /** Ticks from the death animation to the death itself; 2 when absent. */
     deathTicks?: number;
     /** Ticks from removal to respawn; 25 when absent, 0 to disable. */
@@ -72,6 +74,8 @@ const ATTACK_WORDS = new Set([
 /** Combat style words: an attack, unless the name also stands or moves (`top_spider_ranged_idle`). */
 const STYLE_WORDS = new Set(["melee", "ranged", "range", "magic", "mage"]);
 const MOTION_WORDS = new Set(["idle", "ready", "walk", "run", "stand", "standing"]);
+/** An observed entrance or movement is not evidence for an otherwise missing combat role. */
+const NON_COMBAT_WORDS = new Set([...MOTION_WORDS, "tele", "teleport", "appear", "disappear", "spawn"]);
 
 const animationWords = (name: string) => name.split("_").map((word) => word.replace(/\d+$/, "")).filter(Boolean);
 
@@ -317,6 +321,16 @@ export class NpcDefinitionLoader extends DefinitionLoader {
     }
 
     /** Status rules have one canonical source, independent of combat-stat snapshots. */
+    /** A `projectileArc` entry with its finite numbers only; null when it gives none. */
+    public static projectileArc(source: any): NpcProjectileArc | null {
+        if (!source || typeof source !== "object") return null;
+        const arc: Record<string, number> = {};
+        for (const key of ["startHeight", "endHeight", "angle", "progress"]) {
+            if (Number.isFinite(source[key])) arc[key] = source[key];
+        }
+        return Object.keys(arc).length ? Object.freeze(arc) as NpcProjectileArc : null;
+    }
+
     public static applyStatusImmunities(definition: NpcDefinition, cacheName: string, source: any): void {
         if (!source || typeof source.name !== "string" || normalizeName(source.name) !== normalizeName(cacheName)) return;
         Object.assign(definition, {
@@ -364,10 +378,13 @@ export class NpcDefinitionLoader extends DefinitionLoader {
         }
         const projectiles: Record<string, number> = {};
         const launchGraphics: Record<string, number> = {};
+        const projectileArcs: Record<string, NpcProjectileArc> = {};
         for (const [id, entry] of Object.entries((animationFile.npcs ?? {}) as Record<string, CombatAnimation>)) {
             if (entry?.anims) animations[id] = entry;
             if (Number.isInteger(entry?.projectile)) projectiles[id] = entry.projectile as number;
             if (Number.isInteger(entry?.launchGraphic)) launchGraphics[id] = entry.launchGraphic as number;
+            const arc = NpcDefinitionLoader.projectileArc(entry?.projectileArc);
+            if (arc) projectileArcs[id] = arc;
         }
         // Only hand-made entries stop the guess below; captures leave a role open when they do not settle it.
         const configuredAnimationIds = new Set(Object.keys(animations));
@@ -423,7 +440,11 @@ export class NpcDefinitionLoader extends DefinitionLoader {
             inferredAnimations += Object.keys(inferred).length;
             if (!configuredAnimationIds.has(npcId)) {
                 // A named animation never fills another role: a death is not guessed as an attack.
-                const ids = Array.from(new Set(observed.filter((id) => Number.isInteger(id) && id >= 0 && !namedRoles.has(id))));
+                const ids = Array.from(new Set(observed.filter((id) => {
+                    if (!Number.isInteger(id) || id < 0 || namedRoles.has(id)) return false;
+                    const name = CacheDefinitions.getSeqName(id);
+                    return !name || !animationWords(name).some((word) => NON_COMBAT_WORDS.has(word));
+                })));
                 const indexes = ids.map((_, index) => index);
                 const preferences: Record<CombatAnimationRole, number[]> = {
                     attack: ids.length <= 2 ? indexes : [1, ...indexes.filter((index) => index !== 1)],
@@ -467,6 +488,7 @@ export class NpcDefinitionLoader extends DefinitionLoader {
             ...Object.keys(animations), ...Object.keys(observedAnimations),
             ...Object.keys(projectiles),
             ...Object.keys(launchGraphics),
+            ...Object.keys(projectileArcs),
             ...Object.keys(capturedDeaths),
         ]);
         let applied = 0;
@@ -529,6 +551,7 @@ export class NpcDefinitionLoader extends DefinitionLoader {
             if (Number.isInteger(launchGraphics[key])) {
                 definition.launchGraphicId = launchGraphics[key];
             }
+            if (projectileArcs[key]) definition.projectileArc = projectileArcs[key];
 
             const respawn = animationFile.npcs?.[key]?.respawn;
             if (Number.isInteger(respawn) && respawn >= 0) definition.setRespawn(respawn);

@@ -36,6 +36,10 @@ Rsprox recording **3220** shows the tea attempt message, `human_pickuptable` and
 
 The attempt now faces the stall and checks its lookouts. On success it plays cache animation `human_pickuptable` (**832**, rather than pickpocket animation 881), with sound 2581. Loot, XP, the recorded success message, theft state and depletion follow on the next tick. Restocking counts from depletion. Attempts begun together can both complete; later clicks cannot steal from the empty stall. A full inventory at completion prevents both loot and XP.
 
+### Loot tracker
+
+rsprox captures (rev 241/242, local recordings 1001550 and 58 more, 12,498 thefts) show every theft from the Ardougne baker's stall (`cakethiefstall`, 11730) adding a loot tracker entry on the tick the item arrives: client script 7193 (the loc, the player's next loot tracker key, category 6, -1) and then 7194 (the loc, the same key, the item, 1), after the inventory update and before the XP (1001550 tick 3905). The key is the one every other entry counts with (`LootTracker.plugin.js`, "loot-tracker:add-loc"). A missed or caught attempt adds nothing. Other stalls send no entry in revisions that send it elsewhere: the Varrock tea stall (83 thefts, 1001438, rev 241), the Draynor seed stall (1002184, rev 242, in the same session as baker's stall entries) and the Civitas silk and baker's stalls (rev 237), so only `cakethiefstall` is tracked (`LOOT_TRACKED_STALLS`). The other Ardougne market stalls have no capture since the tracker was added, and aren't tracked.
+
 ### Merchant memory
 
 The [Thieving stalls section](https://oldschool.runescape.wiki/w/Thieving#Stalls) says successful theft prevents interaction with owners of that stall type for ten consecutive in-game minutes. [Silk merchant](https://oldschool.runescape.wiki/w/Silk_merchant) confirms the ten-minute wait restarts after logging back in. Specific NPC pages give different waits: [Baker](https://oldschool.runescape.wiki/w/Baker) says fifteen minutes, and [Spice seller](https://oldschool.runescape.wiki/w/Spice_seller) says six. The implementation follows those specific durations for bakery and spice, with ten minutes for the other supported types. No recording measured expiration; the disagreement between the general and specific Wiki pages remains an evidence limitation.
@@ -268,6 +272,45 @@ Ours: without a key the click gets the server's "Nothing interesting happens."; 
 a pre-roll that hits replaces the main roll; the slam is 1 to 10, even. The chest's Check option is not handled: no
 capture or Wiki line shows it.
 
+## Lock-picking doors and chests (#5744)
+
+Reported: Lock-pick did nothing at the Wilderness pirates' hideout and magic axe hut doors, and Picklock did nothing at Aldarin's chests. All were cache locs with the option and no handler. Doors: `plugins/skills/thieving/LockedDoors.Thieving.js`, tests `server/tests/thieving-locked-doors.test.cjs`. Chests: `plugins/skills/thieving/PicklockChests.Thieving.js`, tests `server/tests/thieving-picklock-chests.test.cjs`.
+
+### Doors
+
+| Door | Loc | Thieving | XP | Lockpick |
+| --- | --- | --- | --- | --- |
+| [Magic axe hut](https://oldschool.runescape.wiki/w/Door_(Magic_axe_hut)) (3190,3957 and 3191,3963) | 11726 | 32 | 22.5 | yes |
+| [Pirates' Hideout](https://oldschool.runescape.wiki/w/Door_(Pirates%27_Hideout)) (3038,3956, 3041,3959, 3044,3956) | 11727 | 39 | 35 | yes |
+| [East Ardougne house](https://oldschool.runescape.wiki/w/Door_(East_Ardougne)), north wall (2674,3305) | 11719 | 1 | 3.8 | no |
+| East Ardougne house, south wall (2674,3304) | 11720 | 16 | 15 | no |
+| [Chaos Druid Tower](https://oldschool.runescape.wiki/w/Door_(Chaos_Druid_Tower)) (2565,3356) | 11723 | 46 | 37.5 | no |
+
+- **Wiki:** a failed pick is retried by clicking again; a door needs no picking from the inside (East Ardougne: it "will just open if attempted, displaying the message The door is already unlocked.", used for every door here). The Chaos Druid Tower door rolls a trap first (6% of maximum Hitpoints when it goes off, certain to be disarmed from level 58), then the lock.
+- **Charts** are the pages' own, as a roll out of 256 at two levels and linear between: hut 25 at level 1 and 176 at 99, hideout 13 and 88, East Ardougne south 33 and 251 (the page gives no chart for the north door, which uses the same one), Chaos Druid lock 9 and 76. They reproduce the pages' percentages (about 28.5% at 32 for the hut, 16.4% at 39 for the hideout, 15.6% at 46 for the tower).
+- **Doors.plugin:** 11726, 11727 and 11723 have no open loc in the cache, so they swing in place (`SELF_OPENING_DOOR_IDS`); the East Ardougne pair opens by the existing same-model rule.
+- **Ours (nothing captured; no recording touches these doors):** every message but the inside one, the pick animation (`human_pickuptable`, as Pyramid Plunder and the Forthos door), the unlock resolving on the click, the current (boostable) level, and Open from outside saying "The door is locked.".
+- **Not done:** the Ardougne Sewers gates (11721/11722, 31 Thieving, 25 XP), Ross' House (40178, 13 Thieving, 15 XP, a Hitpoints loss, a Mahogany Homes bypass), the H.A.M. Hideout jail door (5501, a retry ramp) and the Monkey Madness II door (28783, no Wiki page). Their pages give charts but not which side is "inside".
+
+### Chests
+
+The Aldarin villas' six chests (54773, open 54774), the Sailing pirate chests and the Lizardman Temple's three stone chests (34429, open 34430), all `Picklock`, none needing a lockpick:
+
+| Chest | Thieving | XP | Unlock at the two charted levels (no lockpick) |
+| --- | --- | --- | --- |
+| [Aldarin Villas](https://oldschool.runescape.wiki/w/Chest_(Aldarin_Villas)) | 36 | 200 | 21.5% at 36, 59% at 99 |
+| [Rusty](https://oldschool.runescape.wiki/w/Rusty_chest) (Dognose, Vatrachos) | 33 | 90 | 18.75% at 33, 60.9% at 99 |
+| [Tarnished](https://oldschool.runescape.wiki/w/Tarnished_chest) (Crown Jewel, Shimmering Atoll) | 54 | 122.5 | 32.4% at 54, 60.9% at 99 |
+| [Reinforced](https://oldschool.runescape.wiki/w/Reinforced_chest) (Ynysdail, Brittle Isle) | 76 | 182.5 | 46.1% at 76, 60.9% at 99 |
+| [Stone chest](https://oldschool.runescape.wiki/w/Stone_chest) (Lizardman Temple) | 64 | 280 | 31.25% at 64, 60.55% at 99 |
+
+A carried lockpick adds 25/256 to every chart (each page's with-lockpick chart sits that far above) and is never used up.
+
+- **Capture:** rsprox recording 1105 (rev 237, Leagues) holds 108 Aldarin loots at 1350,2947, all successes. The timeline is the Isle of Souls chest's: tick 0 `human_lockedchest` (537), sound 1243, "You attempt to picklock the chest."; 2 `human_openchest` (536), sound 52, "You manage to unlock the chest."; 3 "You steal some loot from the chest.", the loot, 200 XP (2,400 at Leagues' 12x) and the open chest (54774); 4 sound 51; 5 the chest closed. Every chest here uses it. A further 24 XP (2 at 12x) a tick after the loot is unexplained.
+- **Loot** is the Wiki's (Drop Rate Project): Aldarin a medium clue 1 in 90 then 60 rolls (coins 100-200/250-500/600-1,200, silver and gold bars, gems, spinach roll, blessed bone shards, eclipse red, the seed table); the pirate chests a Medallion fragment on Dognose (1 in 4, unless owned) and a clue, then 60 rolls; the temple 300 rolls (bolt tips, seeds, coins 20-260, Xerician fabric, lizardman fang, gems, a medium clue, Xeric's talisman (inert)). The pirate pages' rows add to 59, not 60; the weights are used as given.
+- **Failure:** "You fail to picklock the chest." with sound 2402 (the Isle of Souls chest's; Ours). The Aldarin chest teleports a share of failures (21.1% at 36 down to 7.03% at 99) to a tile beside the nearest of the villas' three wells (cache loc 46805); the Wiki shows the well on a map only, so the destination and the cast animation (the Isle of Souls trap's) are Ours. The pirate chests' and the temple's failure teleports are not implemented: the Wiki gives their share but no destination.
+- **Not done:** the Stranglewood stone chest (48766: no level, XP or loot on its page; a one-use trap teleport), the Ogre coffins (6848-6883: Zogre Flesh Eaters, with Thieving drain and disease) and Legends' Quest's Ancient Gate (3266/3268).
+
 ## Wealthy citizens and the street urchins
 
 `plugins/skills/thieving/WealthyCitizens.Thieving.js`; tests in `server/tests/thieving-wealthy-citizens.test.cjs`.
@@ -330,7 +373,7 @@ clue rolled at the cap keeps the clue, and the key waits for the next success.
 - **The Ardougne diary:** no diary system exists yet. Its effects would be +10% success (medium: in Ardougne; hard: everywhere), the gloves of silence becoming ineffective, and coin pouch limits of 56, 84 and 140.
 - **Location- or quest-only loot:** the Pirate's medallion fragment (The Onyx Crest only), the Pirate's very rare medium clue (no rate given), and the H.A.M. robe table during Death to the Dorgeshuun.
 - **The H.A.M. camp's failures:** "You feel slightly concussed from the blow.", "Your agility helps you partially avoid the blow." and "You're beaten unconscious and bundled out of the HAM Camp." (1723, Leagues V, and the Wiki). A failure here is the ordinary stun.
-- **The in-game loot tracker:** OSRS adds each pickpocket's loot to it (client script 7192, `loottracker_lootadd`).
+- **The in-game loot tracker beyond the baker's stall:** the Ardougne silk, fur, spice, gem and silver stalls aren't tracked: no capture since the tracker was added shows whether they are.
 
 ## Cache NPCs with a Pickpocket option that this doesn't cover
 

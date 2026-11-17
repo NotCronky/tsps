@@ -24,7 +24,7 @@ function fixture() {
   let position = new core.Location(3222, 3218, 0), chain, placed = 0;
   const items = Array(28).fill(null), worn = [];
   const inventory = {
-    getItems: () => items, refreshItems() {}, setItem(slot, item) { items[slot] = item; return inventory; },
+    getItems: () => items, getAmount: id => items.reduce((sum, item) => sum + (item?.getId() === id ? item.getAmount() : 0), 0), refreshItems() {}, setItem(slot, item) { items[slot] = item; return inventory; },
     getFreeSlots: () => items.filter(i => !i).length, isFull() { return this.getFreeSlots() === 0; },
     delete(id, amount) { while (amount > 0) { const slot = items.findIndex(i => i?.getId() === id); if (slot < 0) return; const take = Math.min(amount, items[slot].getAmount()); this.deleteAtSlot(slot, take); amount -= take; } },
     deleteAtSlot(slot, amount) { const item = items[slot]; if (!item) return; if (item.getAmount() <= amount) items[slot] = null; else item.setAmount(item.getAmount() - amount); },
@@ -407,7 +407,8 @@ test("an easy STASH unit is built with Construction 27, then stores and returns 
   assert.equal(units.length, 31);
   const unit = units[0];
   const locId = unit.step.stash.locId;
-  const use = () => { const event = { player: f.player, objectId: locId, location: unit.location, handled: false }; Stash.interact(event); return event.handled; };
+  // A build finishes a tick after the click (227/01768.txt ticks 10836-10837).
+  const use = () => { const event = { player: f.player, objectId: locId, location: unit.location, handled: false }; Stash.interact(event); core.TaskManager.process(); return event.handled; };
   f.items.fill(null);
   [[I.HAMMER, 1], [I.SAW, 1], [I.PLANK, 2], [I.DRAGON_NAILS, 10]].forEach(([id, amount], slot) => { f.items[slot] = new core.Item(id, amount); });
   f.skills.level = 26;

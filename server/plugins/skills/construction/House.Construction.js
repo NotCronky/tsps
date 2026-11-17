@@ -1,8 +1,11 @@
 "use strict";
 
-const { api, World, Animation, ChatType, CountdownTask, EffectSpells, Equipment, Flag, Location, Skill, ItemIdentifiers,
+const { api, World, Animation, ChatType, CountdownTask, EffectSpells, Flag, Location, Skill, ItemIdentifiers,
   ItemDefinition, PlayerRights, Task, TaskManager, DialogueChainBuilder, OptionDialogue } = require("./Core.Construction");
 const Ids = require("./Ids.Construction");
+const ConstructionCore = require("./Core.Construction");
+const Saws = require("../../items/Saws");
+const Hammers = require("../../items/Hammers");
 const EstateAgent = require("./EstateAgent.Construction");
 const Servants = require("./Servants.Construction");
 const Estate = require("./Estate.Construction");
@@ -45,7 +48,6 @@ const ClockworkToys = require("./ClockworkToys.Construction");
 const HAMMER_ID = ItemIdentifiers.HAMMER;
 const HAMMERS = [HAMMER_ID, ItemIdentifiers.IMCANDO_HAMMER, ItemIdentifiers.IMCANDO_HAMMER_OFF_HAND_];
 const SAW_ID = ItemIdentifiers.SAW;
-const SAWS = [ItemIdentifiers.SAW, ItemIdentifiers.CRYSTAL_SAW, ItemIdentifiers.AMYS_SAW, ItemIdentifiers.AMYS_SAW_OFF_HAND_];
 const TINDERBOX_ID = ItemIdentifiers.TINDERBOX;
 // Wiki (Nails): with several kinds carried, the higher tier goes first.
 const NAIL_IDS = [ItemIdentifiers.DRAGON_NAILS, ItemIdentifiers.RUNE_NAILS, ItemIdentifiers.ADAMANTITE_NAILS,
@@ -150,7 +152,8 @@ const NAME_INPUT_SCRIPT = 109; // meslayer_mode8, answered by resume_p_namedialo
 const VISIT_PROMPT = "Enter name:";
 const VISIT_OFFLINE = "That player is offline, or has privacy mode enabled.";
 const IRONMAN_VISIT = "Ironmen do not visit their friends.<br>Ironmen stand alone.";
-const IRON_MODES = ["ironman", "ultimate", "hardcore"];
+const IRON_MODES = ["ironman", "ultimate", "hardcore", "group", "group-hardcore", "group-unranked"];
+const GROUP_IRON_MODES = ["group", "group-hardcore", "group-unranked"];
 const kickOptionVisible = new WeakSet();
 
 const activeHouses = new WeakMap();
@@ -159,6 +162,8 @@ const activeHouses = new WeakMap();
 const adverts = new Map();
 const lastAdvertised = new Map();
 const lastVisited = new WeakMap();
+/** A teleport on its way to a group mate's house (Teleport to House's Group options): player -> owner. */
+const groupVisits = new WeakMap();
 const pendingFurnitureMenus = new WeakMap();
 
 function defaultHouse() {
@@ -401,10 +406,22 @@ function hasFollower(player) {
   return !!request.pet;
 }
 
-function isIronman(player) {
+function ironModeOf(player) {
   const mode = { player, mode: "none" };
   api.emitCustomEvent("ironman:mode", mode);
-  return IRON_MODES.includes(mode.mode);
+  return mode.mode;
+}
+
+function isIronman(player) {
+  return IRON_MODES.includes(ironModeOf(player));
+}
+
+/** Wiki (Player-owned house): a Group Ironman may enter a group member's house. */
+function groupMateHouse(player, owner) {
+  if (!GROUP_IRON_MODES.includes(ironModeOf(player))) return false;
+  const query = { player, other: owner, same: false, ironman: false };
+  api.emitCustomEvent("grouping:same-group", query);
+  return query.same === true && query.ironman === true;
 }
 
 /**
@@ -413,7 +430,7 @@ function isIronman(player) {
  */
 function visitRefusal(player, owner, house, location) {
   if (!owner || !owner.getRelations().canReceivePrivateMessageFrom(player)) return VISIT_OFFLINE;
-  if (owner !== player && isIronman(player)) return Menu.messageBox(IRONMAN_VISIT);
+  if (owner !== player && isIronman(player) && !groupMateHouse(player, owner)) return Menu.messageBox(IRONMAN_VISIT);
   if (!house || house.isDestroyed() || (location != null && Estate.houseLocation(house.save).id !== location)) {
     return "That house is unavailable or its owner is not accepting guests.";
   }
@@ -465,10 +482,10 @@ function arriveAsGuest(player, owner, house) {
   player.getPacketSender().sendVarbit(HOUSE_LOCKED_VARBIT, house.save.locked ? 1 : 0);
 }
 
-/** Friend's house: Ironmen are refused at once; anyone else names the host. */
+/** Friend's house: Ironmen are refused at once (a Group Ironman may still name a group member); anyone else names the host. */
 function promptVisit({ player, objectId, location: portalLocation, sourceLocation, object }) {
   portalClickTiles.delete(player);
-  if (isIronman(player)) {
+  if (isIronman(player) && !GROUP_IRON_MODES.includes(ironModeOf(player))) {
     Menu.refuse(player, Menu.messageBox(IRONMAN_VISIT));
     return true;
   }
@@ -1092,9 +1109,40 @@ function handleHouseOptions(event) {
 /** Cast follows the house's teleport setting; the spell's "Outside" option (`option`) always stays outside. */
 function houseTeleportArrival({ player, name, option }) {
   if (name !== "teleport to house") return;
+  if (option === "group") return groupHouseArrival(player);
   const saved = houseStateFor(player);
   if (option === "outside" || saved.teleportOutside) player.moveTo(Estate.houseExit(saved));
   else teleportIntoHouse(player, saved.defaultBuildingMode);
+}
+
+/**
+ * "construction:group-house" { player, owner, destination, onArrival, refused }: Teleport to House's
+ * Group options take a Group Ironman to a group mate's house (Update:Group Ironman Improvements:
+ * the owner on the same world, not in building mode, and the house open to them as at its portal).
+ * `destination` is the owner's house portal; arriving (`onArrival`, or the spell's arrival with
+ * option "group") takes them in as a guest. Refused, the reason is shown and `refused` set.
+ */
+function groupHouse(request) {
+  const { player, owner } = request;
+  const refusal = owner === player ? "That's your own house." : visitRefusal(player, owner, owner && activeHouses.get(owner), null);
+  if (refusal) {
+    request.refused = true;
+    Menu.refuse(player, refusal);
+    return;
+  }
+  groupVisits.set(player, owner);
+  request.destination = Estate.houseExit(houseStateFor(owner));
+  request.onArrival = () => groupHouseArrival(player);
+}
+
+/** The group teleport has landed: in as a guest, if the house is still open to them. */
+function groupHouseArrival(player) {
+  const owner = groupVisits.get(player);
+  groupVisits.delete(player);
+  const house = owner && activeHouses.get(owner);
+  const late = visitRefusal(player, owner, house, null);
+  if (late) Menu.refuse(player, late);
+  else arriveAsGuest(player, owner, house);
 }
 
 /**
@@ -1389,18 +1437,14 @@ function getBuildMaterials(player, house, target, buildable) {
   return requiredItems;
 }
 
-/** Wiki (Imcando hammer): either repaired variant works carried or wielded. */
+/** Wiki (Imcando hammer): either repaired variant works carried or wielded (items/Hammers.js). */
 function hasHammer(player) {
-  const equipment = player.getEquipment();
-  const wielded = [Equipment.WEAPON_SLOT, Equipment.SHIELD_SLOT].map(slot => equipment.get(slot)?.getId());
-  return HAMMERS.some(id => player.getInventory().contains(id) || wielded.includes(id));
+  return Hammers.holdsHammer(ConstructionCore, player);
 }
 
 /** A saw, the crystal saw or Amy's saw, carried or wielded (Amy's saw in the weapon slot, its off-hand copy in the shield slot). */
 function hasSaw(player) {
-  const equipment = player.getEquipment();
-  const wielded = [Equipment.WEAPON_SLOT, Equipment.SHIELD_SLOT].map(slot => equipment.get(slot)?.getId());
-  return SAWS.some(id => player.getInventory().contains(id) || wielded.includes(id));
+  return Saws.holdsSaw(ConstructionCore, player);
 }
 
 /** What a carried container (the plank sack) holds of a material ("storage:amount"). */
@@ -2059,6 +2103,7 @@ function attach(api) {
   api.onCustomEvent("interface:closed", closeFurnitureMenu);
   api.onCustomEvent("spell:teleport-arrival", houseTeleportArrival);
   api.onCustomEvent("construction:house-tablet", houseTablet);
+  api.onCustomEvent("construction:group-house", groupHouse);
   api.onCustomEvent("construction:owns-house", ownsHouse);
   api.onCustomEvent("construction:grant-house", grantHouse);
   api.onCustomEvent("construction:spirit-tree", spiritTreeHouse);

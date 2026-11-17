@@ -815,11 +815,24 @@ test('a dropped connection during the entry fade cancels the dream and refunds t
   assert.deepEqual([p.location.getX(), p.location.getY()], [2608, 3116], 'never moved into the arena');
 });
 
-test('a dropped connection inside a dream ends it, pays its points and leaves nothing in the instance', () => {
+test('a dropped connection inside a dream ends it, pays its points and leaves nothing in the instance', (t) => {
+  const multiFormBoss = Common.data.bosses.findIndex(boss => boss.forms.length > 1);
+  assert.ok(multiFormBoss >= 0);
+  const randomInt = Common.randomInt;
+  t.mock.method(Common, 'randomInt', (min, max) =>
+    min === 0 && max === Common.data.bosses.length - 1 ? multiFormBoss : randomInt(min, max));
   const p = dreamer();
   ticks(Common.data.arena.firstSpawnTicks);
-  const [boss] = Dream.dreams.get(p).npcs;
-  Dream.bossDied({ npc: boss });
+  const state = Dream.dreams.get(p);
+  const [boss] = state.npcs;
+  const bossIndex = boss.__nightmareZone.boss;
+  assert.equal(bossIndex, multiFormBoss, 'exercise the multi-form case deterministically');
+  // Rumble chooses randomly; a multi-form boss pays only after its last form.
+  for (let form = 0; form < Common.bossForms(bossIndex, state.dream.difficulty).length; form++) {
+    const current = [...state.npcs].find(npc => npc.__nightmareZone.boss === bossIndex && npc.__nightmareZone.form === form);
+    assert.ok(current, 'the next form was spawned');
+    Dream.bossDied({ npc: current });
+  }
   const earned = varbit(p, 'nzone_currentpoints');
   assert.ok(earned > 0, 'a boss was killed before the connection dropped');
   assert.equal(Dream.dreams.has(p), true);
@@ -843,6 +856,13 @@ test('banking is refused inside a dream and allowed outside it', () => {
   assert.equal(refused.allow, false);
   assert.ok(p.messages.includes(Common.message('noBank')));
   Dream.wake({ player: p });
+});
+
+test("a leaver who stays a ranked Group Ironman loses the coins in the coffer (Wiki)", () => {
+  const p = fakePlayer();
+  Common.setCoffer(p, 5000);
+  hooks.events["group-ironman:wipe-tradeables"]({ player: p });
+  assert.equal(Common.coffer(p), 0);
 });
 
 test('the Hard Combat Achievement rewards halve imbue prices, as the cache script 275 shows them (script6931(3))', (t) => {
@@ -870,4 +890,23 @@ test('the Hard Combat Achievement rewards halve imbue prices, as the cache scrip
   tiers.Hard = 2;
   tiers.Medium = 0;
   assert.equal(Rewards.imbuePrice(11864, p), 1_250_000, 'Medium not reached: full price, as the script checks');
+});
+
+test("Uncharge on a black mask (i) refunds its whole imbue price in points (Wiki, Black mask (i)), never past the cap", () => {
+  const Rewards = require('../plugins/minigames/nightmarezone/Rewards.NightmareZone');
+  const p = fakePlayer();
+  const request = { player: p, baseItemId: 8921, refunded: null };
+  Rewards.refundImbue(request);
+  assert.equal(request.refunded, 1_250_000, "the black mask's price");
+  assert.equal(Common.points(p), 1_250_000);
+  const charged = { player: p, baseItemId: 8901, refunded: null };
+  Rewards.refundImbue(charged);
+  assert.equal(charged.refunded, 1_250_000, 'a charged mask costs the same');
+  const none = { player: p, baseItemId: 4151, refunded: null };
+  Rewards.refundImbue(none);
+  assert.equal(none.refunded, null, 'nothing imbued here, nothing refunded');
+  Common.addPoints(p, Common.data.pointsCap - Common.points(p));
+  const full = { player: p, baseItemId: 8921, refunded: null };
+  Rewards.refundImbue(full);
+  assert.equal(full.refunded, null, 'points at the cap: refused, so none are lost');
 });
