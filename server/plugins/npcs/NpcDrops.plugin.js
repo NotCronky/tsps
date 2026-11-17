@@ -727,6 +727,21 @@ function rareMultiplier(table, entry) {
   return Number.isFinite(multiplier) && multiplier > 1 && isUniqueEntry(entry) ? multiplier : 1;
 }
 
+/**
+ * Reward chests and boss rewards rolled outside NpcDrops that take the boss rare multiplier
+ * through "drops:chance". Each of these applies the answer to its uniques only (raid uniques,
+ * Barrows equipment, Zalcano's shard, pet, tool seed and onyx), so its common loot keeps its rate.
+ */
+const CHEST_RARE_SOURCES = new Set(["Chambers of Xeric", "Theatre of Blood", "Tombs of Amascut", "Barrows", "Zalcano"]);
+const ANY_NAME = { test: () => true };
+
+/** "drops:chance" { player, source, rules }: the boss rare multiplier for a listed reward chest. */
+function chestRareChance(request) {
+  if (!Array.isArray(request?.rules) || !CHEST_RARE_SOURCES.has(request.source)) return;
+  const multiplier = Number(pluginApi?.getPluginConfig(BOSS_RARE_MULTIPLIER_CONFIG, 1));
+  if (Number.isFinite(multiplier) && multiplier > 1) request.rules.push({ pattern: ANY_NAME, multiplier });
+}
+
 /** The NPC's name (its current definition's), or the cache's name for `npcId`, for plugins that boost by source. */
 function sourceName(npc, npcId) {
   const name = (npc?.getCurrentDefinition?.() ?? npc?.getDefinition?.())?.getName?.();
@@ -1333,7 +1348,7 @@ module.exports = {
   config: {
     "NpcDrops:bossRareMultiplier": {
       type: "number", label: "Boss unique drop multiplier", default: 1, min: 1,
-      help: "Makes bosses' unique drops this many times likelier. 1 is the normal rate; values of 1 or less change nothing.",
+      help: "Makes bosses' unique drops, and the uniques of the raid, Barrows and Zalcano rewards, this many times likelier. 1 is the normal rate; values of 1 or less change nothing.",
     },
   },
   register(api) {
@@ -1380,6 +1395,7 @@ module.exports = {
     api.onCustomEvent("npc-drops:place", placeRolled);
     api.onCustomEvent("npc-drops:ground-options", groundOptions);
     api.onCustomEvent("npc-drops:report", reportRolled);
+    api.onCustomEvent("drops:chance", chestRareChance);
 
     api.onNpcDeath(({ killer, npc, npcId, damagers }) => {
       if (!killer || !npc) {

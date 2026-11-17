@@ -263,3 +263,28 @@ test("Araxxor's halberd piece group takes the boss multiplier once, not three ti
   assert.deepEqual(dropsAt(araxxor, 4 / 600, 1).filter((id) => pieces.has(id)), []);
   assert.equal(dropsAt(araxxor, 4 / 600, 2).filter((id) => pieces.has(id)).length, 1, "one piece, doubled rate");
 });
+
+test("raid, Barrows and Zalcano rewards take the boss rare multiplier through drops:chance", () => {
+  const ask = (source, multiplier) => {
+    config["NpcDrops:bossRareMultiplier"] = multiplier;
+    const rules = [];
+    emitCustomEvent("drops:chance", { player: {}, source, rules });
+    return rules;
+  };
+  try {
+    for (const source of ["Chambers of Xeric", "Theatre of Blood", "Tombs of Amascut", "Barrows", "Zalcano"]) {
+      const rules = ask(source, 5);
+      assert.equal(rules.length, 1, source);
+      assert.equal(rules[0].multiplier, 5, source);
+      assert.ok(rules[0].pattern.test("Twisted bow"), source);
+      assert.equal(ask(source, 1).length, 0, `${source} at x1`);
+      assert.equal(ask(source, "fast").length, 0, `${source} unusable`);
+    }
+    // Rollers whose rules reach their common loot are not answered.
+    for (const source of ["Wintertodt", "Tempoross", "Guardians of the Rift", "Revenant imp"]) {
+      assert.equal(ask(source, 5).length, 0, source);
+    }
+  } finally {
+    config["NpcDrops:bossRareMultiplier"] = 1;
+  }
+});

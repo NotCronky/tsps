@@ -132,8 +132,15 @@ The Collection Log plugin does not need to be enabled. Ordinary loot keeps its r
 on the weighted main roll the boosted rows are rolled separately instead of taking chance from
 the rest of the table, so a very high multiplier can drop a rare alongside the main roll. Bosses
 are the NPCs the game cache marks as bosses, plus the few `npc-drop-overrides.json` lists
-because the cache omits their marker. Raid chests (Chambers of Xeric, Theatre of Blood, Tombs of
-Amascut) and other reward chests are not affected.
+because the cache omits their marker.
+
+The same multiplier applies to the uniques of rewards rolled outside the NPC drop tables: the
+Chambers of Xeric, Theatre of Blood and Tombs of Amascut chests (the unique chance), the Barrows
+chest (its equipment roll) and Zalcano (shard, pet, tool seed, onyx). Their common loot, raid pets
+and kits keep their rates. A raid's unique chance is multiplied after its own cap, so a high
+multiplier can make a unique close to certain (Theatre of Blood at 5 is 55% a run without deaths).
+Other reward sources (Wintertodt, Tempoross, Guardians of the Rift, caskets, key chests) are not
+affected.
 
 ```json
 {
@@ -387,7 +394,7 @@ After changing a plugin's `description` or `config`, run `yarn --cwd server worl
 
 | Key | Type | Default | Description |
 | --- | --- | --- | --- |
-| `NpcDrops:bossRareMultiplier` | number (>= 1) | `1` | **Boss unique drop multiplier.** Makes bosses' unique drops this many times likelier. 1 is the normal rate; values of 1 or less change nothing. |
+| `NpcDrops:bossRareMultiplier` | number (>= 1) | `1` | **Boss unique drop multiplier.** Makes bosses' unique drops, and the raid, Barrows and Zalcano reward uniques, this many times likelier. 1 is the normal rate; values of 1 or less change nothing. |
 | `Pets:skillingPetMultiplier` | number (>= 1) | `1` | **Skilling pet multiplier.** Makes every skilling pet roll this many times likelier. 1 is the normal rate; values of 1 or less change nothing. |
 | `random-events:enabled` | boolean | `true` | **Random events.** Turn off to stop random events from appearing. |
 
